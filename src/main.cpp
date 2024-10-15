@@ -1,12 +1,11 @@
-#include "fa_scanner.h"
+#include "handcoded_scanner.h"
 #include <iostream>
 using namespace std;
 
 int main()
 {
-  FAScanner sc("var s: string = \"hello\"");
+  HandCodedScanner sc("var message: string = \"Hello \"; write message + \"Wren!\"; ");
   sc.display_tokens();
   system("pause");
-
   return 0;
 }

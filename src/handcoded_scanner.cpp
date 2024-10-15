@@ -4,6 +4,11 @@ HandCodedScanner::HandCodedScanner(string src) : ScannerBase(src)
 {
 }
 
+bool HandCodedScanner::is_eof()
+{
+  return curr >= source.length();
+}
+
 char HandCodedScanner::peek()
 {
   return source.at(curr + 1);
@@ -116,7 +121,7 @@ Token HandCodedScanner::get_token()
     {
       eat();
 
-      while (!expect('\n') && curr < source.length())
+      while (!expect('\n') && !is_eof())
       {
         eat();
       }
@@ -128,7 +133,7 @@ Token HandCodedScanner::get_token()
     {
       eat();
 
-      while (!expect('*') && curr < source.length())
+      while (!expect('*') && !is_eof())
       {
         eat();
 
@@ -169,7 +174,7 @@ Token HandCodedScanner::get_token()
       str += eat();
       tokens.push_back({str, TokenType::NOT_EQUAL_OP});
       return {str, TokenType::NOT_EQUAL_OP};
-    } 
+    }
     else if (expect('='))
     {
       str += eat();
@@ -179,7 +184,8 @@ Token HandCodedScanner::get_token()
 
     tokens.push_back({str, TokenType::LESS_THAN_OP});
     return {str, TokenType::LESS_THAN_OP};
-  } else if (expect('>'))
+  }
+  else if (expect('>'))
   {
     str += eat();
 
@@ -192,6 +198,50 @@ Token HandCodedScanner::get_token()
 
     tokens.push_back({str, TokenType::GREATER_THAN_OP});
     return {str, TokenType::GREATER_THAN_OP};
+  }
+  // symbols
+  else if (expect(';'))
+  {
+    eat();
+    tokens.push_back({";", TokenType::SEMI_COLON_SY});
+    return {";", TokenType::SEMI_COLON_SY};
+  }
+  else if (expect(':'))
+  {
+    eat();
+    tokens.push_back({":", TokenType::COLON_SY});
+    return {":", TokenType::COLON_SY};
+  }
+  else if (expect(','))
+  {
+    eat();
+    tokens.push_back({",", TokenType::COMMA_SY});
+    return {",", TokenType::COMMA_SY};
+  }
+  // identifier and keywords
+  else if (isalpha(peek()))
+  {
+    str += eat();
+
+    while (isalnum(peek()) && !is_eof())
+    {
+      str += eat();
+    }
+
+    return check_reserved(str);
+  }
+  // string literal
+  else if (expect('\"'))
+  {
+    str += eat();
+
+    while (!expect('\"') && !is_eof())
+    {
+      str += eat();
+    }
+
+    tokens.push_back({str, TokenType::STRING_SY});
+    return {str, TokenType::STRING_SY};
   }
 }
 

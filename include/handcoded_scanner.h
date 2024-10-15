@@ -11,6 +11,7 @@ public:
     char peek();
     char eat();
     bool expect(char expected);
+    bool is_eof();
     Token get_token();
     void display_tokens();
 };

@@ -2,6 +2,7 @@
 
 HandCodedScanner::HandCodedScanner(string src) : ScannerBase(src)
 {
+  // curr = 0;
 }
 
 bool HandCodedScanner::is_eof()
@@ -11,11 +12,17 @@ bool HandCodedScanner::is_eof()
 
 char HandCodedScanner::peek()
 {
-  return source.at(curr + 1);
+  if (is_eof())
+    return '$';
+
+  return source.at(curr);
 }
 
 char HandCodedScanner::eat()
 {
+  if (is_eof())
+    return '$';
+
   return source.at(curr++);
 }
 
@@ -27,8 +34,18 @@ bool HandCodedScanner::expect(char expected)
 Token HandCodedScanner::get_token()
 {
   str = "";
+
+  while (isspace(peek()) && !is_eof())
+  {
+    eat();
+  }
+
+  if (is_eof())
+  {
+    return {"$", TokenType::END_OF_FILE};
+  }
   // bracket
-  if (expect('['))
+  else if (expect('['))
   {
     eat();
     tokens.push_back({"[", TokenType::LEFT_SQUARE_PR});
@@ -131,12 +148,10 @@ Token HandCodedScanner::get_token()
     // multi comment
     else if (expect('*'))
     {
-      eat();
+      eat(); /**/
 
-      while (!expect('*') && !is_eof())
+      while (!is_eof())
       {
-        eat();
-
         if (expect('*'))
         {
           eat();
@@ -145,11 +160,9 @@ Token HandCodedScanner::get_token()
             eat();
             return get_token();
           }
-          else if (expect('*'))
-          {
-            eat();
-          }
         }
+
+        eat();
       }
     }
     // divide op
@@ -240,15 +253,52 @@ Token HandCodedScanner::get_token()
       str += eat();
     }
 
+    if (is_eof())
+    {
+      return {"Unclosed string literal: " + str, TokenType::ERROR};
+    }
+
+    str += eat();
     tokens.push_back({str, TokenType::STRING_SY});
     return {str, TokenType::STRING_SY};
+  }
+  // numbers
+  else if (isdigit(peek()))
+  {
+    str += eat();
+    bool is_float = false;
+
+    while (isdigit(peek()) && !is_eof())
+    {
+      str += eat();
+
+      if (expect('.') && !is_float)
+      {
+        is_float = true;
+        str += eat();
+      }
+    }
+
+    if (is_float)
+    {
+      tokens.push_back({str, TokenType::FLOAT_NUM});
+      return {str, TokenType::FLOAT_NUM};
+    }
+
+    tokens.push_back({str, TokenType::INTEGER_NUM});
+    return {str, TokenType::INTEGER_NUM};
+  }
+  else
+  {
+    str += eat();
+    return {"Unrecognized token: " + str, TokenType::ERROR};
   }
 }
 
 void HandCodedScanner::display_tokens(void)
 {
-  Token T;
-  T = get_token();
+  Token T = get_token();
+
   while (T.type != TokenType::END_OF_FILE)
   {
     switch (T.type)
@@ -417,6 +467,10 @@ void HandCodedScanner::display_tokens(void)
       break;
     case TokenType::STRING_SY:
       cout << "String " << T.value << " : token" << endl;
+      break;
+
+    case TokenType::ERROR:
+      cout << T.value << endl;
       break;
 
     default:

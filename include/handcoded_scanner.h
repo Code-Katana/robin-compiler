@@ -4,9 +4,13 @@
 #include <iostream>
 using namespace std;
 
-class HandCodedScanner : ScannerBase {
+class HandCodedScanner : ScannerBase
+{
 public:
     HandCodedScanner(string src);
+    char peek();
+    char eat();
+    bool expect(char expected);
     Token get_token();
     void display_tokens();
 };

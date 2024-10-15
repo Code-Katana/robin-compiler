@@ -1,9 +1,12 @@
+#include "fa_scanner.h"
 #include <iostream>
 using namespace std;
 
 int main()
 {
-  cout << "Hello Wren!!!" << endl;
+  FAScanner sc("var s: string = \"hello\"");
+  sc.display_tokens();
   system("pause");
+
   return 0;
 }

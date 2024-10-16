@@ -143,18 +143,20 @@ Token HandCodedScanner::get_token()
         eat();
       }
 
+      eat();
       return get_token();
     }
     // multi comment
     else if (expect('*'))
     {
-      eat(); /**/
+      eat();
 
       while (!is_eof())
       {
         if (expect('*'))
         {
           eat();
+
           if (expect('/'))
           {
             eat();
@@ -164,6 +166,9 @@ Token HandCodedScanner::get_token()
 
         eat();
       }
+
+      eat();
+      return get_token();
     }
     // divide op
     else

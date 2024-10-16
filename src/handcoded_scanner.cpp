@@ -276,6 +276,11 @@ Token HandCodedScanner::get_token()
       {
         is_float = true;
         str += eat();
+
+        if (!isdigit(peek()))
+        {
+          return {"Invalid floating point number " + str, TokenType::ERROR};
+        }
       }
     }
 

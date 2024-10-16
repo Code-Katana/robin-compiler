@@ -4,7 +4,7 @@ using namespace std;
 
 int main()
 {
-  HandCodedScanner sc("var message: string = \"Hello \"; write message + \"Wren!\"; ");
+  HandCodedScanner sc("var message: string = \"Hello \"; write message + \"Wren!\"; 12. 12");
   sc.display_tokens();
   system("pause");
   return 0;

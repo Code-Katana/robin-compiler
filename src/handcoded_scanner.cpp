@@ -268,10 +268,8 @@ Token HandCodedScanner::get_token()
     str += eat();
     bool is_float = false;
 
-    while (isdigit(peek()) && !is_eof())
+    while (isdigit(peek()) || expect('.') && !is_eof())
     {
-      str += eat();
-
       if (expect('.') && !is_float)
       {
         is_float = true;
@@ -282,6 +280,8 @@ Token HandCodedScanner::get_token()
           return {"Invalid floating point number " + str, TokenType::ERROR};
         }
       }
+
+      str += eat();
     }
 
     if (is_float)

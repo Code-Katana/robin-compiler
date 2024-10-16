@@ -3,6 +3,7 @@
 using namespace std;
 FAScanner::FAScanner(string src) : ScannerBase(src)
 {
+  source.append("  ");
 }
 
 Token FAScanner::get_token()
@@ -10,7 +11,7 @@ Token FAScanner::get_token()
   str = "";
   int state = 0;
 
-  while ((state >= 0 && state <= 43) && (curr < source.length()))
+  while ((state >= 0 && state <= 46) && (curr < source.length()))
   {
     switch (state)
     {
@@ -62,7 +63,7 @@ Token FAScanner::get_token()
         str += ch;
         state = 36;
       }
-      else if (ch == '"')
+      else if (ch == '\"')
       {
         state = 41;
         str += ch;
@@ -273,11 +274,7 @@ Token FAScanner::get_token()
       break;
     case 33:
       ch = source.at(curr++);
-      if (curr == source.length() - 1)
-      {
-        state = 43;
-      }
-      else if (ch != '*')
+      if (ch != '*')
       {
         state = 33;
       }
@@ -332,7 +329,7 @@ Token FAScanner::get_token()
       }
       else
       {
-        state = 43;
+        state = 44;
         curr--;
       }
       break;
@@ -355,16 +352,16 @@ Token FAScanner::get_token()
       break;
     case 41:
       ch = source.at(curr++);
-      if (curr == source.length() - 1)
+      if (curr >= source.length() - 1)
       {
-        state = 43;
+        state = 45;
       }
-      else if (ch != '"')
+      else if (ch != '\"')
       {
         str += ch;
         state = 41;
       }
-      else if (ch == '"')
+      else if (ch == '\"')
       {
         str += ch;
         state = 42;
@@ -375,8 +372,16 @@ Token FAScanner::get_token()
       return {str, TokenType::STRING_SY};
       break;
     case 43:
-      tokens.push_back({"ERROR", TokenType::ERROR});
-      return {"ERROR", TokenType::STRING_SY};
+      tokens.push_back({"Unrecognized token: " + source.at(curr), TokenType::ERROR});
+      return {"Unrecognized token: " + source.at(curr), TokenType::ERROR};
+      break;
+    case 44:
+      tokens.push_back({"Invalid floating point number " + str, TokenType::ERROR});
+      return {"Invalid floating point number " + str, TokenType::ERROR};
+      break;
+    case 45:
+      tokens.push_back({"Unclosed string literal: " + str, TokenType::ERROR});
+      return {"Unclosed string literal: " + str, TokenType::ERROR};
       break;
     default:
       tokens.push_back({"ERROR", TokenType::ERROR});
@@ -559,6 +564,9 @@ void FAScanner::display_tokens(void)
       break;
     case TokenType::STRING_SY:
       cout << "String " << T.value << " : token" << endl;
+      break;
+    case TokenType::ERROR:
+      cout << T.value << endl;
       break;
 
     default:

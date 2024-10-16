@@ -268,7 +268,7 @@ Token HandCodedScanner::get_token()
     str += eat();
     bool is_float = false;
 
-    while (isdigit(peek()) || expect('.') && !is_eof())
+    while ((isdigit(peek()) || expect('.')) && !is_eof())
     {
       if (expect('.') && !is_float)
       {

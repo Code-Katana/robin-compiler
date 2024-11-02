@@ -1,17 +1,28 @@
+#include <iostream>
+
 #include "handcoded_scanner.h"
 #include "fa_scanner.h"
-#include <iostream>
+#include "json.h"
+
 using namespace std;
 
 int main()
 {
-  cout << "Hand Coded Scanner:" << endl;
-  HandCodedScanner sc1("\"Wren!\"; 898. //skasmka\n ++ * / /*sodojs:jaisj*****@#$%^&*(*saojs*hhh + --");
-  sc1.display_tokens();
-  cout << "**************************************************************" << endl;
-  cout << "FA Scanner:" << endl;
-  FAScanner sc2("\"Wren!\"; 898. //skasmka\n ++ * / /*sodojs:jaisj*****@#$%^&*(*saojs*hhh + --");
-  sc2.display_tokens();
+  string program = "for has samir hakkem";
+
+  // HandCodedScanner sc(program);
+  FAScanner sc1(program);
+  HandCodedScanner sc2(program);
+
+  vector<Token> tks1 = sc1.get_tokens_stream();
+  vector<Token> tks2 = sc2.get_tokens_stream();
+
+  for (int i = 0; i < tks1.size(); ++i)
+  {
+    cout << "HandCoded: " << JSON::stringify_token(tks2[i]) << endl;
+    cout << "FAScanner: " << JSON::stringify_token(tks1[i]) << endl;
+  }
+
   system("pause");
   return 0;
 }

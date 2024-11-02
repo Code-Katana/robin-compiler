@@ -1,5 +1,8 @@
 #pragma once
+
 #include <string>
+#include <map>
+
 using namespace std;
 
 enum class TokenType
@@ -46,8 +49,8 @@ enum class TokenType
   MULT_OP,
   DIVIDE_OP,
   MOD_OP,
-  LESS_EQUAL_OP, 
-  LESS_THAN_OP, 
+  LESS_EQUAL_OP,
+  LESS_THAN_OP,
   IS_EQUAL_OP,
   GREATER_THAN_OP,
   GREATER_EQUAL_OP,
@@ -70,8 +73,16 @@ enum class TokenType
   END_OF_FILE
 };
 
-struct Token
+class Token
 {
+public:
   string value;
   TokenType type;
+  static map<string, TokenType> ReservedWords;
+
+  static bool is_reserved(string val);
+  static string get_token_name(TokenType ty);
+
+private:
+  static map<TokenType, string> TokenNames;
 };

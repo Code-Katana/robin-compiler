@@ -1,0 +1,324 @@
+#include "handcoded_scanner.h"
+
+HandCodedScanner::HandCodedScanner(string src) : ScannerBase(src) {}
+
+bool HandCodedScanner::is_eof()
+{
+  return curr >= source.length();
+}
+
+char HandCodedScanner::peek()
+{
+  if (is_eof())
+  {
+    return '$';
+  }
+
+  return source.at(curr);
+}
+
+char HandCodedScanner::eat()
+{
+  if (is_eof())
+  {
+    return '$';
+  }
+
+  return source.at(curr++);
+}
+
+bool HandCodedScanner::expect(char expected)
+{
+  return peek() == expected;
+}
+
+Token HandCodedScanner::get_token()
+{
+  str = "";
+
+  while (isspace(peek()) && !is_eof())
+  {
+    eat();
+  }
+
+  if (is_eof())
+  {
+    return {"$", TokenType::END_OF_FILE};
+  }
+  // bracket
+  else if (expect('['))
+  {
+    eat();
+    // tokens.push_back({"[", TokenType::LEFT_SQUARE_PR});
+    return {"[", TokenType::LEFT_SQUARE_PR};
+  }
+  else if (expect(']'))
+  {
+    eat();
+    // tokens.push_back({"]", TokenType::RIGHT_SQUARE_PR});
+    return {"]", TokenType::RIGHT_SQUARE_PR};
+  }
+  else if (expect('{'))
+  {
+    eat();
+    // tokens.push_back({"{", TokenType::LEFT_CURLY_PR});
+    return {"{", TokenType::LEFT_CURLY_PR};
+  }
+  else if (expect('}'))
+  {
+    eat();
+    // tokens.push_back({"}", TokenType::RIGHT_CURLY_PR});
+    return {"}", TokenType::RIGHT_CURLY_PR};
+  }
+  else if (expect('('))
+  {
+    eat();
+    // tokens.push_back({"(", TokenType::LEFT_PR});
+    return {"(", TokenType::LEFT_PR};
+  }
+  else if (expect(')'))
+  {
+    eat();
+    // tokens.push_back({")", TokenType::RIGHT_PR});
+    return {")", TokenType::RIGHT_PR};
+  }
+  // operations
+  else if (expect('='))
+  {
+    str += eat();
+
+    if (expect('='))
+    {
+      str += eat();
+      // tokens.push_back({str, TokenType::IS_EQUAL_OP});
+      return {str, TokenType::IS_EQUAL_OP};
+    }
+
+    // tokens.push_back({str, TokenType::EQUAL_OP});
+    return {str, TokenType::EQUAL_OP};
+  }
+  else if (expect('+'))
+  {
+    str += eat();
+
+    if (expect('+'))
+    {
+      str += eat();
+      // tokens.push_back({str, TokenType::INCREMENT_OP});
+      return {str, TokenType::INCREMENT_OP};
+    }
+
+    // tokens.push_back({str, TokenType::PLUS_OP});
+    return {str, TokenType::PLUS_OP};
+  }
+  else if (expect('-'))
+  {
+    str += eat();
+
+    if (expect('-'))
+    {
+      str += eat();
+      // tokens.push_back({str, TokenType::DECREMENT_OP});
+      return {str, TokenType::DECREMENT_OP};
+    }
+
+    // tokens.push_back({str, TokenType::MINUS_OP});
+    return {str, TokenType::MINUS_OP};
+  }
+  else if (expect('*'))
+  {
+    eat();
+    // tokens.push_back({"*", TokenType::MULT_OP});
+    return {"*", TokenType::MULT_OP};
+  }
+  else if (expect('/'))
+  {
+    str += eat();
+    // single comment
+    if (expect('/'))
+    {
+      eat();
+
+      while (!expect('\n') && !is_eof())
+      {
+        eat();
+      }
+
+      eat();
+      return get_token();
+    }
+    // multi comment
+    else if (expect('*'))
+    {
+      eat();
+
+      while (!is_eof())
+      {
+        if (expect('*'))
+        {
+          eat();
+
+          if (expect('/'))
+          {
+            eat();
+            return get_token();
+          }
+        }
+
+        eat();
+      }
+
+      eat();
+      return get_token();
+    }
+    // divide op
+    else
+    {
+      // tokens.push_back({str, TokenType::DIVIDE_OP});
+      return {str, TokenType::DIVIDE_OP};
+    }
+  }
+  else if (expect('%'))
+  {
+    eat();
+    // tokens.push_back({"%", TokenType::MOD_OP});
+    return {"%", TokenType::MOD_OP};
+  }
+  else if (expect('<'))
+  {
+    str += eat();
+
+    if (expect('>'))
+    {
+      str += eat();
+      // tokens.push_back({str, TokenType::NOT_EQUAL_OP});
+      return {str, TokenType::NOT_EQUAL_OP};
+    }
+    else if (expect('='))
+    {
+      str += eat();
+      // tokens.push_back({str, TokenType::LESS_EQUAL_OP});
+      return {str, TokenType::LESS_EQUAL_OP};
+    }
+
+    // tokens.push_back({str, TokenType::LESS_THAN_OP});
+    return {str, TokenType::LESS_THAN_OP};
+  }
+  else if (expect('>'))
+  {
+    str += eat();
+
+    if (expect('='))
+    {
+      str += eat();
+      // tokens.push_back({str, TokenType::GREATER_EQUAL_OP});
+      return {str, TokenType::GREATER_EQUAL_OP};
+    }
+
+    // tokens.push_back({str, TokenType::GREATER_THAN_OP});
+    return {str, TokenType::GREATER_THAN_OP};
+  }
+  // symbols
+  else if (expect(';'))
+  {
+    eat();
+    // tokens.push_back({";", TokenType::SEMI_COLON_SY});
+    return {";", TokenType::SEMI_COLON_SY};
+  }
+  else if (expect(':'))
+  {
+    eat();
+    // tokens.push_back({":", TokenType::COLON_SY});
+    return {":", TokenType::COLON_SY};
+  }
+  else if (expect(','))
+  {
+    eat();
+    // tokens.push_back({",", TokenType::COMMA_SY});
+    return {",", TokenType::COMMA_SY};
+  }
+  // identifier and keywords
+  else if (isalpha(peek()))
+  {
+    str += eat();
+
+    while (isalnum(peek()) && !is_eof())
+    {
+      str += eat();
+    }
+
+    return check_reserved(str);
+  }
+  // string literal
+  else if (expect('\"'))
+  {
+    str += eat();
+
+    while (!expect('\"') && !is_eof())
+    {
+      str += eat();
+    }
+
+    if (is_eof())
+    {
+      return {"Unclosed string literal: " + str, TokenType::ERROR};
+    }
+
+    str += eat();
+    // tokens.push_back({str, TokenType::STRING_SY});
+    return {str, TokenType::STRING_SY};
+  }
+  // numbers
+  else if (isdigit(peek()))
+  {
+    str += eat();
+    bool is_float = false;
+
+    while ((isdigit(peek()) || expect('.')) && !is_eof())
+    {
+      if (expect('.') && !is_float)
+      {
+        is_float = true;
+        str += eat();
+
+        if (!isdigit(peek()))
+        {
+          return {"Invalid floating point number " + str, TokenType::ERROR};
+        }
+      }
+
+      str += eat();
+    }
+
+    if (is_float)
+    {
+      // tokens.push_back({str, TokenType::FLOAT_NUM});
+      return {str, TokenType::FLOAT_NUM};
+    }
+
+    // tokens.push_back({str, TokenType::INTEGER_NUM});
+    return {str, TokenType::INTEGER_NUM};
+  }
+  else
+  {
+    str += eat();
+    return {"Unrecognized token: " + str, TokenType::ERROR};
+  }
+}
+
+vector<Token> HandCodedScanner::get_tokens_stream(void)
+{
+  int curr_placeholder = curr;
+  curr = 0;
+  vector<Token> stream = {};
+  Token tk = get_token();
+
+  while (tk.type != TokenType::END_OF_FILE)
+  {
+    stream.push_back(tk);
+    tk = get_token();
+  }
+
+  curr = curr_placeholder;
+  return stream;
+}

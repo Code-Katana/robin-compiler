@@ -1,23 +1,31 @@
 #pragma once
-#include "token.h"
+
 #include <string>
 #include <vector>
-using namespace std;
 
+#include "token.h"
+
+using namespace std;
 
 class ScannerBase
 {
 public:
   Token check_reserved(string s);
+
+  virtual char eat() = 0;
+  virtual char peek() = 0;
+  virtual bool expect(char expected) = 0;
+  virtual bool is_eof() = 0;
+
   virtual Token get_token() = 0;
-  virtual void display_tokens() = 0;
+  virtual vector<Token> get_tokens_stream() = 0;
 
 protected:
-  string source;
-  int curr;
   char ch;
+  int curr;
   string str;
-  vector<Token> tokens;
+  string source;
+  // vector<Token> tokens;
 
   ScannerBase(string src);
 };

@@ -8,7 +8,8 @@ using namespace std;
 
 int main()
 {
-  string program = "for has samir hakkem";
+  // for  i = 0; i < size(); i++ do
+  string program = "for  i = 0; i < size(); i++ do";
 
   // HandCodedScanner sc(program);
   FAScanner sc1(program);

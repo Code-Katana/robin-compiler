@@ -31,7 +31,10 @@ bool FAScanner::expect(char expected)
 }
 
 using namespace std;
-FAScanner::FAScanner(string src) : ScannerBase(src) {}
+FAScanner::FAScanner(string src) : ScannerBase(src)
+{
+  source.append("  ");
+}
 
 Token FAScanner::get_token()
 {
@@ -43,57 +46,113 @@ Token FAScanner::get_token()
     switch (state)
     {
     case 0:
-      ch = eat();
+      ch = peek();
       if (isspace(ch))
+      {
+        eat();
         state = 0;
+      }
+
       else if (isalpha(ch) | expect('_'))
       {
+
         str += eat();
         state = 1;
       }
       else if (expect('['))
+      {
+        eat();
         state = 3;
+      }
       else if (expect(']'))
+      {
+        eat();
         state = 4;
+      }
       else if (expect(';'))
+      {
+        eat();
         state = 5;
+      }
       else if (expect(','))
+      {
+        eat();
         state = 6;
+      }
       else if (expect('{'))
+      {
+        eat();
         state = 7;
+      }
       else if (expect('}'))
+      {
+        eat();
         state = 8;
+      }
       else if (expect(':'))
+      {
+        eat();
         state = 9;
+      }
       else if (expect('('))
+      {
+        eat();
         state = 10;
+      }
       else if (expect(')'))
+      {
+        eat();
         state = 11;
+      }
       else if (expect('*'))
+      {
+        eat();
         state = 12;
+      }
       else if (expect('%'))
+      {
+        eat();
         state = 13;
+      }
       else if (expect('='))
+      {
+        eat();
         state = 14;
+      }
       else if (expect('+'))
+      {
+        eat();
         state = 17;
+      }
       else if (expect('-'))
+      {
+        eat();
         state = 20;
+      }
       else if (expect('<'))
+      {
+        eat();
         state = 23;
+      }
       else if (expect('>'))
+      {
+        eat();
         state = 27;
+      }
       else if (expect('/'))
+      {
+        eat();
         state = 30;
+      }
       else if (isdigit(ch))
       {
-        str += ch;
+        str += eat();
         state = 36;
       }
       else if (expect('\"'))
       {
+        str += eat();
         state = 41;
-        str += ch;
       }
       else
         state = 43;

@@ -1,53 +1,29 @@
 #include "fa_scanner.h"
 
-bool FAScanner::is_eof()
-{
-  return curr >= source.length();
-}
-
-char FAScanner::peek()
-{
-  if (is_eof())
-  {
-    return '$';
-  }
-
-  return source.at(curr);
-}
-
-char FAScanner::eat()
-{
-  if (is_eof())
-  {
-    return '$';
-  }
-
-  return source.at(curr++);
-}
-
-bool FAScanner::expect(char expected)
-{
-  return peek() == expected;
-}
-
-using namespace std;
-FAScanner::FAScanner(string src) : ScannerBase(src)
-{
-  source.append("  ");
-}
+FAScanner::FAScanner(string src) : ScannerBase(src) {}
 
 Token FAScanner::get_token()
 {
   str = "";
   int state = 0;
 
-  while ((state >= 0 && state <= 46) && !is_eof())
+  if (is_eof())
+  {
+    return {"$", TokenType::END_OF_FILE};
+  }
+
+  while (state >= 0 && state <= 46)
   {
     switch (state)
     {
     case 0:
       ch = peek();
-      if (isspace(ch))
+
+      if (expect('$'))
+      {
+        state = 46;
+      }
+      else if (isspace(ch))
       {
         eat();
         state = 0;
@@ -55,7 +31,6 @@ Token FAScanner::get_token()
 
       else if (isalpha(ch) | expect('_'))
       {
-
         str += eat();
         state = 1;
       }
@@ -156,7 +131,6 @@ Token FAScanner::get_token()
       }
       else
       {
-        eat();
         state = 43;
       }
       break;
@@ -371,17 +345,26 @@ Token FAScanner::get_token()
         state = 32;
       }
       break;
-    case 33:
+    case 33: /*klk              */
       ch = peek();
-      if (ch != '*')
+      if(!is_eof())
       {
-        eat();
-        state = 33;
+        if (ch != '*')
+        {
+          eat();
+          state = 33;
+        }
+      
+        else
+        {
+          eat();
+          state = 34;
+        }
       }
       else
       {
         eat();
-        state = 34;
+        state = 46;
       }
       break;
     case 34:
@@ -454,41 +437,73 @@ Token FAScanner::get_token()
       break;
     case 41:
       ch = peek();
-      if (curr >= source.length() - 1)
-      {
-        eat();
-        state = 45;
-      }
-      else if (ch != '\"')
-      {
-        str += eat();
-        state = 41;
-      }
-      else if (expect('\"'))
+
+      // is ch === "\""
+      if (expect('\"'))
       {
         str += eat();
         state = 42;
+        break;
       }
+      // ch !== "\"" and not eof -> 41
+      else
+      {
+        if (!is_eof())
+        {
+          str += eat();
+          state = 41;
+          break;
+        }
+      }
+      state = 45;
+      // ch !== "\"" and is eof -> retun error
+
+      // if (!expect('\"'))
+      // {
+      //   if (is_eof())
+      //   {
+      //     str += eat();
+      //     state = 45;
+      //   }
+      //   else
+      //   {
+      //     state = 41;
+      //   }
+      // }
+      // else if (expect('\"'))
+      // {
+      //   str += eat();
+      //   state = 42;
+      // }
+
       break;
     case 42:
       // tokens.push_back({str, TokenType::STRING_SY});
       return {str, TokenType::STRING_SY};
       break;
     case 43:
-      // tokens.push_back({"Unrecognized token: " + source.at(curr), TokenType::ERROR});
-      error_token = {"Unrecognized token: " + peek(), TokenType::ERROR};
+      str += eat();
+      curr = source.length() + 1;
+      error_token = {"Unrecognized token: " + str, TokenType::ERROR};
+
       return error_token;
       break;
     case 44:
       // tokens.push_back({"Invalid floating point number " + str, TokenType::ERROR});
+      curr = source.length() + 1;
       error_token = {"Invalid floating point number " + str, TokenType::ERROR};
       return error_token;
       break;
     case 45:
       // tokens.push_back({"Unclosed string literal: " + str, TokenType::ERROR});
+      curr = source.length() + 1;
       error_token = {"Unclosed string literal: " + str, TokenType::ERROR};
       return error_token;
       break;
+    case 46:
+      return {"$", TokenType::END_OF_FILE};
+      break;
+
     default:
       // tokens.push_back({"ERROR", TokenType::ERROR});
       error_token = {"ERROR", TokenType::ERROR};

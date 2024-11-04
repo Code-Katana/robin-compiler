@@ -12,10 +12,10 @@ class ScannerBase
 public:
   Token check_reserved(string s);
 
-  virtual char eat() = 0;
-  virtual char peek() = 0;
-  virtual bool expect(char expected) = 0;
-  virtual bool is_eof() = 0;
+  char eat();
+  char peek();
+  bool expect(char expected);
+  bool is_eof();
 
   virtual Token get_token() = 0;
   virtual vector<Token> get_tokens_stream() = 0;

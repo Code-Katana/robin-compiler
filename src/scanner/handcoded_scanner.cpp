@@ -2,36 +2,6 @@
 
 HandCodedScanner::HandCodedScanner(string src) : ScannerBase(src) {}
 
-bool HandCodedScanner::is_eof()
-{
-  return curr >= source.length();
-}
-
-char HandCodedScanner::peek()
-{
-  if (is_eof())
-  {
-    return '$';
-  }
-
-  return source.at(curr);
-}
-
-char HandCodedScanner::eat()
-{
-  if (is_eof())
-  {
-    return '$';
-  }
-
-  return source.at(curr++);
-}
-
-bool HandCodedScanner::expect(char expected)
-{
-  return peek() == expected;
-}
-
 Token HandCodedScanner::get_token()
 {
   str = "";
@@ -49,7 +19,6 @@ Token HandCodedScanner::get_token()
 
   if (is_eof())
   {
-    cout << "flag" << endl;
     return {"$", TokenType::END_OF_FILE};
   }
   // bracket
@@ -136,7 +105,7 @@ Token HandCodedScanner::get_token()
   {
     eat();
     // tokens.push_back({"*", TokenType::MULT_OP});
-    return {"*", TokenType::MULT_OP};
+    return {"*", TokenType::MULT_OP}; // DIVIDE_OP
   }
   else if (expect('/'))
   {
@@ -157,7 +126,7 @@ Token HandCodedScanner::get_token()
     // multi comment
     else if (expect('*'))
     {
-      eat();
+      eat();/*kcoskcok*lmcso */
 
       while (!is_eof())
       {
@@ -174,9 +143,9 @@ Token HandCodedScanner::get_token()
 
         eat();
       }
-
-      eat();
-      return get_token();
+      // //edit zr
+      // eat();
+      // return get_token();
     }
     // divide op
     else

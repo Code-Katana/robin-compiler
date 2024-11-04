@@ -1,12 +1,16 @@
 #pragma once
+
 #include "scanner_base.h"
-#include <iostream>
-using namespace std;
 
 class FAScanner : ScannerBase
 {
 public:
   FAScanner(string src);
+
   Token get_token();
-  void display_tokens();
+  vector<Token> get_tokens_stream();
+
+protected:
+  const int START_STATE = 0;
+  const int END_STATE = 46;
 };

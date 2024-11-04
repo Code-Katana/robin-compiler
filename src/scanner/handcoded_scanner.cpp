@@ -36,6 +36,12 @@ Token HandCodedScanner::get_token()
 {
   str = "";
 
+  if (error_token.type == TokenType::ERROR && !is_eof())
+  {
+    curr = source.length() + 1;
+    return error_token;
+  }
+
   while (isspace(peek()) && !is_eof())
   {
     eat();
@@ -43,6 +49,7 @@ Token HandCodedScanner::get_token()
 
   if (is_eof())
   {
+    cout << "flag" << endl;
     return {"$", TokenType::END_OF_FILE};
   }
   // bracket
@@ -261,7 +268,9 @@ Token HandCodedScanner::get_token()
 
     if (is_eof())
     {
-      return {"Unclosed string literal: " + str, TokenType::ERROR};
+      curr = source.length() + 1;
+      error_token = {"Unclosed string literal: " + str, TokenType::ERROR};
+      return error_token;
     }
 
     str += eat();
@@ -283,7 +292,9 @@ Token HandCodedScanner::get_token()
 
         if (!isdigit(peek()))
         {
-          return {"Invalid floating point number " + str, TokenType::ERROR};
+          curr = source.length() + 1;
+          error_token = {"Invalid floating point number " + str, TokenType::ERROR};
+          return error_token;
         }
       }
 
@@ -302,7 +313,9 @@ Token HandCodedScanner::get_token()
   else
   {
     str += eat();
-    return {"Unrecognized token: " + str, TokenType::ERROR};
+    curr = source.length() + 1;
+    error_token = {"Unrecognized token: " + str, TokenType::ERROR};
+    return error_token;
   }
 }
 

@@ -155,7 +155,10 @@ Token FAScanner::get_token()
         state = 41;
       }
       else
+      {
+        eat();
         state = 43;
+      }
       break;
     case 1:
       ch = peek();
@@ -364,6 +367,7 @@ Token FAScanner::get_token()
       }
       else
       {
+        eat();
         state = 32;
       }
       break;
@@ -376,6 +380,7 @@ Token FAScanner::get_token()
       }
       else
       {
+        eat();
         state = 34;
       }
       break;
@@ -471,19 +476,23 @@ Token FAScanner::get_token()
       break;
     case 43:
       // tokens.push_back({"Unrecognized token: " + source.at(curr), TokenType::ERROR});
-      return {"Unrecognized token: " + peek(), TokenType::ERROR};
+      error_token = {"Unrecognized token: " + peek(), TokenType::ERROR};
+      return error_token;
       break;
     case 44:
       // tokens.push_back({"Invalid floating point number " + str, TokenType::ERROR});
-      return {"Invalid floating point number " + str, TokenType::ERROR};
+      error_token = {"Invalid floating point number " + str, TokenType::ERROR};
+      return error_token;
       break;
     case 45:
       // tokens.push_back({"Unclosed string literal: " + str, TokenType::ERROR});
-      return {"Unclosed string literal: " + str, TokenType::ERROR};
+      error_token = {"Unclosed string literal: " + str, TokenType::ERROR};
+      return error_token;
       break;
     default:
       // tokens.push_back({"ERROR", TokenType::ERROR});
-      return {"ERROR", TokenType::STRING_SY};
+      error_token = {"ERROR", TokenType::ERROR};
+      return error_token;
       break;
     }
   }

@@ -94,7 +94,7 @@ map<TokenType, string> Token::TokenNames = {
     {TokenType::STRING_SY, "STRING_SY"},
     // others
     {TokenType::ERROR, "ERROR"},
-    {TokenType::END_OF_FILE, "$"}};
+    {TokenType::END_OF_FILE, "END_OF_FILE"}};
 
 bool Token::is_reserved(string val)
 {

@@ -25,6 +25,7 @@ protected:
   int curr;
   string str;
   string source;
+  Token error_token;
   // vector<Token> tokens;
 
   ScannerBase(string src);

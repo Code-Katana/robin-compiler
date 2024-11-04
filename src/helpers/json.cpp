@@ -6,14 +6,15 @@ string JSON::stringify_token(Token tk)
          "\\\", \\\"value\\\": \\\"" + tk.value + "\\\" }";
 }
 
-string JSON::stringify_tokens_stream(vector<Token> tokens)
+string
+JSON::stringify_tokens_stream(vector<Token> tokens)
 {
-  string stream = "[" + JSON::stringify_token(tokens.front());
+  string stream = "[\n" + JSON::stringify_token(tokens.front());
 
   for (int i = 1; i < tokens.size(); ++i)
   {
     stream += "," + JSON::stringify_token(tokens[i]);
   }
 
-  return "\b" + stream + "]";
+  return stream + "\n]";
 }

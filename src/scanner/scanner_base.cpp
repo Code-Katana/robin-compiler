@@ -2,7 +2,7 @@
 
 ScannerBase::ScannerBase(string src)
 {
-  ch = ' ';
+  ch = 0;
   str = "";
   curr = 0;
   source = src;

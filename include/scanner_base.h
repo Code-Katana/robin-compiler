@@ -21,6 +21,7 @@ public:
 
 protected:
   ScannerBase(string src);
+  virtual ~ScannerBase() = default;
 
   char ch;
   int curr;

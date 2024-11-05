@@ -1,0 +1,384 @@
+#include "ast.h"
+
+// Root Node Implementation
+Source::Source(ProgramDeclaration *prog, const vector<FunctionDeclaration *> &funcs)
+    : program(prog), functions(funcs)
+{
+  type = AstNodeType::Source;
+}
+
+Source::~Source()
+{
+  delete program;
+  for (FunctionDeclaration *func : functions)
+  {
+    delete func;
+  }
+}
+
+// Identifier Node Implementation
+Identifier::Identifier(const string &name) : name(name)
+{
+  type = AstNodeType::Identifier;
+}
+
+// IntegerLiteral Node Implementation
+IntegerLiteral::IntegerLiteral(int val) : value(val)
+{
+  type = AstNodeType::IntegerLiteral;
+}
+
+// FloatLiteral Node Implementation
+FloatLiteral::FloatLiteral(float val) : value(val)
+{
+  type = AstNodeType::FloatLiteral;
+}
+
+// StringLiteral Node Implementation
+StringLiteral::StringLiteral(const string &val) : value(val)
+{
+  type = AstNodeType::StringLiteral;
+}
+
+// BooleanLiteral Node Implementation
+BooleanLiteral::BooleanLiteral(bool val) : value(val)
+{
+  type = AstNodeType::BooleanLiteral;
+}
+
+// ArrayLiteral Node Implementation
+ArrayLiteral::ArrayLiteral(const vector<Literal *> &elems) : elements(elems)
+{
+  type = AstNodeType::ArrayLiteral;
+}
+
+ArrayLiteral::~ArrayLiteral()
+{
+  for (Literal *elem : elements)
+  {
+    delete elem;
+  }
+}
+
+// AssignmentExpression Node Implementation
+AssignmentExpression::AssignmentExpression(Identifier *var, Expression *val)
+    : variable(var), value(val)
+{
+  type = AstNodeType::AssignmentExpression;
+}
+
+AssignmentExpression::~AssignmentExpression()
+{
+  delete variable;
+  delete value;
+}
+
+// OrExpression Node Implementation
+OrExpression::OrExpression(Expression *lhs, Expression *rhs)
+    : left(lhs), right(rhs)
+{
+  type = AstNodeType::OrExpression;
+}
+
+OrExpression::~OrExpression()
+{
+  delete left;
+  delete right;
+}
+
+// AndExpression Node Implementation
+AndExpression::AndExpression(Expression *lhs, Expression *rhs)
+    : left(lhs), right(rhs)
+{
+  type = AstNodeType::AndExpression;
+}
+
+AndExpression::~AndExpression()
+{
+  delete left;
+  delete right;
+}
+
+// EqualityExpression Node Implementation
+EqualityExpression::EqualityExpression(Expression *lhs, Expression *rhs, const string &op)
+    : left(lhs), right(rhs), optr(op)
+{
+  type = AstNodeType::EqualityExpression;
+}
+
+EqualityExpression::~EqualityExpression()
+{
+  delete left;
+  delete right;
+}
+
+// RelationalExpression Node Implementation
+RelationalExpression::RelationalExpression(Expression *lhs, Expression *rhs, const string &op)
+    : left(lhs), right(rhs), optr(op)
+{
+  type = AstNodeType::RelationalExpression;
+}
+
+RelationalExpression::~RelationalExpression()
+{
+  delete left;
+  delete right;
+}
+
+// AdditiveExpression Node Implementation
+AdditiveExpression::AdditiveExpression(Expression *lhs, Expression *rhs, const string &op)
+    : left(lhs), right(rhs), optr(op)
+{
+  type = AstNodeType::AdditiveExpression;
+}
+
+AdditiveExpression::~AdditiveExpression()
+{
+  delete left;
+  delete right;
+}
+
+// MultiplicativeExpression Node Implementation
+MultiplicativeExpression::MultiplicativeExpression(Expression *lhs, Expression *rhs, const string &op)
+    : left(lhs), right(rhs), optr(op)
+{
+  type = AstNodeType::MultiplicativeExpression;
+}
+
+MultiplicativeExpression::~MultiplicativeExpression()
+{
+  delete left;
+  delete right;
+}
+
+// UnaryExpression Node Implementation
+UnaryExpression::UnaryExpression(Expression *operand, const string &op)
+    : operand(operand), optr(op)
+{
+  type = AstNodeType::UnaryExpression;
+}
+
+UnaryExpression::~UnaryExpression()
+{
+  delete operand;
+}
+
+// CallFunctionExpression Node Implementation
+CallFunctionExpression::CallFunctionExpression(Identifier *func, const vector<Expression *> &args)
+    : function(func), arguments(args)
+{
+  type = AstNodeType::CallFunctionExpression;
+}
+
+CallFunctionExpression::~CallFunctionExpression()
+{
+  delete function;
+  for (auto arg : arguments)
+  {
+    delete arg;
+  }
+}
+
+// IndexExpression Node Implementation
+IndexExpression::IndexExpression(Expression *baseExpr, Expression *indexExpr)
+    : base(baseExpr), index(indexExpr)
+{
+  type = AstNodeType::IndexExpression;
+}
+
+IndexExpression::~IndexExpression()
+{
+  delete base;
+  delete index;
+}
+
+// PrimaryExpression Node Implementation
+PrimaryExpression::PrimaryExpression(Literal *val) : value(val)
+{
+  type = AstNodeType::PrimaryExpression;
+}
+
+PrimaryExpression::~PrimaryExpression()
+{
+  delete value;
+}
+
+// VariableDeclaration Node Implementation
+VariableDeclaration::VariableDeclaration(const vector<Identifier *> &names, const string &datatype)
+    : names(names), datatype(datatype)
+{
+  type = AstNodeType::VariableDeclaration;
+}
+
+VariableDeclaration::~VariableDeclaration()
+{
+  for (Identifier *name : names)
+  {
+    delete name;
+  }
+}
+
+// VariableInitialization Node Implementation
+VariableInitialization::VariableInitialization(Identifier *name, const string &datatype, Expression *init)
+    : name(name), datatype(datatype), initializer(init)
+{
+  type = AstNodeType::VariableInitialization;
+}
+
+VariableInitialization::~VariableInitialization()
+{
+  delete name;
+  delete initializer;
+}
+
+// VariableDefinition Node Implementation
+VariableDefinition::VariableDefinition(Statement *def) : def(def)
+{
+  type = AstNodeType::VariableDefinition;
+}
+
+VariableDefinition::~VariableDefinition()
+{
+  delete def;
+}
+
+// FunctionDeclaration Node Implementation
+FunctionDeclaration::FunctionDeclaration(Identifier *name, const string &ret, const vector<VariableDefinition *> &params)
+    : funcname(name), return_type(ret), parameters(params)
+{
+  type = AstNodeType::FunctionDeclaration;
+}
+
+FunctionDeclaration::~FunctionDeclaration()
+{
+  delete funcname;
+  for (VariableDefinition *param : parameters)
+  {
+    delete param;
+  }
+}
+
+// ProgramDeclaration Node Implementation
+ProgramDeclaration::ProgramDeclaration(Identifier *program_name, const vector<VariableDefinition *> &globals, vector<Statement *> &body)
+    : program_name(program_name), globals(globals), body(body)
+{
+  type = AstNodeType::ProgramDeclaration;
+}
+
+ProgramDeclaration::~ProgramDeclaration()
+{
+  delete program_name;
+  for (VariableDefinition *global : globals)
+  {
+    delete global;
+  }
+  for (Statement *stmt : body)
+  {
+    delete stmt;
+  }
+}
+
+// IfStatement Node Implementation
+IfStatement::IfStatement(Expression *cond, const vector<Statement *> &consequent, const vector<Statement *> &alternate)
+    : condition(cond), consequent(consequent), alternate(alternate)
+{
+  type = AstNodeType::IfStatement;
+}
+
+IfStatement::~IfStatement()
+{
+  delete condition;
+  for (Statement *stmt : consequent)
+  {
+    delete stmt;
+  }
+  for (Statement *stmt : alternate)
+  {
+    delete stmt;
+  }
+}
+
+// ReturnStatement Node Implementation
+ReturnStatement::ReturnStatement(Expression *value = nullptr) : returnValue(value)
+{
+  type = AstNodeType::ReturnStatement;
+}
+
+ReturnStatement::~ReturnStatement()
+{
+  delete returnValue;
+}
+
+// StopStatement Node Implementation
+StopStatement::StopStatement()
+{
+  type = AstNodeType::StopStatement;
+}
+
+// SkipStatement Node Implementation
+SkipStatement::SkipStatement()
+{
+  type = AstNodeType::SkipStatement;
+}
+
+// ReadStatement Node Implementation
+ReadStatement::ReadStatement(const vector<Identifier *> &vars) : variables(vars)
+{
+  type = AstNodeType::ReadStatement;
+}
+
+ReadStatement::~ReadStatement()
+{
+  for (Identifier *var : variables)
+  {
+    delete var;
+  }
+}
+
+// WriteStatement Node Implementation
+WriteStatement::WriteStatement(const vector<Expression *> &values) : args(values)
+{
+  type = AstNodeType::WriteStatement;
+}
+
+WriteStatement::~WriteStatement()
+{
+  for (Expression *arg : args)
+  {
+    delete arg;
+  }
+}
+
+// WhileLoop Node Implementation
+WhileLoop::WhileLoop(Expression *cond, const vector<Statement *> &stmts)
+    : condition(cond), body(stmts)
+{
+  type = AstNodeType::WhileLoop;
+}
+
+WhileLoop::~WhileLoop()
+{
+  delete condition;
+  for (Statement *stmt : body)
+  {
+    delete stmt;
+  }
+}
+
+// ForLoop Node Implementation
+ForLoop::ForLoop(AssignmentExpression *init, BooleanExpression *cond, UnaryExpression *iter, const vector<Statement *> &stmts)
+    : init(init), condition(cond), update(iter), body(stmts)
+{
+  type = AstNodeType::ForLoop;
+}
+
+ForLoop::~ForLoop()
+{
+  delete init;
+  delete condition;
+  delete update;
+  for (Statement *stmt : body)
+  {
+    delete stmt;
+  }
+}

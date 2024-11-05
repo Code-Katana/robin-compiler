@@ -2,7 +2,7 @@
 
 #include "scanner_base.h"
 
-class FAScanner : ScannerBase
+class FAScanner : public ScannerBase
 {
 public:
   FAScanner(string src);

@@ -2,7 +2,7 @@
 
 #include "scanner_base.h"
 
-class HandCodedScanner : ScannerBase
+class HandCodedScanner : public ScannerBase
 {
 public:
   HandCodedScanner(string src);

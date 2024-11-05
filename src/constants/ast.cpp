@@ -1,21 +1,5 @@
 #include "ast.h"
 
-// Root Node Implementation
-Source::Source(ProgramDeclaration *prog, const vector<FunctionDeclaration *> &funcs)
-    : program(prog), functions(funcs)
-{
-  type = AstNodeType::Source;
-}
-
-Source::~Source()
-{
-  delete program;
-  for (FunctionDeclaration *func : functions)
-  {
-    delete func;
-  }
-}
-
 // Identifier Node Implementation
 Identifier::Identifier(const string &name) : name(name)
 {
@@ -299,7 +283,7 @@ IfStatement::~IfStatement()
 }
 
 // ReturnStatement Node Implementation
-ReturnStatement::ReturnStatement(Expression *value = nullptr) : returnValue(value)
+ReturnStatement::ReturnStatement(Expression *value) : returnValue(value)
 {
   type = AstNodeType::ReturnStatement;
 }
@@ -380,5 +364,21 @@ ForLoop::~ForLoop()
   for (Statement *stmt : body)
   {
     delete stmt;
+  }
+}
+
+// Root Node Implementation
+Source::Source(ProgramDeclaration *prog, const vector<FunctionDeclaration *> &funcs)
+    : program(prog), functions(funcs)
+{
+  type = AstNodeType::Source;
+}
+
+Source::~Source()
+{
+  delete program;
+  for (FunctionDeclaration *func : functions)
+  {
+    delete func;
   }
 }

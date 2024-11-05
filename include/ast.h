@@ -70,17 +70,6 @@ class Literal : public AstNode
 {
 };
 
-// Root Node Implementation
-class Source : public AstNode
-{
-public:
-  ProgramDeclaration *program;
-  vector<FunctionDeclaration *> functions;
-
-  Source(ProgramDeclaration *prog, const vector<FunctionDeclaration *> &funcs);
-  ~Source();
-};
-
 // Literal Nodes Implementation
 class Identifier : public Literal
 {
@@ -372,4 +361,15 @@ public:
 
   ForLoop(AssignmentExpression *init, BooleanExpression *cond, UnaryExpression *iter, const vector<Statement *> &stmts);
   ~ForLoop();
+};
+
+// Root Node Implementation
+class Source : public AstNode
+{
+public:
+  ProgramDeclaration *program;
+  vector<FunctionDeclaration *> functions;
+
+  Source(ProgramDeclaration *prog, const vector<FunctionDeclaration *> &funcs);
+  ~Source();
 };

@@ -64,7 +64,7 @@ class Statement : public AstNode
 {
 };
 
-class Expression : public AstNode
+class Expression : public Statement
 {
 };
 
@@ -72,7 +72,7 @@ class BooleanExpression : public Expression
 {
 };
 
-class Literal : public AstNode
+class Literal : public Expression
 {
 };
 
@@ -363,10 +363,10 @@ class ForLoop : public Statement
 public:
   AssignmentExpression *init;
   BooleanExpression *condition;
-  UnaryExpression *update;
+  Expression *update;
   vector<Statement *> body;
 
-  ForLoop(AssignmentExpression *init, BooleanExpression *cond, UnaryExpression *iter, const vector<Statement *> &stmts);
+  ForLoop(AssignmentExpression *init, BooleanExpression *cond, Expression *iter, const vector<Statement *> &stmts);
   ~ForLoop();
 };
 

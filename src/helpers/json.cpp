@@ -17,7 +17,8 @@ string JSON::quoted_pair(string type, string value)
 {
   return pair(quote(type), quote(value));
 }
-// Tokens to JSON
+
+// Tokens to json
 string JSON::stringify_token(Token tk)
 {
   return quoted_pair(Token::get_token_name(tk.type), tk.value);
@@ -37,15 +38,10 @@ string JSON::stringify_tokens_stream(vector<Token> tokens)
 
 string JSON::stringify_node(const AstNode *node)
 {
-  if (dynamic_cast<const Literal *>(node))
+  if (dynamic_cast<const Statement *>(node))
   {
-    const Literal *litNode = static_cast<const Literal *>(node);
-    return stringify_literal(litNode);
-  }
-  else if (dynamic_cast<const Expression *>(node))
-  {
-    const Expression *expr = static_cast<const Expression *>(node);
-    return stringify_expr(expr);
+    const Statement *stmt = static_cast<const Statement *>(node);
+    return stringify_stmt(stmt);
   }
 
   return stringify_ast_node(node);
@@ -56,10 +52,80 @@ string JSON::stringify_ast_node(const AstNode *node)
   return "{ " + quote("type") + ": " + quote(AstNode::get_node_name(node)) + " }";
 }
 
+// Statements to json
+string JSON::stringify_stmt(const Statement *stmt)
+{
+  if (dynamic_cast<const Expression *>(stmt))
+  {
+    const Expression *expr = static_cast<const Expression *>(stmt);
+    return stringify_expr(expr);
+  }
+  else if (dynamic_cast<const WhileLoop *>(stmt))
+  {
+    const WhileLoop *loop = static_cast<const WhileLoop *>(stmt);
+    return stringify_while_loop(loop);
+  }
+  else if (dynamic_cast<const ForLoop *>(stmt))
+  {
+    const ForLoop *loop = static_cast<const ForLoop *>(stmt);
+    return stringify_for_loop(loop);
+  }
+}
+
+// Loops to json
+string JSON::stringify_while_loop(const WhileLoop *loop)
+{
+  string type = quote("type") + ": " + quote(AstNode::get_node_name(loop));
+  string condition = quote("condition") + ": " + stringify_expr(loop->condition);
+  string body = quote("body") + ": [";
+
+  for (int i = 0; i < loop->body.size(); ++i)
+  {
+    body += stringify_stmt(loop->body[i]);
+
+    if (i != loop->body.size() - 1)
+    {
+      body += ", ";
+    }
+  }
+
+  body += " ]";
+
+  return "{ " + type + ", " + condition + ", " + body + " }";
+}
+
+string JSON::stringify_for_loop(const ForLoop *loop)
+{
+  string type = quote("type") + ": " + quote(AstNode::get_node_name(loop));
+  string init = quote("init") + stringify_assignment_expr(loop->init);
+  string condition = quote("condition") + ": " + stringify_expr(loop->condition);
+  string update = quote("update") + ": " + stringify_expr(loop->update);
+  string body = quote("body") + ": [";
+
+  for (int i = 0; i < loop->body.size(); ++i)
+  {
+    body += stringify_stmt(loop->body[i]);
+
+    if (i != loop->body.size() - 1)
+    {
+      body += ", ";
+    }
+  }
+
+  body += " ]";
+
+  return "{ " + type + ", " + init + ", " + condition + ", " + update + ", " + body + " }";
+}
+
 // Expressions to json
 string JSON::stringify_expr(const Expression *expr)
 {
-  if (dynamic_cast<const AssignmentExpression *>(expr))
+  if (dynamic_cast<const Literal *>(expr))
+  {
+    const Literal *litNode = static_cast<const Literal *>(expr);
+    return stringify_literal(litNode);
+  }
+  else if (dynamic_cast<const AssignmentExpression *>(expr))
   {
     const AssignmentExpression *assExpr = static_cast<const AssignmentExpression *>(expr);
     return stringify_assignment_expr(assExpr);

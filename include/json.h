@@ -33,8 +33,11 @@ private:
   // Declarations
 
   // Statements
+  static string stringify_stmt(const Statement *stmt);
 
   // Loops
+  static string stringify_while_loop(const WhileLoop *loop);
+  static string stringify_for_loop(const ForLoop *loop);
 
   // Expressions
   static string stringify_expr(const Expression *expr);

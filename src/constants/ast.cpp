@@ -402,7 +402,7 @@ WhileLoop::~WhileLoop()
 }
 
 // ForLoop Node Implementation
-ForLoop::ForLoop(AssignmentExpression *init, BooleanExpression *cond, UnaryExpression *iter, const vector<Statement *> &stmts)
+ForLoop::ForLoop(AssignmentExpression *init, BooleanExpression *cond, Expression *iter, const vector<Statement *> &stmts)
     : init(init), condition(cond), update(iter), body(stmts)
 {
   type = AstNodeType::ForLoop;

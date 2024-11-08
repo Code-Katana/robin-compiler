@@ -6,8 +6,8 @@ map<AstNodeType, string> AstNode::NodeNames = {
     // Root Node
     {AstNodeType::Source, "Source"},
     // Declarations
-    {AstNodeType::ProgramDeclaration, "ProgramDeclaration"},
-    {AstNodeType::FunctionDeclaration, "FunctionDeclaration"},
+    {AstNodeType::Program, "ProgramDeclaration"},
+    {AstNodeType::Function, "FunctionDeclaration"},
     {AstNodeType::VariableDefinition, "VariableDefinition"},
     {AstNodeType::VariableDeclaration, "VariableDeclaration"},
     {AstNodeType::VariableInitialization, "VariableInitialization"},
@@ -240,17 +240,17 @@ PrimaryExpression::~PrimaryExpression()
 }
 
 // VariableDeclaration Node Implementation
-VariableDeclaration::VariableDeclaration(const vector<Identifier *> &names, const string &datatype)
-    : names(names), datatype(datatype)
+VariableDeclaration::VariableDeclaration(const vector<Identifier *> &vars, const string &dt)
+    : variables(vars), datatype(dt)
 {
   type = AstNodeType::VariableDeclaration;
 }
 
 VariableDeclaration::~VariableDeclaration()
 {
-  for (Identifier *name : names)
+  for (Identifier *var : variables)
   {
-    delete name;
+    delete var;
   }
 }
 
@@ -279,13 +279,13 @@ VariableDefinition::~VariableDefinition()
 }
 
 // FunctionDeclaration Node Implementation
-FunctionDeclaration::FunctionDeclaration(Identifier *name, const string &ret, const vector<VariableDefinition *> &params)
+Function::Function(Identifier *name, const string &ret, const vector<VariableDefinition *> &params)
     : funcname(name), return_type(ret), parameters(params)
 {
-  type = AstNodeType::FunctionDeclaration;
+  type = AstNodeType::Function;
 }
 
-FunctionDeclaration::~FunctionDeclaration()
+Function::~Function()
 {
   delete funcname;
   for (VariableDefinition *param : parameters)
@@ -295,13 +295,13 @@ FunctionDeclaration::~FunctionDeclaration()
 }
 
 // ProgramDeclaration Node Implementation
-ProgramDeclaration::ProgramDeclaration(Identifier *program_name, const vector<VariableDefinition *> &globals, vector<Statement *> &body)
-    : program_name(program_name), globals(globals), body(body)
+Program::Program(Identifier *prog, const vector<VariableDefinition *> &glob, const vector<Statement *> &body)
+    : program_name(prog), globals(glob), body(body)
 {
-  type = AstNodeType::ProgramDeclaration;
+  type = AstNodeType::Program;
 }
 
-ProgramDeclaration::~ProgramDeclaration()
+Program::~Program()
 {
   delete program_name;
   for (VariableDefinition *global : globals)
@@ -420,7 +420,7 @@ ForLoop::~ForLoop()
 }
 
 // Root Node Implementation
-Source::Source(ProgramDeclaration *prog, const vector<FunctionDeclaration *> &funcs)
+Source::Source(Program *prog, const vector<Function *> &funcs)
     : program(prog), functions(funcs)
 {
   type = AstNodeType::Source;
@@ -429,7 +429,7 @@ Source::Source(ProgramDeclaration *prog, const vector<FunctionDeclaration *> &fu
 Source::~Source()
 {
   delete program;
-  for (FunctionDeclaration *func : functions)
+  for (Function *func : functions)
   {
     delete func;
   }

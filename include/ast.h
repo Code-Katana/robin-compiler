@@ -11,8 +11,8 @@ enum class AstNodeType
   // Root Node
   Source,
   // Declarations
-  ProgramDeclaration,
-  FunctionDeclaration,
+  Program,
+  Function,
   VariableDefinition,
   VariableDeclaration,
   VariableInitialization,
@@ -246,10 +246,10 @@ public:
 class VariableDeclaration : public Statement
 {
 public:
-  vector<Identifier *> names;
+  vector<Identifier *> variables;
   string datatype;
 
-  VariableDeclaration(const vector<Identifier *> &names, const string &datatype);
+  VariableDeclaration(const vector<Identifier *> &variables, const string &datatype);
   ~VariableDeclaration();
 };
 
@@ -273,7 +273,7 @@ public:
   ~VariableDefinition();
 };
 
-class FunctionDeclaration : public Statement
+class Function : public AstNode
 {
 public:
   Identifier *funcname;
@@ -281,19 +281,19 @@ public:
   vector<VariableDefinition *> parameters;
   vector<Statement *> body;
 
-  FunctionDeclaration(Identifier *name, const string &ret, const vector<VariableDefinition *> &params);
-  ~FunctionDeclaration();
+  Function(Identifier *name, const string &ret, const vector<VariableDefinition *> &params);
+  ~Function();
 };
 
-class ProgramDeclaration : public Statement
+class Program : public AstNode
 {
 public:
   Identifier *program_name;
   vector<VariableDefinition *> globals;
   vector<Statement *> body;
 
-  ProgramDeclaration(Identifier *program_name, const vector<VariableDefinition *> &globals, vector<Statement *> &body);
-  ~ProgramDeclaration();
+  Program(Identifier *prog, const vector<VariableDefinition *> &glob, const vector<Statement *> &body);
+  ~Program();
 };
 
 // Statement Nodes Implementation
@@ -374,9 +374,9 @@ public:
 class Source : public AstNode
 {
 public:
-  ProgramDeclaration *program;
-  vector<FunctionDeclaration *> functions;
+  Program *program;
+  vector<Function *> functions;
 
-  Source(ProgramDeclaration *prog, const vector<FunctionDeclaration *> &funcs);
+  Source(Program *prog, const vector<Function *> &funcs);
   ~Source();
 };

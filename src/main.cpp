@@ -9,25 +9,23 @@ using namespace std;
 
 int main()
 {
-  Literal *a = new StringLiteral("Hello World");
-  Literal *b = new IntegerLiteral(69);
-  Literal *c = new FloatLiteral(3.14);
-  Literal *d = new BooleanLiteral(true);
-  Literal *e = new IntegerLiteral(88);
-  Identifier *x = new Identifier("x");
-  Identifier *y = new Identifier("y");
-  Identifier *z = new Identifier("z");
+  Identifier *program_name = new Identifier("say_hello");
+  vector<VariableDefinition *> globals = {};
+  vector<Statement *> body = {
+      new WriteStatement(
+          vector<Expression *>{
+              new PrimaryExpression(
+                  new StringLiteral("Hello Word!!!")),
+          }),
+  };
 
-  vector<Identifier *> vars = {x, y, z};
+  Program *program = new Program(program_name, globals, body);
 
-  // Literal *arr = new ArrayLiteral(elements);
+  vector<Function *> functions = {};
 
-  // AstNode *expr = new AdditiveExpression(
-  //     new PrimaryExpression(f), new PrimaryExpression(b), "+");
+  AstNode *source = new Source(program, functions);
 
-  AstNode *stmt = new ReadStatement(vars);
-
-  cout << JSON::stringify_node(stmt) << endl;
+  cout << JSON::stringify_node(source);
 
   system("pause");
   return 0;

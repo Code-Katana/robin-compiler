@@ -26,11 +26,17 @@ private:
   static string quote(string str);
   static string pair(string type, string value);
   static string quoted_pair(string type, string value);
-
+  static string node_type(const AstNode *node);
   static string stringify_ast_node(const AstNode *node);
   // Root Node
+  static string stringify_source(const Source *src);
 
   // Declarations
+  static string stringify_program(const Program *node);
+  static string stringify_function(const Function *node);
+  static string stringify_var_def(const VariableDefinition *node);
+  static string stringify_var_dec(const VariableDeclaration *node);
+  static string stringify_var_init(const VariableInitialization *node);
 
   // Statements
   static string stringify_stmt(const Statement *stmt);
@@ -62,7 +68,7 @@ private:
   static string stringify_primary_expr(const PrimaryExpression *expr);
   // Literals
   static string stringify_literal(const Literal *node);
-  static string stringify_identifier_literal(const Identifier *node);
+  static string stringify_identifier(const Identifier *node);
   static string stringify_integer_literal(const IntegerLiteral *node);
   static string stringify_float_literal(const FloatLiteral *node);
   static string stringify_string_literal(const StringLiteral *node);

@@ -1,5 +1,57 @@
 #include "ast.h"
 
+// AstNode
+
+map<AstNodeType, string> AstNode::NodeNames = {
+    // Root Node
+    {AstNodeType::Source, "Source"},
+    // Declarations
+    {AstNodeType::ProgramDeclaration, "ProgramDeclaration"},
+    {AstNodeType::FunctionDeclaration, "FunctionDeclaration"},
+    {AstNodeType::VariableDefinition, "VariableDefinition"},
+    {AstNodeType::VariableDeclaration, "VariableDeclaration"},
+    {AstNodeType::VariableInitialization, "VariableInitialization"},
+    // Statements
+    {AstNodeType::IfStatement, "IfStatement"},
+    {AstNodeType::ReturnStatement, "ReturnStatement"},
+    {AstNodeType::SkipStatement, "SkipStatement"},
+    {AstNodeType::StopStatement, "StopStatement"},
+    {AstNodeType::ReadStatement, "ReadStatement"},
+    {AstNodeType::WriteStatement, "WriteStatement"},
+    // Loops
+    {AstNodeType::ForLoop, "ForLoop"},
+    {AstNodeType::WhileLoop, "WhileLoop"},
+    // Expressions
+    {AstNodeType::AssignmentExpression, "AssignmentExpression"},
+    {AstNodeType::OrExpression, "OrExpression"},
+    {AstNodeType::AndExpression, "AndExpression"},
+    {AstNodeType::EqualityExpression, "EqualityExpression"},
+    {AstNodeType::RelationalExpression, "RelationalExpression"},
+    {AstNodeType::AdditiveExpression, "AdditiveExpression"},
+    {AstNodeType::MultiplicativeExpression, "MultiplicativeExpression"},
+    {AstNodeType::UnaryExpression, "UnaryExpression"},
+    {AstNodeType::CallFunctionExpression, "CallFunctionExpression"},
+    {AstNodeType::IndexExpression, "IndexExpression"},
+    {AstNodeType::PrimaryExpression, "PrimaryExpression"},
+    // Literals
+    {AstNodeType::Identifier, "Identifier"},
+    {AstNodeType::IntegerLiteral, "IntegerLiteral"},
+    {AstNodeType::FloatLiteral, "FloatLiteral"},
+    {AstNodeType::StringLiteral, "StringLiteral"},
+    {AstNodeType::BooleanLiteral, "BooleanLiteral"},
+    {AstNodeType::ArrayLiteral, "ArrayLiteral"},
+};
+
+string AstNode::get_node_name(const AstNode *node)
+{
+  if (NodeNames.find(node->type) == NodeNames.end())
+  {
+    return "";
+  }
+
+  return NodeNames[node->type];
+}
+
 // Identifier Node Implementation
 Identifier::Identifier(const string &name) : name(name)
 {
@@ -45,15 +97,15 @@ ArrayLiteral::~ArrayLiteral()
 }
 
 // AssignmentExpression Node Implementation
-AssignmentExpression::AssignmentExpression(Identifier *var, Expression *val)
-    : variable(var), value(val)
+AssignmentExpression::AssignmentExpression(Expression *var, Expression *val)
+    : assignee(var), value(val)
 {
   type = AstNodeType::AssignmentExpression;
 }
 
 AssignmentExpression::~AssignmentExpression()
 {
-  delete variable;
+  delete assignee;
   delete value;
 }
 
@@ -136,8 +188,8 @@ MultiplicativeExpression::~MultiplicativeExpression()
 }
 
 // UnaryExpression Node Implementation
-UnaryExpression::UnaryExpression(Expression *operand, const string &op)
-    : operand(operand), optr(op)
+UnaryExpression::UnaryExpression(Expression *operand, const string &op, const bool &post)
+    : operand(operand), optr(op), postfix(post)
 {
   type = AstNodeType::UnaryExpression;
 }

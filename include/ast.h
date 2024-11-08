@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <map>
 
 using namespace std;
 
@@ -52,6 +53,11 @@ class AstNode
 public:
   AstNodeType type;
   virtual ~AstNode() = default;
+
+  static string get_node_name(const AstNode *node);
+
+private:
+  static map<AstNodeType, string> NodeNames;
 };
 
 class Statement : public AstNode
@@ -124,10 +130,10 @@ public:
 class AssignmentExpression : public Expression
 {
 public:
-  Identifier *variable;
+  Expression *assignee;
   Expression *value;
 
-  AssignmentExpression(Identifier *var, Expression *val);
+  AssignmentExpression(Expression *var, Expression *val);
   ~AssignmentExpression();
 };
 
@@ -200,8 +206,9 @@ class UnaryExpression : public Expression
 public:
   Expression *operand;
   string optr; // "-" | "++" | "--" | "NOT"
+  bool postfix;
 
-  UnaryExpression(Expression *operand, const string &op);
+  UnaryExpression(Expression *operand, const string &op, const bool &post);
   ~UnaryExpression();
 };
 

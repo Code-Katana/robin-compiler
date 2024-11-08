@@ -34,6 +34,12 @@ private:
 
   // Statements
   static string stringify_stmt(const Statement *stmt);
+  static string stringify_if_stmt(const IfStatement *stmt);
+  static string stringify_return_stmt(const ReturnStatement *stmt);
+  static string stringify_skip_stmt(const SkipStatement *stmt);
+  static string stringify_stop_stmt(const StopStatement *stmt);
+  static string stringify_read_stmt(const ReadStatement *stmt);
+  static string stringify_write_stmt(const WriteStatement *stmt);
 
   // Loops
   static string stringify_while_loop(const WhileLoop *loop);

@@ -9,21 +9,15 @@ using namespace std;
 
 int main()
 {
-  Literal *a = new StringLiteral("Hello World");
-  Literal *b = new IntegerLiteral(69);
-  Literal *c = new FloatLiteral(3.14);
-  Literal *d = new BooleanLiteral(true);
-  Literal *e = new IntegerLiteral(88);
-  Literal *f = new Identifier("x");
+  Identifier *x = new Identifier("x");
+  Identifier *y = new Identifier("y");
+  Identifier *z = new Identifier("z");
 
-  vector<Literal *> elements = {a, b, c, d, e};
+  vector<Identifier *> vars = {x, y, z};
 
-  Literal *arr = new ArrayLiteral(elements);
+  AstNode *stmt = new ReadStatement(vars);
 
-  AstNode *expr = new AdditiveExpression(
-      new PrimaryExpression(f), new PrimaryExpression(b), "+");
-
-  cout << JSON::stringify_node(expr) << endl;
+  cout << JSON::stringify_node(stmt) << endl;
 
   system("pause");
   return 0;

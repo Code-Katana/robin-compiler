@@ -60,6 +60,36 @@ string JSON::stringify_stmt(const Statement *stmt)
     const Expression *expr = static_cast<const Expression *>(stmt);
     return stringify_expr(expr);
   }
+  else if (dynamic_cast<const IfStatement *>(stmt))
+  {
+    const IfStatement *ifStmt = static_cast<const IfStatement *>(stmt);
+    return stringify_if_stmt(ifStmt);
+  }
+  else if (dynamic_cast<const ReturnStatement *>(stmt))
+  {
+    const ReturnStatement *rtnStmt = static_cast<const ReturnStatement *>(stmt);
+    return stringify_return_stmt(rtnStmt);
+  }
+  else if (dynamic_cast<const SkipStatement *>(stmt))
+  {
+    const SkipStatement *skipStmt = static_cast<const SkipStatement *>(stmt);
+    return stringify_skip_stmt(skipStmt);
+  }
+  else if (dynamic_cast<const StopStatement *>(stmt))
+  {
+    const StopStatement *stopStmt = static_cast<const StopStatement *>(stmt);
+    return stringify_stop_stmt(stopStmt);
+  }
+  else if (dynamic_cast<const ReadStatement *>(stmt))
+  {
+    const ReadStatement *readStmt = static_cast<const ReadStatement *>(stmt);
+    return stringify_read_stmt(readStmt);
+  }
+  else if (dynamic_cast<const WriteStatement *>(stmt))
+  {
+    const WriteStatement *writeStmt = static_cast<const WriteStatement *>(stmt);
+    return stringify_write_stmt(writeStmt);
+  }
   else if (dynamic_cast<const WhileLoop *>(stmt))
   {
     const WhileLoop *loop = static_cast<const WhileLoop *>(stmt);
@@ -70,6 +100,96 @@ string JSON::stringify_stmt(const Statement *stmt)
     const ForLoop *loop = static_cast<const ForLoop *>(stmt);
     return stringify_for_loop(loop);
   }
+}
+
+string JSON::stringify_if_stmt(const IfStatement *stmt)
+{
+  string type = quote("type") + ": " + quote(AstNode::get_node_name(stmt));
+  string consequent = quote("consequent") + ": [";
+  string alternate = quote("alternate") + ": [";
+
+  for (int i = 0; i < stmt->consequent.size(); ++i)
+  {
+    consequent += stringify_stmt(stmt->consequent[i]);
+
+    if (i != stmt->consequent.size() - 1)
+    {
+      consequent += ", ";
+    }
+  }
+
+  for (int i = 0; i < stmt->alternate.size(); ++i)
+  {
+    alternate += stringify_stmt(stmt->alternate[i]);
+
+    if (i != stmt->alternate.size() - 1)
+    {
+      alternate += ", ";
+    }
+  }
+
+  consequent += "]";
+  alternate += "]";
+
+  return "{ " + type + ", " + consequent + ", " + alternate + " }";
+}
+
+string JSON::stringify_return_stmt(const ReturnStatement *stmt)
+{
+  string type = quote("type") + ": " + quote(AstNode::get_node_name(stmt));
+  string value = quote("value") + ": " + (stmt->returnValue == nullptr ? "null" : stringify_expr(stmt->returnValue));
+
+  return "{ " + type + ", " + value + " }";
+}
+
+string JSON::stringify_skip_stmt(const SkipStatement *stmt)
+{
+  return stringify_ast_node(stmt);
+}
+
+string JSON::stringify_stop_stmt(const StopStatement *stmt)
+{
+  return stringify_ast_node(stmt);
+}
+
+string JSON::stringify_read_stmt(const ReadStatement *stmt)
+{
+  string type = quote("type") + ": " + quote(AstNode::get_node_name(stmt));
+  string vars = quote("variables") + ": [";
+
+  for (int i = 0; i < stmt->variables.size(); ++i)
+  {
+    vars += stringify_stmt(stmt->variables[i]);
+
+    if (i != stmt->variables.size() - 1)
+    {
+      vars += ", ";
+    }
+  }
+
+  vars += " ]";
+
+  return "{ " + type + ", " + vars + " }";
+}
+
+string JSON::stringify_write_stmt(const WriteStatement *stmt)
+{
+  string type = quote("type") + ": " + quote(AstNode::get_node_name(stmt));
+  string args = quote("expressions") + ": [";
+
+  for (int i = 0; i < stmt->args.size(); ++i)
+  {
+    args += stringify_stmt(stmt->args[i]);
+
+    if (i != stmt->args.size() - 1)
+    {
+      args += ", ";
+    }
+  }
+
+  args += " ]";
+
+  return "{ " + type + ", " + args + " }";
 }
 
 // Loops to json

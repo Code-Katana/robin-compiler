@@ -97,7 +97,7 @@ ArrayLiteral::~ArrayLiteral()
 }
 
 // AssignmentExpression Node Implementation
-AssignmentExpression::AssignmentExpression(Expression *var, Expression *val)
+AssignmentExpression::AssignmentExpression(AssignableExpression *var, Expression *val)
     : assignee(var), value(val)
 {
   type = AstNodeType::AssignmentExpression;

@@ -10,7 +10,7 @@ string JSON::quote(string str)
 
 string JSON::pair(string type, string value)
 {
-  return "{ \\\"type\\\": " + type + ", \\\"value\\\": " + value + " }";
+  return "{ " + quote("type") + ": " + type + ", " + quote("value") + ": " + value + " }";
 }
 
 string JSON::quoted_pair(string type, string value)
@@ -417,6 +417,11 @@ string JSON::stringify_expr(const Expression *expr)
     const Literal *litNode = static_cast<const Literal *>(expr);
     return stringify_literal(litNode);
   }
+  else if (dynamic_cast<const AssignableExpression *>(expr))
+  {
+    const AssignableExpression *assignable = static_cast<const AssignableExpression *>(expr);
+    return stringify_assignable_expr(assignable);
+  }
   else if (dynamic_cast<const AssignmentExpression *>(expr))
   {
     const AssignmentExpression *assExpr = static_cast<const AssignmentExpression *>(expr);
@@ -457,11 +462,6 @@ string JSON::stringify_expr(const Expression *expr)
     const UnaryExpression *unaryExpr = static_cast<const UnaryExpression *>(expr);
     return stringify_unary_expr(unaryExpr);
   }
-  else if (dynamic_cast<const IndexExpression *>(expr))
-  {
-    const IndexExpression *idxExpr = static_cast<const IndexExpression *>(expr);
-    return stringify_index_expr(idxExpr);
-  }
   else if (dynamic_cast<const CallFunctionExpression *>(expr))
   {
     const CallFunctionExpression *cfExpr = static_cast<const CallFunctionExpression *>(expr);
@@ -471,6 +471,22 @@ string JSON::stringify_expr(const Expression *expr)
   {
     const PrimaryExpression *primaryExpr = static_cast<const PrimaryExpression *>(expr);
     return stringify_primary_expr(primaryExpr);
+  }
+
+  return stringify_ast_node(expr);
+}
+
+string JSON::stringify_assignable_expr(const AssignableExpression *expr)
+{
+  if (dynamic_cast<const Identifier *>(expr))
+  {
+    const Identifier *idNode = static_cast<const Identifier *>(expr);
+    return stringify_identifier(idNode);
+  }
+  else if (dynamic_cast<const IndexExpression *>(expr))
+  {
+    const IndexExpression *idxExpr = static_cast<const IndexExpression *>(expr);
+    return stringify_index_expr(idxExpr);
   }
 
   return stringify_ast_node(expr);
@@ -498,7 +514,7 @@ string JSON::stringify_binary_expr(const string &exprType, const Expression *exp
 string JSON::stringify_assignment_expr(const AssignmentExpression *assExpr)
 {
   string type = node_type(assExpr);
-  string assignee = quote("assignee") + ": " + stringify_expr(assExpr->assignee);
+  string assignee = quote("assignee") + ": " + stringify_assignable_expr(assExpr->assignee);
   string value = quote("value") + ": " + stringify_expr(assExpr->value);
 
   return "{ " + type + ", " + assignee + ", " + value + " }";
@@ -568,8 +584,8 @@ string JSON::stringify_call_function_expr(const CallFunctionExpression *cfExpr)
 string JSON::stringify_index_expr(const IndexExpression *idxExpr)
 {
   string type = node_type(idxExpr);
-  string base = stringify_expr(idxExpr->base);
-  string index = stringify_expr(idxExpr->index);
+  string base = quote("base") + ": " + stringify_expr(idxExpr->base);
+  string index = quote("index") + ": " + stringify_expr(idxExpr->index);
 
   return "{ " + type + ", " + base + ", " + index + " }";
 }
@@ -582,12 +598,7 @@ string JSON::stringify_primary_expr(const PrimaryExpression *primaryExpr)
 // Literals to json
 string JSON::stringify_literal(const Literal *litNode)
 {
-  if (dynamic_cast<const Identifier *>(litNode))
-  {
-    const Identifier *idNode = static_cast<const Identifier *>(litNode);
-    return stringify_identifier(idNode);
-  }
-  else if (dynamic_cast<const IntegerLiteral *>(litNode))
+  if (dynamic_cast<const IntegerLiteral *>(litNode))
   {
     const IntegerLiteral *intNode = static_cast<const IntegerLiteral *>(litNode);
     return stringify_integer_literal(intNode);

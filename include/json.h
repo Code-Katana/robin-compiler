@@ -53,6 +53,7 @@ private:
 
   // Expressions
   static string stringify_expr(const Expression *expr);
+  static string stringify_assignable_expr(const AssignableExpression *expr);
   static string stringify_assignment_expr(const AssignmentExpression *expr);
   static string stringify_boolean_expr(const string &exprType, const Expression *exprLeft, const Expression *exprRight);
   static string stringify_binary_expr(const string &exprType, const Expression *exprLeft, const Expression *exprRight, const string &optr);

@@ -72,12 +72,16 @@ class BooleanExpression : public Expression
 {
 };
 
+class AssignableExpression : public Expression
+{
+};
+
 class Literal : public Expression
 {
 };
 
 // Literal Nodes Implementation
-class Identifier : public Literal
+class Identifier : public AssignableExpression
 {
 public:
   string name;
@@ -130,10 +134,10 @@ public:
 class AssignmentExpression : public Expression
 {
 public:
-  Expression *assignee;
+  AssignableExpression *assignee;
   Expression *value;
 
-  AssignmentExpression(Expression *var, Expression *val);
+  AssignmentExpression(AssignableExpression *var, Expression *val);
   ~AssignmentExpression();
 };
 
@@ -222,7 +226,7 @@ public:
   ~CallFunctionExpression();
 };
 
-class IndexExpression : public Expression
+class IndexExpression : public AssignableExpression
 {
 public:
   Expression *base;

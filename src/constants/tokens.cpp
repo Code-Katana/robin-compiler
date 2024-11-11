@@ -28,7 +28,8 @@ map<string, TokenType> Token::ReservedWords = {
     {"integer", TokenType::INTEGER_TY},
     {"boolean", TokenType::BOOLEAN_TY},
     {"string", TokenType::STRING_TY},
-    {"float", TokenType::FLOAT_TY}};
+    {"float", TokenType::FLOAT_TY},
+};
 
 map<TokenType, string> Token::TokenNames = {
     // Keywords
@@ -94,7 +95,8 @@ map<TokenType, string> Token::TokenNames = {
     {TokenType::STRING_SY, "STRING_SY"},
     // others
     {TokenType::ERROR, "ERROR"},
-    {TokenType::END_OF_FILE, "END_OF_FILE"}};
+    {TokenType::END_OF_FILE, "END_OF_FILE"},
+};
 
 bool Token::is_reserved(string val)
 {
@@ -103,10 +105,10 @@ bool Token::is_reserved(string val)
 
 string Token::get_token_name(TokenType ty)
 {
-  if (Token::TokenNames.find(ty) != Token::TokenNames.end())
+  if (Token::TokenNames.find(ty) == Token::TokenNames.end())
   {
-    return Token::TokenNames[ty];
+    return Token::TokenNames[TokenType::ERROR];
   }
 
-  return Token::TokenNames[TokenType::ERROR];
+  return Token::TokenNames[ty];
 }

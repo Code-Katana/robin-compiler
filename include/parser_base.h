@@ -1,0 +1,25 @@
+#pragma once
+
+#include <string>
+
+#include "ast.h"
+#include "scanner_base.h"
+
+using namespace std;
+
+class ParserBase
+{
+public:
+  ParserBase(ScannerBase *sc);
+  virtual ~ParserBase() = default;
+
+  virtual AstNode *parse_ast() = 0;
+
+protected:
+  ScannerBase *sc;
+  Token current_token;
+
+  Token match(TokenType type);
+
+  bool expect(TokenType type);
+};

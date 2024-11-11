@@ -13,7 +13,7 @@ public:
   ParserBase(ScannerBase *sc);
   virtual ~ParserBase() = default;
 
-  AstNode *parse_ast();
+  virtual AstNode *parse_ast() = 0;
 
 protected:
   ScannerBase *sc;

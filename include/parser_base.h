@@ -20,4 +20,6 @@ protected:
   Token current_token;
 
   Token match(TokenType type);
+
+  bool expect(TokenType type);
 };

@@ -3,7 +3,6 @@
 ParserBase::ParserBase(ScannerBase *scanner)
 {
   sc = scanner;
-
   current_token = sc->get_token();
 }
 
@@ -19,4 +18,9 @@ Token ParserBase::match(TokenType type)
 
   current_token = sc->get_token();
   return placeholder;
+}
+
+bool ParserBase::expect(TokenType type)
+{
+  return current_token.type == type;
 }

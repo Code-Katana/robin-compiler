@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <map>
 
 using namespace std;
 
@@ -10,8 +11,8 @@ enum class AstNodeType
   // Root Node
   Source,
   // Declarations
-  ProgramDeclaration,
-  FunctionDeclaration,
+  Program,
+  Function,
   VariableDefinition,
   VariableDeclaration,
   VariableInitialization,
@@ -52,13 +53,18 @@ class AstNode
 public:
   AstNodeType type;
   virtual ~AstNode() = default;
+
+  static string get_node_name(const AstNode *node);
+
+private:
+  static map<AstNodeType, string> NodeNames;
 };
 
 class Statement : public AstNode
 {
 };
 
-class Expression : public AstNode
+class Expression : public Statement
 {
 };
 
@@ -66,12 +72,16 @@ class BooleanExpression : public Expression
 {
 };
 
-class Literal : public AstNode
+class AssignableExpression : public Expression
+{
+};
+
+class Literal : public Expression
 {
 };
 
 // Literal Nodes Implementation
-class Identifier : public Literal
+class Identifier : public AssignableExpression
 {
 public:
   string name;
@@ -124,10 +134,10 @@ public:
 class AssignmentExpression : public Expression
 {
 public:
-  Identifier *variable;
+  AssignableExpression *assignee;
   Expression *value;
 
-  AssignmentExpression(Identifier *var, Expression *val);
+  AssignmentExpression(AssignableExpression *var, Expression *val);
   ~AssignmentExpression();
 };
 
@@ -200,8 +210,9 @@ class UnaryExpression : public Expression
 public:
   Expression *operand;
   string optr; // "-" | "++" | "--" | "NOT"
+  bool postfix;
 
-  UnaryExpression(Expression *operand, const string &op);
+  UnaryExpression(Expression *operand, const string &op, const bool &post);
   ~UnaryExpression();
 };
 
@@ -215,7 +226,7 @@ public:
   ~CallFunctionExpression();
 };
 
-class IndexExpression : public Expression
+class IndexExpression : public AssignableExpression
 {
 public:
   Expression *base;
@@ -239,10 +250,10 @@ public:
 class VariableDeclaration : public Statement
 {
 public:
-  vector<Identifier *> names;
+  vector<Identifier *> variables;
   string datatype;
 
-  VariableDeclaration(const vector<Identifier *> &names, const string &datatype);
+  VariableDeclaration(const vector<Identifier *> &variables, const string &datatype);
   ~VariableDeclaration();
 };
 
@@ -266,7 +277,7 @@ public:
   ~VariableDefinition();
 };
 
-class FunctionDeclaration : public Statement
+class Function : public AstNode
 {
 public:
   Identifier *funcname;
@@ -274,19 +285,19 @@ public:
   vector<VariableDefinition *> parameters;
   vector<Statement *> body;
 
-  FunctionDeclaration(Identifier *name, const string &ret, const vector<VariableDefinition *> &params);
-  ~FunctionDeclaration();
+  Function(Identifier *name, const string &ret, const vector<VariableDefinition *> &params);
+  ~Function();
 };
 
-class ProgramDeclaration : public Statement
+class Program : public AstNode
 {
 public:
   Identifier *program_name;
   vector<VariableDefinition *> globals;
   vector<Statement *> body;
 
-  ProgramDeclaration(Identifier *program_name, const vector<VariableDefinition *> &globals, vector<Statement *> &body);
-  ~ProgramDeclaration();
+  Program(Identifier *prog, const vector<VariableDefinition *> &glob, const vector<Statement *> &body);
+  ~Program();
 };
 
 // Statement Nodes Implementation
@@ -356,10 +367,10 @@ class ForLoop : public Statement
 public:
   AssignmentExpression *init;
   BooleanExpression *condition;
-  UnaryExpression *update;
+  Expression *update;
   vector<Statement *> body;
 
-  ForLoop(AssignmentExpression *init, BooleanExpression *cond, UnaryExpression *iter, const vector<Statement *> &stmts);
+  ForLoop(AssignmentExpression *init, BooleanExpression *cond, Expression *iter, const vector<Statement *> &stmts);
   ~ForLoop();
 };
 
@@ -367,9 +378,9 @@ public:
 class Source : public AstNode
 {
 public:
-  ProgramDeclaration *program;
-  vector<FunctionDeclaration *> functions;
+  Program *program;
+  vector<Function *> functions;
 
-  Source(ProgramDeclaration *prog, const vector<FunctionDeclaration *> &funcs);
+  Source(Program *prog, const vector<Function *> &funcs);
   ~Source();
 };

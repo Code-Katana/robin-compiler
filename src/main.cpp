@@ -11,18 +11,20 @@ int main()
 {
   string program = R"(
   
-  program katana is
-    var x: integer;
-  begin
-    read x;
-  end
+  // program katana is
+  //   var x: integer;
+  // begin
+  //   read x;
+  // end
+
+  return 69;
 
   )";
 
-  WrenCompiler wc(program, ScannerOptions::FA);
+  WrenCompiler wc(program, ScannerOptions::FA, ParserOptions::RecursiveDecent);
 
   // stringify to json
-  cout << JSON::stringify_tokens_stream(wc.scanner->get_tokens_stream()) << endl;
+  cout << JSON::stringify_node(wc.parser->parse_ast()) << endl;
 
   system("pause");
   return 0;

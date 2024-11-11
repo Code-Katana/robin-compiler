@@ -1,6 +1,6 @@
 #include "wren_compiler.h"
 
-WrenCompiler::WrenCompiler(string src, ScannerOptions scOpt)
+WrenCompiler::WrenCompiler(string src, ScannerOptions scOpt, ParserOptions prOpt)
 {
   switch (scOpt)
   {
@@ -9,5 +9,11 @@ WrenCompiler::WrenCompiler(string src, ScannerOptions scOpt)
     break;
   case ScannerOptions::FA:
     scanner = new FAScanner(src);
+  }
+  switch (prOpt)
+  {
+  case ParserOptions::RecursiveDecent:
+    parser = new RecursiveDecentParser(scanner);
+    break;
   }
 }

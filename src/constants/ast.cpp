@@ -1,5 +1,78 @@
 #include "ast.h"
 
+// AstNode
+
+map<AstNodeType, string> AstNode::NodeNames = {
+    // Root Node
+    {AstNodeType::Source, "Source"},
+    // Declarations
+    {AstNodeType::Program, "ProgramDeclaration"},
+    {AstNodeType::Function, "FunctionDeclaration"},
+    {AstNodeType::VariableDefinition, "VariableDefinition"},
+    {AstNodeType::VariableDeclaration, "VariableDeclaration"},
+    {AstNodeType::VariableInitialization, "VariableInitialization"},
+    // Types
+    {AstNodeType::ReturnType, "ReturnType"},
+    {AstNodeType::PrimitiveType, "PrimitiveType"},
+    {AstNodeType::ArrayType, "ArrayType"},
+    // Statements
+    {AstNodeType::IfStatement, "IfStatement"},
+    {AstNodeType::ReturnStatement, "ReturnStatement"},
+    {AstNodeType::SkipStatement, "SkipStatement"},
+    {AstNodeType::StopStatement, "StopStatement"},
+    {AstNodeType::ReadStatement, "ReadStatement"},
+    {AstNodeType::WriteStatement, "WriteStatement"},
+    // Loops
+    {AstNodeType::ForLoop, "ForLoop"},
+    {AstNodeType::WhileLoop, "WhileLoop"},
+    // Expressions
+    {AstNodeType::AssignmentExpression, "AssignmentExpression"},
+    {AstNodeType::OrExpression, "OrExpression"},
+    {AstNodeType::AndExpression, "AndExpression"},
+    {AstNodeType::EqualityExpression, "EqualityExpression"},
+    {AstNodeType::RelationalExpression, "RelationalExpression"},
+    {AstNodeType::AdditiveExpression, "AdditiveExpression"},
+    {AstNodeType::MultiplicativeExpression, "MultiplicativeExpression"},
+    {AstNodeType::UnaryExpression, "UnaryExpression"},
+    {AstNodeType::CallFunctionExpression, "CallFunctionExpression"},
+    {AstNodeType::IndexExpression, "IndexExpression"},
+    {AstNodeType::PrimaryExpression, "PrimaryExpression"},
+    // Literals
+    {AstNodeType::Identifier, "Identifier"},
+    {AstNodeType::IntegerLiteral, "IntegerLiteral"},
+    {AstNodeType::FloatLiteral, "FloatLiteral"},
+    {AstNodeType::StringLiteral, "StringLiteral"},
+    {AstNodeType::BooleanLiteral, "BooleanLiteral"},
+    {AstNodeType::ArrayLiteral, "ArrayLiteral"},
+};
+
+map<TokenType, string> AstNode::DataTypes = {
+    {TokenType::INTEGER_TY, "integer"},
+    {TokenType::BOOLEAN_TY, "boolean"},
+    {TokenType::STRING_TY, "string"},
+    {TokenType::FLOAT_TY, "float"},
+};
+
+bool AstNode::is_data_type(TokenType type)
+{
+  return DataTypes.find(type) != DataTypes.end();
+}
+
+bool AstNode::is_return_type(TokenType type)
+{
+  return is_data_type(type) || type == TokenType::VOID_TY;
+}
+
+string AstNode::get_node_name(const AstNode *node)
+{
+  if (NodeNames.find(node->type) == NodeNames.end())
+  {
+    return "";
+  }
+
+  return NodeNames[node->type];
+}
+
 // Identifier Node Implementation
 Identifier::Identifier(const string &name) : name(name)
 {
@@ -31,29 +104,51 @@ BooleanLiteral::BooleanLiteral(bool val) : value(val)
 }
 
 // ArrayLiteral Node Implementation
-ArrayLiteral::ArrayLiteral(const vector<Literal *> &elems) : elements(elems)
+ArrayLiteral::ArrayLiteral(const vector<Expression *> &elems) : elements(elems)
 {
   type = AstNodeType::ArrayLiteral;
 }
 
 ArrayLiteral::~ArrayLiteral()
 {
-  for (Literal *elem : elements)
+  for (Expression *elem : elements)
   {
     delete elem;
   }
 }
 
+// Primitive Data Type Implementation
+ReturnType::ReturnType(DataType *rt) : return_type(rt)
+{
+  type = AstNodeType::ReturnType;
+}
+
+ReturnType::~ReturnType()
+{
+  delete return_type;
+}
+
+PrimitiveType::PrimitiveType(const string &ty) : datatype(ty)
+{
+  type = AstNodeType::PrimitiveType;
+}
+
+// Array Data Type Implementation
+ArrayType::ArrayType(const string &ty, int dim) : datatype(ty), dimension(dim)
+{
+  type = AstNodeType::ArrayType;
+}
+
 // AssignmentExpression Node Implementation
-AssignmentExpression::AssignmentExpression(Identifier *var, Expression *val)
-    : variable(var), value(val)
+AssignmentExpression::AssignmentExpression(AssignableExpression *var, Expression *val)
+    : assignee(var), value(val)
 {
   type = AstNodeType::AssignmentExpression;
 }
 
 AssignmentExpression::~AssignmentExpression()
 {
-  delete variable;
+  delete assignee;
   delete value;
 }
 
@@ -136,8 +231,8 @@ MultiplicativeExpression::~MultiplicativeExpression()
 }
 
 // UnaryExpression Node Implementation
-UnaryExpression::UnaryExpression(Expression *operand, const string &op)
-    : operand(operand), optr(op)
+UnaryExpression::UnaryExpression(Expression *operand, const string &op, const bool &post)
+    : operand(operand), optr(op), postfix(post)
 {
   type = AstNodeType::UnaryExpression;
 }
@@ -188,22 +283,24 @@ PrimaryExpression::~PrimaryExpression()
 }
 
 // VariableDeclaration Node Implementation
-VariableDeclaration::VariableDeclaration(const vector<Identifier *> &names, const string &datatype)
-    : names(names), datatype(datatype)
+VariableDeclaration::VariableDeclaration(const vector<Identifier *> &vars, DataType *dt)
+    : variables(vars), datatype(dt)
 {
   type = AstNodeType::VariableDeclaration;
 }
 
 VariableDeclaration::~VariableDeclaration()
 {
-  for (Identifier *name : names)
+  delete datatype;
+
+  for (Identifier *var : variables)
   {
-    delete name;
+    delete var;
   }
 }
 
 // VariableInitialization Node Implementation
-VariableInitialization::VariableInitialization(Identifier *name, const string &datatype, Expression *init)
+VariableInitialization::VariableInitialization(Identifier *name, DataType *datatype, Expression *init)
     : name(name), datatype(datatype), initializer(init)
 {
   type = AstNodeType::VariableInitialization;
@@ -212,6 +309,7 @@ VariableInitialization::VariableInitialization(Identifier *name, const string &d
 VariableInitialization::~VariableInitialization()
 {
   delete name;
+  delete datatype;
   delete initializer;
 }
 
@@ -227,15 +325,16 @@ VariableDefinition::~VariableDefinition()
 }
 
 // FunctionDeclaration Node Implementation
-FunctionDeclaration::FunctionDeclaration(Identifier *name, const string &ret, const vector<VariableDefinition *> &params)
-    : funcname(name), return_type(ret), parameters(params)
+Function::Function(Identifier *name, ReturnType *ret, const vector<VariableDefinition *> &params, const vector<Statement *> &body)
+    : funcname(name), return_type(ret), parameters(params), body(body)
 {
-  type = AstNodeType::FunctionDeclaration;
+  type = AstNodeType::Function;
 }
 
-FunctionDeclaration::~FunctionDeclaration()
+Function::~Function()
 {
   delete funcname;
+  delete return_type;
   for (VariableDefinition *param : parameters)
   {
     delete param;
@@ -243,13 +342,13 @@ FunctionDeclaration::~FunctionDeclaration()
 }
 
 // ProgramDeclaration Node Implementation
-ProgramDeclaration::ProgramDeclaration(Identifier *program_name, const vector<VariableDefinition *> &globals, vector<Statement *> &body)
-    : program_name(program_name), globals(globals), body(body)
+Program::Program(Identifier *prog, const vector<VariableDefinition *> &glob, const vector<Statement *> &body)
+    : program_name(prog), globals(glob), body(body)
 {
-  type = AstNodeType::ProgramDeclaration;
+  type = AstNodeType::Program;
 }
 
-ProgramDeclaration::~ProgramDeclaration()
+Program::~Program()
 {
   delete program_name;
   for (VariableDefinition *global : globals)
@@ -350,7 +449,7 @@ WhileLoop::~WhileLoop()
 }
 
 // ForLoop Node Implementation
-ForLoop::ForLoop(AssignmentExpression *init, BooleanExpression *cond, UnaryExpression *iter, const vector<Statement *> &stmts)
+ForLoop::ForLoop(AssignmentExpression *init, BooleanExpression *cond, Expression *iter, const vector<Statement *> &stmts)
     : init(init), condition(cond), update(iter), body(stmts)
 {
   type = AstNodeType::ForLoop;
@@ -368,7 +467,7 @@ ForLoop::~ForLoop()
 }
 
 // Root Node Implementation
-Source::Source(ProgramDeclaration *prog, const vector<FunctionDeclaration *> &funcs)
+Source::Source(Program *prog, const vector<Function *> &funcs)
     : program(prog), functions(funcs)
 {
   type = AstNodeType::Source;
@@ -377,7 +476,7 @@ Source::Source(ProgramDeclaration *prog, const vector<FunctionDeclaration *> &fu
 Source::~Source()
 {
   delete program;
-  for (FunctionDeclaration *func : functions)
+  for (Function *func : functions)
   {
     delete func;
   }

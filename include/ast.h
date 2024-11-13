@@ -2,6 +2,9 @@
 
 #include <string>
 #include <vector>
+#include <map>
+
+#include "token.h"
 
 using namespace std;
 
@@ -10,11 +13,15 @@ enum class AstNodeType
   // Root Node
   Source,
   // Declarations
-  ProgramDeclaration,
-  FunctionDeclaration,
+  Program,
+  Function,
   VariableDefinition,
   VariableDeclaration,
   VariableInitialization,
+  // Types
+  ReturnType,
+  PrimitiveType,
+  ArrayType,
   // Statements
   IfStatement,
   ReturnStatement,
@@ -52,13 +59,21 @@ class AstNode
 public:
   AstNodeType type;
   virtual ~AstNode() = default;
+  static bool is_data_type(TokenType type);
+  static bool is_return_type(TokenType type);
+
+  static string get_node_name(const AstNode *node);
+  static map<TokenType, string> DataTypes;
+
+private:
+  static map<AstNodeType, string> NodeNames;
 };
 
 class Statement : public AstNode
 {
 };
 
-class Expression : public AstNode
+class Expression : public Statement
 {
 };
 
@@ -66,12 +81,20 @@ class BooleanExpression : public Expression
 {
 };
 
-class Literal : public AstNode
+class AssignableExpression : public Expression
+{
+};
+
+class DataType : public AstNode
+{
+};
+
+class Literal : public Expression
 {
 };
 
 // Literal Nodes Implementation
-class Identifier : public Literal
+class Identifier : public AssignableExpression
 {
 public:
   string name;
@@ -114,20 +137,47 @@ public:
 class ArrayLiteral : public Literal
 {
 public:
-  vector<Literal *> elements;
+  vector<Expression *> elements;
 
-  ArrayLiteral(const vector<Literal *> &elems);
+  ArrayLiteral(const vector<Expression *> &elems);
   ~ArrayLiteral();
+};
+
+// Data Type implementation
+class ReturnType : public DataType
+{
+public:
+  DataType *return_type;
+
+  ReturnType(DataType *rt);
+  ~ReturnType();
+};
+
+class PrimitiveType : public DataType
+{
+public:
+  string datatype;
+
+  PrimitiveType(const string &ty);
+};
+
+class ArrayType : public DataType
+{
+public:
+  string datatype;
+  int dimension;
+
+  ArrayType(const string &ty, int dim);
 };
 
 // Expression Nodes Implementation
 class AssignmentExpression : public Expression
 {
 public:
-  Identifier *variable;
+  AssignableExpression *assignee;
   Expression *value;
 
-  AssignmentExpression(Identifier *var, Expression *val);
+  AssignmentExpression(AssignableExpression *var, Expression *val);
   ~AssignmentExpression();
 };
 
@@ -199,9 +249,10 @@ class UnaryExpression : public Expression
 {
 public:
   Expression *operand;
-  string optr; // "-" | "++" | "--" | "NOT"
+  string optr; // "-" | "++" | "--" | "NOT()"
+  bool postfix;
 
-  UnaryExpression(Expression *operand, const string &op);
+  UnaryExpression(Expression *operand, const string &op, const bool &post);
   ~UnaryExpression();
 };
 
@@ -215,7 +266,7 @@ public:
   ~CallFunctionExpression();
 };
 
-class IndexExpression : public Expression
+class IndexExpression : public AssignableExpression
 {
 public:
   Expression *base;
@@ -239,10 +290,10 @@ public:
 class VariableDeclaration : public Statement
 {
 public:
-  vector<Identifier *> names;
-  string datatype;
+  vector<Identifier *> variables;
+  DataType *datatype;
 
-  VariableDeclaration(const vector<Identifier *> &names, const string &datatype);
+  VariableDeclaration(const vector<Identifier *> &variables, DataType *datatype);
   ~VariableDeclaration();
 };
 
@@ -250,10 +301,10 @@ class VariableInitialization : public Statement
 {
 public:
   Identifier *name;
-  string datatype;
+  DataType *datatype;
   Expression *initializer;
 
-  VariableInitialization(Identifier *name, const string &datatype, Expression *init);
+  VariableInitialization(Identifier *name, DataType *datatype, Expression *init);
   ~VariableInitialization();
 };
 
@@ -266,27 +317,27 @@ public:
   ~VariableDefinition();
 };
 
-class FunctionDeclaration : public Statement
+class Function : public AstNode
 {
 public:
   Identifier *funcname;
-  string return_type;
+  ReturnType *return_type;
   vector<VariableDefinition *> parameters;
   vector<Statement *> body;
 
-  FunctionDeclaration(Identifier *name, const string &ret, const vector<VariableDefinition *> &params);
-  ~FunctionDeclaration();
+  Function(Identifier *name, ReturnType *ret, const vector<VariableDefinition *> &params, const vector<Statement *> &body);
+  ~Function();
 };
 
-class ProgramDeclaration : public Statement
+class Program : public AstNode
 {
 public:
   Identifier *program_name;
   vector<VariableDefinition *> globals;
   vector<Statement *> body;
 
-  ProgramDeclaration(Identifier *program_name, const vector<VariableDefinition *> &globals, vector<Statement *> &body);
-  ~ProgramDeclaration();
+  Program(Identifier *prog, const vector<VariableDefinition *> &glob, const vector<Statement *> &body);
+  ~Program();
 };
 
 // Statement Nodes Implementation
@@ -356,10 +407,10 @@ class ForLoop : public Statement
 public:
   AssignmentExpression *init;
   BooleanExpression *condition;
-  UnaryExpression *update;
+  Expression *update;
   vector<Statement *> body;
 
-  ForLoop(AssignmentExpression *init, BooleanExpression *cond, UnaryExpression *iter, const vector<Statement *> &stmts);
+  ForLoop(AssignmentExpression *init, BooleanExpression *cond, Expression *iter, const vector<Statement *> &stmts);
   ~ForLoop();
 };
 
@@ -367,9 +418,9 @@ public:
 class Source : public AstNode
 {
 public:
-  ProgramDeclaration *program;
-  vector<FunctionDeclaration *> functions;
+  Program *program;
+  vector<Function *> functions;
 
-  Source(ProgramDeclaration *prog, const vector<FunctionDeclaration *> &funcs);
+  Source(Program *prog, const vector<Function *> &funcs);
   ~Source();
 };

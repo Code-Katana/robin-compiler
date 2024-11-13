@@ -4,6 +4,8 @@
 #include <vector>
 #include <map>
 
+#include "token.h"
+
 using namespace std;
 
 enum class AstNodeType
@@ -16,6 +18,10 @@ enum class AstNodeType
   VariableDefinition,
   VariableDeclaration,
   VariableInitialization,
+  // Types
+  ReturnType,
+  PrimitiveType,
+  ArrayType,
   // Statements
   IfStatement,
   ReturnStatement,
@@ -53,8 +59,11 @@ class AstNode
 public:
   AstNodeType type;
   virtual ~AstNode() = default;
+  static bool is_data_type(TokenType type);
+  static bool is_return_type(TokenType type);
 
   static string get_node_name(const AstNode *node);
+  static map<TokenType, string> DataTypes;
 
 private:
   static map<AstNodeType, string> NodeNames;
@@ -73,6 +82,10 @@ class BooleanExpression : public Expression
 };
 
 class AssignableExpression : public Expression
+{
+};
+
+class DataType : public AstNode
 {
 };
 
@@ -124,10 +137,37 @@ public:
 class ArrayLiteral : public Literal
 {
 public:
-  vector<Literal *> elements;
+  vector<Expression *> elements;
 
-  ArrayLiteral(const vector<Literal *> &elems);
+  ArrayLiteral(const vector<Expression *> &elems);
   ~ArrayLiteral();
+};
+
+// Data Type implementation
+class ReturnType : public DataType
+{
+public:
+  DataType *return_type;
+
+  ReturnType(DataType *rt);
+  ~ReturnType();
+};
+
+class PrimitiveType : public DataType
+{
+public:
+  string datatype;
+
+  PrimitiveType(const string &ty);
+};
+
+class ArrayType : public DataType
+{
+public:
+  string datatype;
+  int dimension;
+
+  ArrayType(const string &ty, int dim);
 };
 
 // Expression Nodes Implementation
@@ -209,7 +249,7 @@ class UnaryExpression : public Expression
 {
 public:
   Expression *operand;
-  string optr; // "-" | "++" | "--" | "NOT"
+  string optr; // "-" | "++" | "--" | "NOT()"
   bool postfix;
 
   UnaryExpression(Expression *operand, const string &op, const bool &post);
@@ -251,9 +291,9 @@ class VariableDeclaration : public Statement
 {
 public:
   vector<Identifier *> variables;
-  string datatype;
+  DataType *datatype;
 
-  VariableDeclaration(const vector<Identifier *> &variables, const string &datatype);
+  VariableDeclaration(const vector<Identifier *> &variables, DataType *datatype);
   ~VariableDeclaration();
 };
 
@@ -261,10 +301,10 @@ class VariableInitialization : public Statement
 {
 public:
   Identifier *name;
-  string datatype;
+  DataType *datatype;
   Expression *initializer;
 
-  VariableInitialization(Identifier *name, const string &datatype, Expression *init);
+  VariableInitialization(Identifier *name, DataType *datatype, Expression *init);
   ~VariableInitialization();
 };
 
@@ -281,11 +321,11 @@ class Function : public AstNode
 {
 public:
   Identifier *funcname;
-  string return_type;
+  ReturnType *return_type;
   vector<VariableDefinition *> parameters;
   vector<Statement *> body;
 
-  Function(Identifier *name, const string &ret, const vector<VariableDefinition *> &params);
+  Function(Identifier *name, ReturnType *ret, const vector<VariableDefinition *> &params, const vector<Statement *> &body);
   ~Function();
 };
 

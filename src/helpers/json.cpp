@@ -133,7 +133,7 @@ string JSON::stringify_function(const Function *node)
 {
   string type = node_type(node);
   string name = quote("name") + ": " + stringify_identifier(node->funcname);
-  string return_type = quote("returns") + ": " + quote(node->return_type);
+  string return_type = quote("returns") + ": " + stringify_return_type(node->return_type);
   string parameters = quote("parameters") + ": [";
   string body = quote("body") + ": [";
 
@@ -168,19 +168,15 @@ string JSON::stringify_var_def(const VariableDefinition *node)
   string type = node_type(node);
   string definition = quote("definition") + ": ";
 
-  if (dynamic_cast<const VariableDeclaration *>(node))
+  if (dynamic_cast<const VariableDeclaration *>(node->def))
   {
     const VariableDeclaration *dec = static_cast<const VariableDeclaration *>(node->def);
     definition += stringify_var_dec(dec);
   }
-  else if (dynamic_cast<const VariableInitialization *>(node))
+  else if (dynamic_cast<const VariableInitialization *>(node->def))
   {
     const VariableInitialization *init = static_cast<const VariableInitialization *>(node->def);
     definition += stringify_var_init(init);
-  }
-  else
-  {
-    definition += "null";
   }
 
   return "{ " + type + ", " + definition + " }";
@@ -189,7 +185,7 @@ string JSON::stringify_var_def(const VariableDefinition *node)
 string JSON::stringify_var_dec(const VariableDeclaration *node)
 {
   string type = node_type(node);
-  string datatype = quote("datatype") + ": " + quote(node->datatype);
+  string datatype = quote("datatype") + ": " + stringify_type(node->datatype);
   string vars = quote("variables") + ": [";
 
   for (int i = 0; i < node->variables.size(); ++i)
@@ -210,8 +206,8 @@ string JSON::stringify_var_dec(const VariableDeclaration *node)
 string JSON::stringify_var_init(const VariableInitialization *node)
 {
   string type = node_type(node);
-  string name = stringify_identifier(node->name);
-  string datatype = quote("datatype") + ": " + quote(node->datatype);
+  string name = quote("name") + ": " + stringify_identifier(node->name);
+  string datatype = quote("datatype") + ": " + stringify_type(node->datatype);
   string initializer = quote("initializer") + ": " + stringify_expr(node->initializer);
 
   return "{ " + type + ", " + name + ", " + datatype + ", " + initializer + " }";
@@ -270,6 +266,16 @@ string JSON::stringify_stmt(const Statement *stmt)
     const VariableDefinition *def = static_cast<const VariableDefinition *>(stmt);
     return stringify_var_def(def);
   }
+  else if (dynamic_cast<const VariableDeclaration *>(stmt))
+  {
+    const VariableDeclaration *dec = static_cast<const VariableDeclaration *>(stmt);
+    return stringify_var_dec(dec);
+  }
+  else if (dynamic_cast<const VariableInitialization *>(stmt))
+  {
+    const VariableInitialization *init = static_cast<const VariableInitialization *>(stmt);
+    return stringify_var_init(init);
+  }
 
   return stringify_ast_node(stmt);
 }
@@ -277,6 +283,7 @@ string JSON::stringify_stmt(const Statement *stmt)
 string JSON::stringify_if_stmt(const IfStatement *stmt)
 {
   string type = node_type(stmt);
+  string condition = quote("condition") + ": " + stringify_expr(stmt->condition);
   string consequent = quote("consequent") + ": [";
   string alternate = quote("alternate") + ": [";
 
@@ -303,7 +310,7 @@ string JSON::stringify_if_stmt(const IfStatement *stmt)
   consequent += "]";
   alternate += "]";
 
-  return "{ " + type + ", " + consequent + ", " + alternate + " }";
+  return "{ " + type + ", " + condition + ", " + consequent + ", " + alternate + " }";
 }
 
 string JSON::stringify_return_stmt(const ReturnStatement *stmt)
@@ -389,7 +396,7 @@ string JSON::stringify_while_loop(const WhileLoop *loop)
 string JSON::stringify_for_loop(const ForLoop *loop)
 {
   string type = node_type(loop);
-  string init = quote("init") + stringify_assignment_expr(loop->init);
+  string init = quote("init") + ": " + stringify_assignment_expr(loop->init);
   string condition = quote("condition") + ": " + stringify_expr(loop->condition);
   string update = quote("update") + ": " + stringify_expr(loop->update);
   string body = quote("body") + ": [";
@@ -595,6 +602,48 @@ string JSON::stringify_primary_expr(const PrimaryExpression *primaryExpr)
   return pair(quote(AstNode::get_node_name(primaryExpr)), stringify_literal(primaryExpr->value));
 }
 
+// Types
+string JSON::stringify_type(const DataType *type)
+{
+  if (dynamic_cast<const PrimitiveType *>(type))
+  {
+    const PrimitiveType *prime = static_cast<const PrimitiveType *>(type);
+    return stringify_primitive_type(prime);
+  }
+  else if (dynamic_cast<const ArrayType *>(type))
+  {
+    const ArrayType *array = static_cast<const ArrayType *>(type);
+    return stringify_array_type(array);
+  }
+
+  return stringify_ast_node(type);
+}
+
+string JSON::stringify_primitive_type(const PrimitiveType *prime)
+{
+  string type = node_type(prime);
+  string datatype = quote("datatype") + ": " + quote(prime->datatype);
+
+  return "{ " + type + ", " + datatype + " }";
+}
+
+string JSON::stringify_array_type(const ArrayType *array)
+{
+  string type = node_type(array);
+  string datatype = quote("datatype") + ": " + quote(array->datatype);
+  string dim = quote("dimension") + ": " + to_string(array->dimension);
+
+  return "{ " + type + ", " + datatype + ", " + dim + " }";
+}
+
+string JSON::stringify_return_type(const ReturnType *ret)
+{
+  string type = node_type(ret);
+  string datatype = quote("return_type") + ": " + stringify_type(ret->return_type);
+
+  return "{ " + type + ", " + datatype + " }";
+}
+
 // Literals to json
 string JSON::stringify_literal(const Literal *litNode)
 {
@@ -660,7 +709,7 @@ string JSON::stringify_array_literal(const ArrayLiteral *arrNode)
 
   for (int i = 0; i < arrNode->elements.size(); ++i)
   {
-    elements += stringify_literal(arrNode->elements[i]);
+    elements += stringify_expr(arrNode->elements[i]);
 
     if (i != arrNode->elements.size() - 1)
     {

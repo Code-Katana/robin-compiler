@@ -1,5 +1,6 @@
 #pragma once
 
+#include <iostream>
 #include <string>
 
 #include "ast.h"
@@ -20,6 +21,6 @@ protected:
   Token current_token;
 
   Token match(TokenType type);
-
-  bool expect(TokenType type);
+  void syntax_error(string message);
+  bool lookahead(TokenType type);
 };

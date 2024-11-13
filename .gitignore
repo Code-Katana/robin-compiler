@@ -1,6 +1,7 @@
 # ignore files
 build/
 build-wasm/
+debug/
 
 # ignore files
 .vscode/settings.json

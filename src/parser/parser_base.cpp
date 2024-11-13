@@ -12,15 +12,23 @@ Token ParserBase::match(TokenType type)
 
   if (current_token.type != type)
   {
-    current_token = {"$", TokenType::END_OF_FILE};
-    return placeholder;
+    syntax_error("expecting " + Token::get_token_name(type) +
+                 " instead of " + Token::get_token_name(current_token.type));
   }
 
   current_token = sc->get_token();
   return placeholder;
 }
 
-bool ParserBase::expect(TokenType type)
+void ParserBase::syntax_error(string message)
+{
+  current_token = {"$", TokenType::END_OF_FILE};
+  cerr << message << endl;
+  system("pause");
+  throw runtime_error(message);
+}
+
+bool ParserBase::lookahead(TokenType type)
 {
   return current_token.type == type;
 }

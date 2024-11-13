@@ -11,6 +11,10 @@ map<AstNodeType, string> AstNode::NodeNames = {
     {AstNodeType::VariableDefinition, "VariableDefinition"},
     {AstNodeType::VariableDeclaration, "VariableDeclaration"},
     {AstNodeType::VariableInitialization, "VariableInitialization"},
+    // Types
+    {AstNodeType::ReturnType, "ReturnType"},
+    {AstNodeType::PrimitiveType, "PrimitiveType"},
+    {AstNodeType::ArrayType, "ArrayType"},
     // Statements
     {AstNodeType::IfStatement, "IfStatement"},
     {AstNodeType::ReturnStatement, "ReturnStatement"},
@@ -41,6 +45,23 @@ map<AstNodeType, string> AstNode::NodeNames = {
     {AstNodeType::BooleanLiteral, "BooleanLiteral"},
     {AstNodeType::ArrayLiteral, "ArrayLiteral"},
 };
+
+map<TokenType, string> AstNode::DataTypes = {
+    {TokenType::INTEGER_TY, "integer"},
+    {TokenType::BOOLEAN_TY, "boolean"},
+    {TokenType::STRING_TY, "string"},
+    {TokenType::FLOAT_TY, "float"},
+};
+
+bool AstNode::is_data_type(TokenType type)
+{
+  return DataTypes.find(type) != DataTypes.end();
+}
+
+bool AstNode::is_return_type(TokenType type)
+{
+  return is_data_type(type) || type == TokenType::VOID_TY;
+}
 
 string AstNode::get_node_name(const AstNode *node)
 {
@@ -83,17 +104,39 @@ BooleanLiteral::BooleanLiteral(bool val) : value(val)
 }
 
 // ArrayLiteral Node Implementation
-ArrayLiteral::ArrayLiteral(const vector<Literal *> &elems) : elements(elems)
+ArrayLiteral::ArrayLiteral(const vector<Expression *> &elems) : elements(elems)
 {
   type = AstNodeType::ArrayLiteral;
 }
 
 ArrayLiteral::~ArrayLiteral()
 {
-  for (Literal *elem : elements)
+  for (Expression *elem : elements)
   {
     delete elem;
   }
+}
+
+// Primitive Data Type Implementation
+ReturnType::ReturnType(DataType *rt) : return_type(rt)
+{
+  type = AstNodeType::ReturnType;
+}
+
+ReturnType::~ReturnType()
+{
+  delete return_type;
+}
+
+PrimitiveType::PrimitiveType(const string &ty) : datatype(ty)
+{
+  type = AstNodeType::PrimitiveType;
+}
+
+// Array Data Type Implementation
+ArrayType::ArrayType(const string &ty, int dim) : datatype(ty), dimension(dim)
+{
+  type = AstNodeType::ArrayType;
 }
 
 // AssignmentExpression Node Implementation
@@ -240,7 +283,7 @@ PrimaryExpression::~PrimaryExpression()
 }
 
 // VariableDeclaration Node Implementation
-VariableDeclaration::VariableDeclaration(const vector<Identifier *> &vars, const string &dt)
+VariableDeclaration::VariableDeclaration(const vector<Identifier *> &vars, DataType *dt)
     : variables(vars), datatype(dt)
 {
   type = AstNodeType::VariableDeclaration;
@@ -248,6 +291,8 @@ VariableDeclaration::VariableDeclaration(const vector<Identifier *> &vars, const
 
 VariableDeclaration::~VariableDeclaration()
 {
+  delete datatype;
+
   for (Identifier *var : variables)
   {
     delete var;
@@ -255,7 +300,7 @@ VariableDeclaration::~VariableDeclaration()
 }
 
 // VariableInitialization Node Implementation
-VariableInitialization::VariableInitialization(Identifier *name, const string &datatype, Expression *init)
+VariableInitialization::VariableInitialization(Identifier *name, DataType *datatype, Expression *init)
     : name(name), datatype(datatype), initializer(init)
 {
   type = AstNodeType::VariableInitialization;
@@ -264,6 +309,7 @@ VariableInitialization::VariableInitialization(Identifier *name, const string &d
 VariableInitialization::~VariableInitialization()
 {
   delete name;
+  delete datatype;
   delete initializer;
 }
 
@@ -279,8 +325,8 @@ VariableDefinition::~VariableDefinition()
 }
 
 // FunctionDeclaration Node Implementation
-Function::Function(Identifier *name, const string &ret, const vector<VariableDefinition *> &params)
-    : funcname(name), return_type(ret), parameters(params)
+Function::Function(Identifier *name, ReturnType *ret, const vector<VariableDefinition *> &params, const vector<Statement *> &body)
+    : funcname(name), return_type(ret), parameters(params), body(body)
 {
   type = AstNodeType::Function;
 }
@@ -288,6 +334,7 @@ Function::Function(Identifier *name, const string &ret, const vector<VariableDef
 Function::~Function()
 {
   delete funcname;
+  delete return_type;
   for (VariableDefinition *param : parameters)
   {
     delete param;

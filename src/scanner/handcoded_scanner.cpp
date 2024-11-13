@@ -204,7 +204,7 @@ Token HandCodedScanner::get_token()
   // string literal
   else if (expect('\"'))
   {
-    str += eat();
+    eat();
 
     while (!expect('\"') && !is_eof())
     {
@@ -218,7 +218,7 @@ Token HandCodedScanner::get_token()
       return error_token;
     }
 
-    str += eat();
+    eat();
     return {str, TokenType::STRING_SY};
   }
   // numbers

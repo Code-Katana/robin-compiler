@@ -126,7 +126,7 @@ Token FAScanner::get_token()
       }
       else if (expect('\"'))
       {
-        str += eat();
+        eat();
         state = 41;
       }
       else
@@ -424,7 +424,7 @@ Token FAScanner::get_token()
 
       if (expect('\"'))
       {
-        str += eat();
+        eat();
         state = 42;
         break;
       }
@@ -438,7 +438,7 @@ Token FAScanner::get_token()
         }
       }
       state = 45;
-      // ch !== 
+      // ch !==
       break;
     case 42:
       return {str, TokenType::STRING_SY};

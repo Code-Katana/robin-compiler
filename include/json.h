@@ -1,5 +1,6 @@
 #pragma once
 
+#include <fstream>
 #include <string>
 #include <vector>
 #include <typeinfo>
@@ -12,6 +13,10 @@ using namespace std;
 class JSON
 {
 public:
+  // Writing to json file
+  static bool debug_file(string path, string json);
+  static string format(string json);
+
   // Tokens
   static string stringify_token(Token tk);
   static string stringify_tokens_stream(vector<Token> tokens);

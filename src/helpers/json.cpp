@@ -2,6 +2,32 @@
 
 JSON::JSON() {};
 
+// For debugging in json file
+bool JSON::debug_file(string path, string json)
+{
+  ofstream file(path);
+
+  if (!file.is_open())
+  {
+    return false;
+  }
+
+  // size_t startPos = 0;
+  // string from = "\\";
+  // string to = "";
+
+  // while ((startPos = json.find(from, startPos)) != string::npos)
+  // {
+  //   json.replace(startPos, from.length(), to);
+  //   startPos += to.length(); // Move past the last replaced part
+  // }
+
+  file << format(json);
+  file.close();
+
+  return true;
+}
+
 // Helpers
 string JSON::quote(string str)
 {
@@ -21,6 +47,81 @@ string JSON::quoted_pair(string type, string value)
 string JSON::node_type(const AstNode *node)
 {
   return quote("type") + ": " + quote(AstNode::get_node_name(node));
+}
+
+string JSON::format(string json)
+{
+  string formatted;
+  int indent_level = 0;
+  bool in_quotes = false;
+
+  for (size_t i = 0; i < json.length(); ++i)
+  {
+    char ch = json[i];
+
+    if (ch == '\\' && i + 1 < json.length() && json[i + 1] == '\"')
+    {
+      formatted += '\"';
+      ++i;
+      continue;
+    }
+
+    switch (ch)
+    {
+    case '\"':
+      if (i == 0 || json[i - 1] != '\\')
+      {
+        in_quotes = !in_quotes;
+      }
+      formatted += ch;
+      break;
+
+    case '{':
+    case '[':
+      formatted += ch;
+      if (!in_quotes)
+      {
+        formatted += "\n";
+        ++indent_level;
+        formatted.append(indent_level * 2, ' ');
+      }
+      break;
+
+    case '}':
+    case ']':
+      if (!in_quotes)
+      {
+        formatted += "\n";
+        --indent_level;
+        formatted.append(indent_level * 2, ' ');
+      }
+      formatted += ch;
+      break;
+
+    case ',':
+      formatted += ch;
+      if (!in_quotes)
+      {
+        formatted += "\n";
+        formatted.append(indent_level * 2, ' ');
+      }
+      break;
+
+    case ':':
+      formatted += ch;
+      if (!in_quotes)
+      {
+        formatted += " ";
+      }
+      break;
+
+    default:
+      formatted += ch;
+      break;
+    }
+  }
+
+  return formatted;
 }
 
 // Tokens to json

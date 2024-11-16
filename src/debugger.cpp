@@ -27,11 +27,11 @@ int Debugger::run()
 
   WrenCompiler wc(program, ScannerOptions::FA, ParserOptions::RecursiveDecent);
 
-  // stringify to json
-  // cout << JSON::stringify_tokens_stream(wc.scanner->get_tokens_stream()) << endl;
+  AstNode *parse_tree = wc.parser->parse_ast();
+  vector<Token> tokens_stream = wc.scanner->get_tokens_stream();
 
-  // cout << JSON::stringify_node(wc.parser->parse_ast()) << endl;
-  JSON::debug_file(DEBUGGING_FOLDER + "/parse_tree.json", JSON::stringify_node(wc.parser->parse_ast()));
+  JSON::debug_file(DEBUGGING_FOLDER + "/parse_tree.json", JSON::stringify_node(parse_tree));
+  JSON::debug_file(DEBUGGING_FOLDER + "/tokens_stream.json", JSON::stringify_tokens_stream(tokens_stream));
 
   return 0;
 }

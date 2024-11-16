@@ -1,37 +1,40 @@
 #include "debugger.h"
 
 string Debugger::DEBUGGING_FOLDER = "./debug";
+string Debugger::PROGRAM_FILE = "main.wren";
+
+string read_program(string path)
+{
+  ifstream file(path);
+
+  if (!file.is_open())
+  {
+    cout << "Program file `" << path << "` was not found." << endl;
+    system("pause");
+    exit(1);
+  }
+
+  string program;
+  string line;
+  while (getline(file, line))
+  {
+    program += line + '\n';
+  }
+
+  return program;
+}
 
 int Debugger::run()
 {
-  string program = R"(
-
-  func [[integer]] sum has
-    var x, y: integer;
-  begin
-    return x + y;
-  end func
-
-  program test is
-    var a, b: integer;
-  begin
-    read a, b;
-    write sum(a, b);
-    for i = 0; i < sum; i++ do
-      return sum[i];
-    end for
-    var x : [[boolean]] = { { not(true) },{ false or false },{ true } };
-  end
-
-  )";
+  string program = read_program(DEBUGGING_FOLDER + "/" + PROGRAM_FILE);
 
   WrenCompiler wc(program, ScannerOptions::FA, ParserOptions::RecursiveDecent);
 
-  // stringify to json
-  // cout << JSON::stringify_tokens_stream(wc.scanner->get_tokens_stream()) << endl;
+  AstNode *parse_tree = wc.parser->parse_ast();
+  vector<Token> tokens_stream = wc.scanner->get_tokens_stream();
 
-  // cout << JSON::stringify_node(wc.parser->parse_ast()) << endl;
-  JSON::debug_file(DEBUGGING_FOLDER + "/parse_tree.json", JSON::stringify_node(wc.parser->parse_ast()));
+  JSON::debug_file(DEBUGGING_FOLDER + "/parse_tree.json", JSON::stringify_node(parse_tree));
+  JSON::debug_file(DEBUGGING_FOLDER + "/tokens_stream.json", JSON::stringify_tokens_stream(tokens_stream));
 
   return 0;
 }

@@ -28,7 +28,7 @@ int Debugger::run()
 {
   string program = read_program(DEBUGGING_FOLDER + "/" + PROGRAM_FILE);
 
-  WrenCompiler wc(program, ScannerOptions::FA, ParserOptions::RecursiveDecent);
+  WrenCompiler wc(program, ScannerOptions::HandCoded, ParserOptions::RecursiveDecent);
 
   vector<Token> tokens_stream = wc.scanner->get_tokens_stream();
 

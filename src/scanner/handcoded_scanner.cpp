@@ -190,11 +190,11 @@ Token HandCodedScanner::get_token()
     return {",", TokenType::COMMA_SY};
   }
   // identifier and keywords
-  else if (isalpha(peek()))
+  else if (isalpha(peek()) || expect('_'))
   {
     str += eat();
 
-    while (isalnum(peek()) && !is_eof())
+    while ((isalnum(peek()) || expect('_')) && !is_eof())
     {
       str += eat();
     }

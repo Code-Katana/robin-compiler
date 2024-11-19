@@ -29,5 +29,7 @@ protected:
   string str;
   string source;
   int line_count;
+  int token_start;
+  int token_end;
   Token error_token;
 };

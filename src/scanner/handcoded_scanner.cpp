@@ -22,6 +22,8 @@ Token HandCodedScanner::get_token()
     eat();
   }
 
+  token_start = curr;
+
   if (is_eof())
   {
     return create_token("$", TokenType::END_OF_FILE);
@@ -273,10 +275,15 @@ Token HandCodedScanner::get_token()
 
 vector<Token> HandCodedScanner::get_tokens_stream(void)
 {
-  int curr_placeholder = curr;
-  int line_placeholder = line_count;
-  curr = 0;
+  map<string, int> placeholders = {
+      {"curr", curr},
+      {"line_count", line_count},
+      {"token_start", token_start},
+      {"token_end", token_end},
+  };
+
   line_count = 1;
+  token_start = token_end = curr = 0;
   vector<Token> stream = {};
   Token tk = get_token();
 
@@ -287,7 +294,11 @@ vector<Token> HandCodedScanner::get_tokens_stream(void)
   }
 
   stream.push_back(tk);
-  curr = curr_placeholder;
-  line_count = line_placeholder;
+
+  curr = placeholders["curr"];
+  line_count = placeholders["line_count"];
+  token_start = placeholders["token_start"];
+  token_end = placeholders["token_end"];
+
   return stream;
 }

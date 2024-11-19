@@ -7,6 +7,8 @@ ScannerBase::ScannerBase(string src)
   curr = 0;
   source = src;
   line_count = 1;
+  token_start = 0;
+  token_end = 0;
   error_token = Token("$", TokenType::END_OF_FILE);
 }
 
@@ -57,5 +59,6 @@ Token ScannerBase::check_reserved(string val)
 
 Token ScannerBase::create_token(string val, TokenType type)
 {
-  return Token(val, type, line_count, 0, 0);
+  token_end = curr - 1;
+  return Token(val, type, line_count, token_start, token_end);
 }

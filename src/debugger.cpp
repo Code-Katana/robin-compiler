@@ -34,11 +34,6 @@ int Debugger::run()
 
   JSON::debug_file(DEBUGGING_FOLDER + "/tokens_stream.json", JSON::stringify_tokens_stream(tokens_stream));
 
-  for (auto token : tokens_stream)
-  {
-    cout << token.value << " @" << token.line << endl;
-  }
-
   system("pause");
   return 0;
 }

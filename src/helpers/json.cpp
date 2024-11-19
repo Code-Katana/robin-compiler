@@ -127,7 +127,13 @@ string JSON::format(string json)
 // Tokens to json
 string JSON::stringify_token(Token tk)
 {
-  return quoted_pair(Token::get_token_name(tk.type), tk.value);
+  string type = quote("type") + ":" + quote(Token::get_token_name(tk.type));
+  string val = quote("value") + ":" + quote(tk.value);
+  string line = quote("line") + ":" + to_string(tk.line);
+  string start = quote("start") + ":" + to_string(tk.start);
+  string end = quote("end") + ":" + to_string(tk.end);
+
+  return "{" + type + "," + val + "," + line + "," + start + "," + end + "}";
 }
 
 string JSON::stringify_tokens_stream(vector<Token> tokens)

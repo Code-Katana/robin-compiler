@@ -95,7 +95,7 @@ map<TokenType, string> Token::TokenNames = {
     {TokenType::STRING_SY, "STRING_SY"},
     // others
     {TokenType::ERROR, "UNRECOGNISED_TOKEN"},
-    {TokenType::END_OF_FILE, "$"},
+    {TokenType::END_OF_FILE, "END_OF_FILE"},
 };
 
 Token::Token() {}

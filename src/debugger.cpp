@@ -28,14 +28,16 @@ int Debugger::run()
 {
   string program = read_program(DEBUGGING_FOLDER + "/" + PROGRAM_FILE);
 
-  WrenCompiler wc(program, ScannerOptions::HandCoded, ParserOptions::RecursiveDecent);
+  WrenCompiler wc(program, ScannerOptions::FA, ParserOptions::RecursiveDecent);
 
   vector<Token> tokens_stream = wc.scanner->get_tokens_stream();
 
-  cout << JSON::format(JSON::stringify_tokens_stream(tokens_stream)) << endl;
+  JSON::debug_file(DEBUGGING_FOLDER + "/tokens_stream.json", JSON::stringify_tokens_stream(tokens_stream));
 
-  // string t = "program say_hello is\nbegin\n  write 'Hello, Wren!';\nend\n";
-  // cout << t.length() << endl;
+  for (auto token : tokens_stream)
+  {
+    cout << token.value << " @" << token.line << endl;
+  }
 
   system("pause");
   return 0;

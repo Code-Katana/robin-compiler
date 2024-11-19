@@ -21,11 +21,13 @@ protected:
   char peek();
   bool expect(char expected);
   bool is_eof();
-  Token create_token(string val, TokenType type, int l = 0, int s = 0, int e = 0);
+  int update_line_count();
+  Token create_token(string val, TokenType type);
 
   char ch;
   int curr;
   string str;
   string source;
+  int line_count;
   Token error_token;
 };

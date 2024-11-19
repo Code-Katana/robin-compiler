@@ -6,6 +6,7 @@ ScannerBase::ScannerBase(string src)
   str = "";
   curr = 0;
   source = src;
+  line_count = 1;
   error_token = Token("$", TokenType::END_OF_FILE);
 }
 
@@ -39,17 +40,22 @@ bool ScannerBase::expect(char expected)
   return peek() == expected;
 }
 
+int ScannerBase::update_line_count()
+{
+  return ++line_count;
+}
+
 Token ScannerBase::check_reserved(string val)
 {
   if (Token::is_reserved(val))
   {
-    return Token(val, Token::ReservedWords[val]);
+    return create_token(val, Token::ReservedWords[val]);
   }
 
-  return Token(val, TokenType::ID_SY);
+  return create_token(val, TokenType::ID_SY);
 }
 
-Token ScannerBase::create_token(string val, TokenType type, int l, int s, int e)
+Token ScannerBase::create_token(string val, TokenType type)
 {
-  return Token(val, type, l, s, e);
+  return Token(val, type, line_count, 0, 0);
 }

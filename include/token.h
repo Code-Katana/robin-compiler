@@ -76,8 +76,16 @@ enum class TokenType
 class Token
 {
 public:
+  Token();
+  Token(string val, TokenType ty);
+  Token(string val, TokenType ty, int l, int s, int e);
+  virtual ~Token() = default;
+
   string value;
   TokenType type;
+  int line;
+  int start;
+  int end;
   static map<string, TokenType> ReservedWords;
 
   static bool is_reserved(string val);

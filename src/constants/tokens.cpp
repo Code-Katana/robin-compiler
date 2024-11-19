@@ -94,9 +94,18 @@ map<TokenType, string> Token::TokenNames = {
     {TokenType::ID_SY, "ID_SY"},
     {TokenType::STRING_SY, "STRING_SY"},
     // others
-    {TokenType::ERROR, "ERROR"},
-    {TokenType::END_OF_FILE, "END_OF_FILE"},
+    {TokenType::ERROR, "UNRECOGNISED_TOKEN"},
+    {TokenType::END_OF_FILE, "$"},
 };
+
+Token::Token() {}
+
+Token::Token(string val, TokenType ty) : value(val), type(ty)
+{
+  line = start = end = 0;
+}
+
+Token::Token(string val, TokenType ty, int l, int s, int e) : value(val), type(ty), line(l), start(s), end(e) {}
 
 bool Token::is_reserved(string val)
 {

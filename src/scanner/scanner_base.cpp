@@ -6,7 +6,7 @@ ScannerBase::ScannerBase(string src)
   str = "";
   curr = 0;
   source = src;
-  error_token = {"$", TokenType::END_OF_FILE};
+  error_token = Token("$", TokenType::END_OF_FILE);
 }
 
 bool ScannerBase::is_eof()
@@ -43,8 +43,13 @@ Token ScannerBase::check_reserved(string val)
 {
   if (Token::is_reserved(val))
   {
-    return {val, Token::ReservedWords[val]};
+    return Token(val, Token::ReservedWords[val]);
   }
 
-  return {val, TokenType::ID_SY};
+  return Token(val, TokenType::ID_SY);
+}
+
+Token ScannerBase::create_token(string val, TokenType type, int l, int s, int e)
+{
+  return Token(val, type, l, s, e);
 }

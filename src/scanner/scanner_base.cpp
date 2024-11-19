@@ -59,6 +59,6 @@ Token ScannerBase::check_reserved(string val)
 
 Token ScannerBase::create_token(string val, TokenType type)
 {
-  token_end = curr - 1;
+  token_end = curr;
   return Token(val, type, line_count, token_start, token_end);
 }

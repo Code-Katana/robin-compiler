@@ -9,7 +9,7 @@ ScannerBase::ScannerBase(string src)
   line_count = 1;
   token_start = 0;
   token_end = 0;
-  error_token = Token("$", TokenType::END_OF_FILE);
+  error_token = Token();
 }
 
 bool ScannerBase::is_eof()

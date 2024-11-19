@@ -100,11 +100,6 @@ map<TokenType, string> Token::TokenNames = {
 
 Token::Token() {}
 
-Token::Token(string val, TokenType ty) : value(val), type(ty)
-{
-  line = start = end = 0;
-}
-
 Token::Token(string val, TokenType ty, int l, int s, int e) : value(val), type(ty), line(l), start(s), end(e) {}
 
 bool Token::is_reserved(string val)

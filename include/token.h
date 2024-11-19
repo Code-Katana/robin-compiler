@@ -77,7 +77,6 @@ class Token
 {
 public:
   Token();
-  Token(string val, TokenType ty);
   Token(string val, TokenType ty, int l, int s, int e);
   virtual ~Token() = default;
 

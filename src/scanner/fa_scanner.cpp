@@ -6,13 +6,12 @@ Token FAScanner::get_token()
 {
   str = "";
   int state = 0;
+  token_start = curr;
 
   if (is_eof())
   {
     return create_token("$", TokenType::END_OF_FILE);
   }
-
-  token_start = curr;
 
   while (state >= START_STATE && state <= END_STATE)
   {
@@ -328,6 +327,7 @@ Token FAScanner::get_token()
         update_line_count();
         eat();
         str = "";
+        token_start = curr;
         state = 0;
       }
       else
@@ -460,25 +460,25 @@ Token FAScanner::get_token()
     case 43:
       str += eat();
       curr = source.length() + 1;
-      error_token = {"Unrecognized token: " + str, TokenType::ERROR};
+      error_token = create_token("Unrecognized token: " + str, TokenType::ERROR);
 
       return error_token;
 
     case 44:
       curr = source.length() + 1;
-      error_token = {"Invalid floating point number " + str, TokenType::ERROR};
+      error_token = create_token("Invalid floating point number " + str, TokenType::ERROR);
       return error_token;
 
     case 45:
       curr = source.length() + 1;
-      error_token = {"Unclosed string literal: " + str, TokenType::ERROR};
+      error_token = create_token("Unclosed string literal: " + str, TokenType::ERROR);
       return error_token;
 
     case 46:
       return create_token("$", TokenType::END_OF_FILE);
 
     default:
-      error_token = {"Unexpected end of input.", TokenType::ERROR};
+      error_token = create_token("Unexpected end of input.", TokenType::ERROR);
       return error_token;
     }
   }

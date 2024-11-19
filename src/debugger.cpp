@@ -42,13 +42,16 @@ int Debugger::run()
         tokens_stream1[i].start == tokens_stream2[i].start &&
         tokens_stream1[i].end == tokens_stream2[i].end)
     {
-      cout << "correct (line: " << tokens_stream2[i].line << ", start: " << tokens_stream2[i].start << ", end: " << tokens_stream2[i].end << ")" << endl;
+      cout << "matchs (line: " << tokens_stream2[i].line << ", start: " << tokens_stream2[i].start << ", end: " << tokens_stream2[i].end << ")" << endl;
     }
     else
     {
       cout << "mismatch" << endl;
     }
   }
+
+  JSON::debug_file(DEBUGGING_FOLDER + "/hand_coded_scanner.json", JSON::stringify_tokens_stream(tokens_stream1));
+  JSON::debug_file(DEBUGGING_FOLDER + "/fa_scanner.json", JSON::stringify_tokens_stream(tokens_stream2));
 
   system("pause");
   return 0;

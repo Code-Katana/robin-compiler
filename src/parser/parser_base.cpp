@@ -22,7 +22,7 @@ Token ParserBase::match(TokenType type)
 
 void ParserBase::syntax_error(string message)
 {
-  current_token = {"$", TokenType::END_OF_FILE};
+  current_token = Token("$", TokenType::END_OF_FILE, 0, 0, 0);
   cerr << message << endl;
   system("pause");
   throw runtime_error(message);

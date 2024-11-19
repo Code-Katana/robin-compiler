@@ -6,10 +6,11 @@ Token FAScanner::get_token()
 {
   str = "";
   int state = 0;
+  token_start = curr;
 
   if (is_eof())
   {
-    return {"$", TokenType::END_OF_FILE};
+    return create_token("$", TokenType::END_OF_FILE);
   }
 
   while (state >= START_STATE && state <= END_STATE)
@@ -25,8 +26,14 @@ Token FAScanner::get_token()
       }
       else if (isspace(ch))
       {
+        if (expect('\n'))
+        {
+          update_line_count();
+        }
+
         eat();
         state = 0;
+        token_start = curr;
       }
 
       else if (isalpha(ch) | expect('_'))
@@ -150,37 +157,37 @@ Token FAScanner::get_token()
       return check_reserved(str);
 
     case 3:
-      return {"[", TokenType::LEFT_SQUARE_PR};
+      return create_token("[", TokenType::LEFT_SQUARE_PR);
 
     case 4:
-      return {"]", TokenType::RIGHT_SQUARE_PR};
+      return create_token("]", TokenType::RIGHT_SQUARE_PR);
 
     case 5:
-      return {";", TokenType::SEMI_COLON_SY};
+      return create_token(";", TokenType::SEMI_COLON_SY);
 
     case 6:
-      return {",", TokenType::COMMA_SY};
+      return create_token(",", TokenType::COMMA_SY);
 
     case 7:
-      return {"{", TokenType::LEFT_CURLY_PR};
+      return create_token("{", TokenType::LEFT_CURLY_PR);
 
     case 8:
-      return {"}", TokenType::RIGHT_CURLY_PR};
+      return create_token("}", TokenType::RIGHT_CURLY_PR);
 
     case 9:
-      return {":", TokenType::COLON_SY};
+      return create_token(":", TokenType::COLON_SY);
 
     case 10:
-      return {"(", TokenType::LEFT_PR};
+      return create_token("(", TokenType::LEFT_PR);
 
     case 11:
-      return {")", TokenType::RIGHT_PR};
+      return create_token(")", TokenType::RIGHT_PR);
 
     case 12:
-      return {"*", TokenType::MULT_OP};
+      return create_token("*", TokenType::MULT_OP);
 
     case 13:
-      return {"%", TokenType::MOD_OP};
+      return create_token("%", TokenType::MOD_OP);
 
     case 14:
       ch = peek();
@@ -197,10 +204,10 @@ Token FAScanner::get_token()
 
       break;
     case 15:
-      return {"==", TokenType::IS_EQUAL_OP};
+      return create_token("==", TokenType::IS_EQUAL_OP);
 
     case 16:
-      return {"=", TokenType::EQUAL_OP};
+      return create_token("=", TokenType::EQUAL_OP);
 
     case 17:
       ch = peek();
@@ -217,10 +224,10 @@ Token FAScanner::get_token()
 
       break;
     case 18:
-      return {"+", TokenType::PLUS_OP};
+      return create_token("+", TokenType::PLUS_OP);
 
     case 19:
-      return {"++", TokenType::INCREMENT_OP};
+      return create_token("++", TokenType::INCREMENT_OP);
 
     case 20:
       ch = peek();
@@ -237,10 +244,10 @@ Token FAScanner::get_token()
 
       break;
     case 21:
-      return {"--", TokenType::DECREMENT_OP};
+      return create_token("--", TokenType::DECREMENT_OP);
 
     case 22:
-      return {"-", TokenType::MINUS_OP};
+      return create_token("-", TokenType::MINUS_OP);
 
     case 23:
       ch = peek();
@@ -262,13 +269,13 @@ Token FAScanner::get_token()
 
       break;
     case 24:
-      return {"<", TokenType::LESS_THAN_OP};
+      return create_token("<", TokenType::LESS_THAN_OP);
 
     case 25:
-      return {"<=", TokenType::LESS_EQUAL_OP};
+      return create_token("<=", TokenType::LESS_EQUAL_OP);
 
     case 26:
-      return {"<>", TokenType::NOT_EQUAL_OP};
+      return create_token("<>", TokenType::NOT_EQUAL_OP);
 
     case 27:
       ch = peek();
@@ -285,10 +292,10 @@ Token FAScanner::get_token()
 
       break;
     case 28:
-      return {">", TokenType::GREATER_THAN_OP};
+      return create_token(">", TokenType::GREATER_THAN_OP);
 
     case 29:
-      return {">=", TokenType::GREATER_EQUAL_OP};
+      return create_token(">=", TokenType::GREATER_EQUAL_OP);
 
     case 30:
       ch = peek();
@@ -310,15 +317,17 @@ Token FAScanner::get_token()
 
       break;
     case 31:
-      return {"/", TokenType::DIVIDE_OP};
+      return create_token("/", TokenType::DIVIDE_OP);
 
     case 32:
       ch = peek();
 
       if (expect('\n'))
       {
+        update_line_count();
         eat();
         str = "";
+        token_start = curr;
         state = 0;
       }
       else
@@ -333,7 +342,12 @@ Token FAScanner::get_token()
 
       if (!is_eof())
       {
-        if (ch != '*')
+        if (expect('\n'))
+        {
+          update_line_count();
+        }
+
+        if (!expect('*'))
         {
           eat();
           state = 33;
@@ -387,7 +401,7 @@ Token FAScanner::get_token()
       }
       break;
     case 37:
-      return {str, TokenType::INTEGER_NUM};
+      return create_token(str, TokenType::INTEGER_NUM);
 
     case 38:
       ch = peek();
@@ -417,7 +431,7 @@ Token FAScanner::get_token()
 
       break;
     case 40:
-      return {str, TokenType::FLOAT_NUM};
+      return create_token(str, TokenType::FLOAT_NUM);
 
     case 41:
       ch = peek();
@@ -441,41 +455,48 @@ Token FAScanner::get_token()
       // ch !==
       break;
     case 42:
-      return {str, TokenType::STRING_SY};
+      return create_token(str, TokenType::STRING_SY);
       break;
     case 43:
       str += eat();
       curr = source.length() + 1;
-      error_token = {"Unrecognized token: " + str, TokenType::ERROR};
+      error_token = create_token("Unrecognized token: " + str, TokenType::ERROR);
 
       return error_token;
 
     case 44:
       curr = source.length() + 1;
-      error_token = {"Invalid floating point number " + str, TokenType::ERROR};
+      error_token = create_token("Invalid floating point number " + str, TokenType::ERROR);
       return error_token;
 
     case 45:
       curr = source.length() + 1;
-      error_token = {"Unclosed string literal: " + str, TokenType::ERROR};
+      error_token = create_token("Unclosed string literal: " + str, TokenType::ERROR);
       return error_token;
 
     case 46:
-      return {"$", TokenType::END_OF_FILE};
+      return create_token("$", TokenType::END_OF_FILE);
 
     default:
-      error_token = {"Unexpected end of input.", TokenType::ERROR};
+      error_token = create_token("Unexpected end of input.", TokenType::ERROR);
       return error_token;
     }
   }
 
-  return {"$", TokenType::END_OF_FILE};
+  return create_token("$", TokenType::END_OF_FILE);
 }
 
 vector<Token> FAScanner::get_tokens_stream(void)
 {
-  int placeholder = curr;
-  curr = 0;
+  map<string, int> placeholders = {
+      {"curr", curr},
+      {"line_count", line_count},
+      {"token_start", token_start},
+      {"token_end", token_end},
+  };
+
+  line_count = 1;
+  token_start = token_end = curr = 0;
   vector<Token> stream = {};
   Token tk = get_token();
 
@@ -485,6 +506,12 @@ vector<Token> FAScanner::get_tokens_stream(void)
     tk = get_token();
   }
 
-  curr = placeholder;
+  stream.push_back(tk);
+
+  curr = placeholders["curr"];
+  line_count = placeholders["line_count"];
+  token_start = placeholders["token_start"];
+  token_end = placeholders["token_end"];
+
   return stream;
 }

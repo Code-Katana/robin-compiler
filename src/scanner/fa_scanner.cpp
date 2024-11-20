@@ -381,7 +381,9 @@ Token FAScanner::get_token()
       break;
     case 35:
       str = "";
+      token_start = curr;
       state = 0;
+
       break;
     case 36:
       ch = peek();

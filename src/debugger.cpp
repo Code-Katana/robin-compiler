@@ -9,7 +9,7 @@ string read_program(string path)
 
   if (!file.is_open())
   {
-    cout << "Program file `" << path << "` was not found." << endl;
+    cout << "Program file " << path << " was not found." << endl;
     system("pause");
     exit(1);
   }
@@ -42,7 +42,7 @@ int Debugger::run()
         tokens_stream1[i].start == tokens_stream2[i].start &&
         tokens_stream1[i].end == tokens_stream2[i].end)
     {
-      cout << "matchs (line: " << tokens_stream2[i].line << ", start: " << tokens_stream2[i].start << ", end: " << tokens_stream2[i].end << ")" << endl;
+      cout << "matches (line: " << tokens_stream2[i].line << ", start: " << tokens_stream2[i].start << ", end: " << tokens_stream2[i].end << ")" << endl;
     }
     else
     {

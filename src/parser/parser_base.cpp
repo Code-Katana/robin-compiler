@@ -4,6 +4,12 @@ ParserBase::ParserBase(ScannerBase *scanner)
 {
   sc = scanner;
   current_token = sc->get_token();
+
+  node_start = current_token.start;
+  start_line = current_token.line;
+
+  node_end = current_token.end;
+  end_line = current_token.line;
 }
 
 Token ParserBase::match(TokenType type)
@@ -31,4 +37,16 @@ void ParserBase::syntax_error(string message)
 bool ParserBase::lookahead(TokenType type)
 {
   return current_token.type == type;
+}
+
+void ParserBase::set_start()
+{
+  node_start = current_token.start;
+  start_line = current_token.line;
+}
+
+void ParserBase::set_end()
+{
+  node_end = current_token.end;
+  end_line = current_token.line;
 }

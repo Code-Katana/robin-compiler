@@ -57,7 +57,14 @@ enum class AstNodeType
 class AstNode
 {
 public:
+  int node_start;
+  int start_line;
+  int node_end;
+  int end_line;
   AstNodeType type;
+
+  AstNode();
+  AstNode(int sl, int el, int s, int e);
   virtual ~AstNode() = default;
   static bool is_data_type(TokenType type);
   static bool is_return_type(TokenType type);
@@ -71,26 +78,40 @@ private:
 
 class Statement : public AstNode
 {
+public:
+  Statement();
+  Statement(int sl, int el, int s, int e);
 };
 
 class Expression : public Statement
 {
+public:
+  Expression();
+  Expression(int sl, int el, int s, int e);
 };
 
 class BooleanExpression : public Expression
 {
+public:
+  BooleanExpression(int sl, int el, int s, int e);
 };
 
 class AssignableExpression : public Expression
 {
+public:
+  AssignableExpression(int sl, int el, int s, int e);
 };
 
 class DataType : public AstNode
 {
+public:
+  DataType(int sl, int el, int s, int e);
 };
 
 class Literal : public Expression
 {
+public:
+  Literal(int sl, int el, int s, int e);
 };
 
 // Literal Nodes Implementation
@@ -99,7 +120,7 @@ class Identifier : public AssignableExpression
 public:
   string name;
 
-  Identifier(const string &name);
+  Identifier(const string &name, int sl, int el, int s, int e);
 };
 
 class IntegerLiteral : public Literal
@@ -107,7 +128,7 @@ class IntegerLiteral : public Literal
 public:
   int value;
 
-  IntegerLiteral(int val);
+  IntegerLiteral(int val, int sl, int el, int s, int e);
 };
 
 class FloatLiteral : public Literal
@@ -115,7 +136,7 @@ class FloatLiteral : public Literal
 public:
   float value;
 
-  FloatLiteral(float val);
+  FloatLiteral(float val, int sl, int el, int s, int e);
 };
 
 class StringLiteral : public Literal
@@ -123,7 +144,7 @@ class StringLiteral : public Literal
 public:
   string value;
 
-  StringLiteral(const string &val);
+  StringLiteral(const string &val, int sl, int el, int s, int e);
 };
 
 class BooleanLiteral : public Literal
@@ -131,7 +152,7 @@ class BooleanLiteral : public Literal
 public:
   bool value;
 
-  BooleanLiteral(bool val);
+  BooleanLiteral(bool val, int sl, int el, int s, int e);
 };
 
 class ArrayLiteral : public Literal
@@ -139,7 +160,7 @@ class ArrayLiteral : public Literal
 public:
   vector<Expression *> elements;
 
-  ArrayLiteral(const vector<Expression *> &elems);
+  ArrayLiteral(const vector<Expression *> &elems, int sl, int el, int s, int e);
   ~ArrayLiteral();
 };
 
@@ -149,7 +170,7 @@ class ReturnType : public DataType
 public:
   DataType *return_type;
 
-  ReturnType(DataType *rt);
+  ReturnType(DataType *rt, int sl, int el, int s, int e);
   ~ReturnType();
 };
 
@@ -158,7 +179,7 @@ class PrimitiveType : public DataType
 public:
   string datatype;
 
-  PrimitiveType(const string &ty);
+  PrimitiveType(const string &ty, int sl, int el, int s, int e);
 };
 
 class ArrayType : public DataType
@@ -167,7 +188,7 @@ public:
   string datatype;
   int dimension;
 
-  ArrayType(const string &ty, int dim);
+  ArrayType(const string &ty, int dim, int sl, int el, int s, int e);
 };
 
 // Expression Nodes Implementation
@@ -177,7 +198,7 @@ public:
   AssignableExpression *assignee;
   Expression *value;
 
-  AssignmentExpression(AssignableExpression *var, Expression *val);
+  AssignmentExpression(AssignableExpression *var, Expression *val, int sl, int el, int s, int e);
   ~AssignmentExpression();
 };
 
@@ -187,7 +208,7 @@ public:
   Expression *left;
   Expression *right;
 
-  OrExpression(Expression *lhs, Expression *rhs);
+  OrExpression(Expression *lhs, Expression *rhs, int sl, int el, int s, int e);
   ~OrExpression();
 };
 
@@ -197,7 +218,7 @@ public:
   Expression *left;
   Expression *right;
 
-  AndExpression(Expression *lhs, Expression *rhs);
+  AndExpression(Expression *lhs, Expression *rhs, int sl, int el, int s, int e);
   ~AndExpression();
 };
 
@@ -208,7 +229,7 @@ public:
   Expression *right;
   string optr; // "==", "<>"
 
-  EqualityExpression(Expression *lhs, Expression *rhs, const string &op);
+  EqualityExpression(Expression *lhs, Expression *rhs, const string &op, int sl, int el, int s, int e);
   ~EqualityExpression();
 };
 
@@ -219,7 +240,7 @@ public:
   Expression *right;
   string optr; // "<", "<=", ">", ">="
 
-  RelationalExpression(Expression *lhs, Expression *rhs, const string &op);
+  RelationalExpression(Expression *lhs, Expression *rhs, const string &op, int sl, int el, int s, int e);
   ~RelationalExpression();
 };
 
@@ -230,7 +251,7 @@ public:
   Expression *right;
   string optr; // "+" | "-"
 
-  AdditiveExpression(Expression *lhs, Expression *rhs, const string &op);
+  AdditiveExpression(Expression *lhs, Expression *rhs, const string &op, int sl, int el, int s, int e);
   ~AdditiveExpression();
 };
 
@@ -241,7 +262,7 @@ public:
   Expression *right;
   string optr; // "*" | "/" | "%"
 
-  MultiplicativeExpression(Expression *lhs, Expression *rhs, const string &op);
+  MultiplicativeExpression(Expression *lhs, Expression *rhs, const string &op, int sl, int el, int s, int e);
   ~MultiplicativeExpression();
 };
 
@@ -252,7 +273,7 @@ public:
   string optr; // "-" | "++" | "--" | "NOT()"
   bool postfix;
 
-  UnaryExpression(Expression *operand, const string &op, const bool &post);
+  UnaryExpression(Expression *operand, const string &op, const bool &post, int sl, int el, int s, int e);
   ~UnaryExpression();
 };
 
@@ -262,7 +283,7 @@ public:
   Identifier *function;
   vector<Expression *> arguments;
 
-  CallFunctionExpression(Identifier *func, const vector<Expression *> &args);
+  CallFunctionExpression(Identifier *func, const vector<Expression *> &args, int sl, int el, int s, int e);
   ~CallFunctionExpression();
 };
 
@@ -272,7 +293,7 @@ public:
   Expression *base;
   Expression *index;
 
-  IndexExpression(Expression *baseExpr, Expression *indexExpr);
+  IndexExpression(Expression *baseExpr, Expression *indexExpr, int sl, int el, int s, int e);
   ~IndexExpression();
 };
 
@@ -281,7 +302,7 @@ class PrimaryExpression : public Expression
 public:
   Literal *value;
 
-  PrimaryExpression(Literal *val);
+  PrimaryExpression(Literal *val, int sl, int el, int s, int e);
 
   ~PrimaryExpression();
 };
@@ -293,7 +314,7 @@ public:
   vector<Identifier *> variables;
   DataType *datatype;
 
-  VariableDeclaration(const vector<Identifier *> &variables, DataType *datatype);
+  VariableDeclaration(const vector<Identifier *> &variables, DataType *datatype, int sl, int el, int s, int e);
   ~VariableDeclaration();
 };
 
@@ -304,7 +325,7 @@ public:
   DataType *datatype;
   Expression *initializer;
 
-  VariableInitialization(Identifier *name, DataType *datatype, Expression *init);
+  VariableInitialization(Identifier *name, DataType *datatype, Expression *init, int sl, int el, int s, int e);
   ~VariableInitialization();
 };
 
@@ -313,7 +334,7 @@ class VariableDefinition : public Statement
 public:
   Statement *def;
 
-  VariableDefinition(Statement *def);
+  VariableDefinition(Statement *def, int sl, int el, int s, int e);
   ~VariableDefinition();
 };
 
@@ -325,7 +346,7 @@ public:
   vector<VariableDefinition *> parameters;
   vector<Statement *> body;
 
-  Function(Identifier *name, ReturnType *ret, const vector<VariableDefinition *> &params, const vector<Statement *> &body);
+  Function(Identifier *name, ReturnType *ret, const vector<VariableDefinition *> &params, const vector<Statement *> &body, int sl, int el, int s, int e);
   ~Function();
 };
 
@@ -336,7 +357,7 @@ public:
   vector<VariableDefinition *> globals;
   vector<Statement *> body;
 
-  Program(Identifier *prog, const vector<VariableDefinition *> &glob, const vector<Statement *> &body);
+  Program(Identifier *prog, const vector<VariableDefinition *> &glob, const vector<Statement *> &body, int sl, int el, int s, int e);
   ~Program();
 };
 
@@ -348,7 +369,7 @@ public:
   vector<Statement *> consequent;
   vector<Statement *> alternate;
 
-  IfStatement(Expression *cond, const vector<Statement *> &consequent, const vector<Statement *> &alternate = {});
+  IfStatement(Expression *cond, const vector<Statement *> &consequent, const vector<Statement *> &alternate, int sl, int el, int s, int e);
   ~IfStatement();
 };
 
@@ -357,20 +378,20 @@ class ReturnStatement : public Statement
 public:
   Expression *returnValue;
 
-  ReturnStatement(Expression *value = nullptr);
+  ReturnStatement(Expression *value, int sl, int el, int s, int e);
   ~ReturnStatement();
 };
 
 class StopStatement : public Statement
 {
 public:
-  StopStatement();
+  StopStatement(int sl, int el, int s, int e);
 };
 
 class SkipStatement : public Statement
 {
 public:
-  SkipStatement();
+  SkipStatement(int sl, int el, int s, int e);
 };
 
 class ReadStatement : public Statement
@@ -378,7 +399,7 @@ class ReadStatement : public Statement
 public:
   vector<Identifier *> variables;
 
-  ReadStatement(const vector<Identifier *> &vars);
+  ReadStatement(const vector<Identifier *> &vars, int sl, int el, int s, int e);
   ~ReadStatement();
 };
 
@@ -387,7 +408,7 @@ class WriteStatement : public Statement
 public:
   vector<Expression *> args;
 
-  WriteStatement(const vector<Expression *> &values);
+  WriteStatement(const vector<Expression *> &values, int sl, int el, int s, int e);
   ~WriteStatement();
 };
 
@@ -398,7 +419,7 @@ public:
   Expression *condition;
   vector<Statement *> body;
 
-  WhileLoop(Expression *cond, const vector<Statement *> &stmts);
+  WhileLoop(Expression *cond, const vector<Statement *> &stmts, int sl, int el, int s, int e);
   ~WhileLoop();
 };
 
@@ -410,7 +431,7 @@ public:
   Expression *update;
   vector<Statement *> body;
 
-  ForLoop(AssignmentExpression *init, BooleanExpression *cond, Expression *iter, const vector<Statement *> &stmts);
+  ForLoop(AssignmentExpression *init, BooleanExpression *cond, Expression *iter, const vector<Statement *> &stmts, int sl, int el, int s, int e);
   ~ForLoop();
 };
 
@@ -421,6 +442,6 @@ public:
   Program *program;
   vector<Function *> functions;
 
-  Source(Program *prog, const vector<Function *> &funcs);
+  Source(Program *prog, const vector<Function *> &funcs, int sl, int el, int s, int e);
   ~Source();
 };

@@ -18,9 +18,15 @@ public:
 
 protected:
   ScannerBase *sc;
+  int node_start;
+  int start_line;
+  int node_end;
+  int end_line;
   Token current_token;
 
   Token match(TokenType type);
   void syntax_error(string message);
   bool lookahead(TokenType type);
+  void set_start();
+  void set_end();
 };

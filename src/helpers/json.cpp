@@ -39,6 +39,16 @@ string JSON::node_type(const AstNode *node)
   return quote("type") + ":" + quote(AstNode::get_node_name(node));
 }
 
+string JSON::node_loc(const AstNode *node)
+{
+  string start_line = quote("start_line") + ":" + to_string(node->start_line);
+  string end_line = quote("end_line") + ":" + to_string(node->end_line);
+  string node_start = quote("node_start") + ":" + to_string(node->node_start);
+  string node_end = quote("node_end") + ":" + to_string(node->node_end);
+
+  return start_line + "," + end_line + "," + node_start + "," + node_end;
+}
+
 string JSON::format(string json)
 {
   string formatted;
@@ -177,13 +187,14 @@ string JSON::stringify_node(const AstNode *node)
 
 string JSON::stringify_ast_node(const AstNode *node)
 {
-  return "{" + node_type(node) + "}";
+  return "{" + node_type(node) + "," + node_loc(node) + "}";
 }
 
 // Root Node to json
 string JSON::stringify_source(const Source *src)
 {
   string type = node_type(src);
+  string loc = node_loc(src);
   string program = quote("program") + ":" + stringify_program(src->program);
   string functions = quote("functions") + ":[";
 
@@ -199,13 +210,14 @@ string JSON::stringify_source(const Source *src)
 
   functions += "]";
 
-  return "{" + type + "," + program + "," + functions + "}";
+  return "{" + type + "," + loc + "," + program + "," + functions + "}";
 }
 
 // Definitions to json
 string JSON::stringify_program(const Program *node)
 {
   string type = node_type(node);
+  string loc = node_loc(node);
   string program_name = quote("program_name") + ":" + stringify_identifier(node->program_name);
   string globals = quote("globals") + ":[";
   string body = quote("body") + ":[";
@@ -233,12 +245,13 @@ string JSON::stringify_program(const Program *node)
   globals += "]";
   body += "]";
 
-  return "{" + type + "," + program_name + "," + globals + "," + body + "}";
+  return "{" + type + "," + loc + "," + program_name + "," + globals + "," + body + "}";
 }
 
 string JSON::stringify_function(const Function *node)
 {
   string type = node_type(node);
+  string loc = node_loc(node);
   string name = quote("name") + ":" + stringify_identifier(node->funcname);
   string return_type = quote("returns") + ":" + stringify_return_type(node->return_type);
   string parameters = quote("parameters") + ":[";
@@ -273,6 +286,7 @@ string JSON::stringify_function(const Function *node)
 string JSON::stringify_var_def(const VariableDefinition *node)
 {
   string type = node_type(node);
+  string loc = node_loc(node);
   string definition = quote("definition") + ":";
 
   if (dynamic_cast<const VariableDeclaration *>(node->def))
@@ -286,12 +300,13 @@ string JSON::stringify_var_def(const VariableDefinition *node)
     definition += stringify_var_init(init);
   }
 
-  return "{" + type + "," + definition + "}";
+  return "{" + type + "," + loc + "," + definition + "}";
 }
 
 string JSON::stringify_var_dec(const VariableDeclaration *node)
 {
   string type = node_type(node);
+  string loc = node_loc(node);
   string datatype = quote("datatype") + ":" + stringify_type(node->datatype);
   string vars = quote("variables") + ":[";
 
@@ -307,17 +322,18 @@ string JSON::stringify_var_dec(const VariableDeclaration *node)
 
   vars += "]";
 
-  return "{" + type + "," + vars + "," + datatype + "}";
+  return "{" + type + "," + loc + "," + vars + "," + datatype + "}";
 }
 
 string JSON::stringify_var_init(const VariableInitialization *node)
 {
   string type = node_type(node);
+  string loc = node_loc(node);
   string name = quote("name") + ":" + stringify_identifier(node->name);
   string datatype = quote("datatype") + ":" + stringify_type(node->datatype);
   string initializer = quote("initializer") + ":" + stringify_expr(node->initializer);
 
-  return "{" + type + "," + name + "," + datatype + "," + initializer + "}";
+  return "{" + type + "," + loc + "," + name + "," + datatype + "," + initializer + "}";
 }
 
 // Statements to json
@@ -390,6 +406,7 @@ string JSON::stringify_stmt(const Statement *stmt)
 string JSON::stringify_if_stmt(const IfStatement *stmt)
 {
   string type = node_type(stmt);
+  string loc = node_loc(stmt);
   string condition = quote("condition") + ":" + stringify_expr(stmt->condition);
   string consequent = quote("consequent") + ":[";
   string alternate = quote("alternate") + ":[";
@@ -417,15 +434,16 @@ string JSON::stringify_if_stmt(const IfStatement *stmt)
   consequent += "]";
   alternate += "]";
 
-  return "{" + type + "," + condition + "," + consequent + "," + alternate + "}";
+  return "{" + type + "," + loc + "," + condition + "," + consequent + "," + alternate + "}";
 }
 
 string JSON::stringify_return_stmt(const ReturnStatement *stmt)
 {
   string type = node_type(stmt);
+  string loc = node_loc(stmt);
   string value = quote("value") + ":" + (stmt->returnValue == nullptr ? "null" : stringify_expr(stmt->returnValue));
 
-  return "{" + type + "," + value + "}";
+  return "{" + type + "," + loc + "," + value + "}";
 }
 
 string JSON::stringify_skip_stmt(const SkipStatement *stmt)
@@ -441,6 +459,7 @@ string JSON::stringify_stop_stmt(const StopStatement *stmt)
 string JSON::stringify_read_stmt(const ReadStatement *stmt)
 {
   string type = node_type(stmt);
+  string loc = node_loc(stmt);
   string vars = quote("variables") + ":[";
 
   for (int i = 0; i < stmt->variables.size(); ++i)
@@ -455,12 +474,13 @@ string JSON::stringify_read_stmt(const ReadStatement *stmt)
 
   vars += "]";
 
-  return "{" + type + "," + vars + "}";
+  return "{" + type + "," + loc + "," + vars + "}";
 }
 
 string JSON::stringify_write_stmt(const WriteStatement *stmt)
 {
   string type = node_type(stmt);
+  string loc = node_loc(stmt);
   string args = quote("expressions") + ":[";
 
   for (int i = 0; i < stmt->args.size(); ++i)
@@ -475,13 +495,14 @@ string JSON::stringify_write_stmt(const WriteStatement *stmt)
 
   args += "]";
 
-  return "{" + type + "," + args + "}";
+  return "{" + type + "," + loc + "," + args + "}";
 }
 
 // Loops to json
 string JSON::stringify_while_loop(const WhileLoop *loop)
 {
   string type = node_type(loop);
+  string loc = node_loc(loop);
   string condition = quote("condition") + ":" + stringify_expr(loop->condition);
   string body = quote("body") + ":[";
 
@@ -497,12 +518,13 @@ string JSON::stringify_while_loop(const WhileLoop *loop)
 
   body += "]";
 
-  return "{" + type + "," + condition + "," + body + "}";
+  return "{" + type + "," + loc + "," + condition + "," + body + "}";
 }
 
 string JSON::stringify_for_loop(const ForLoop *loop)
 {
   string type = node_type(loop);
+  string loc = node_loc(loop);
   string init = quote("init") + ":" + stringify_assignment_expr(loop->init);
   string condition = quote("condition") + ":" + stringify_expr(loop->condition);
   string update = quote("update") + ":" + stringify_expr(loop->update);
@@ -520,7 +542,7 @@ string JSON::stringify_for_loop(const ForLoop *loop)
 
   body += "]";
 
-  return "{" + type + "," + init + "," + condition + "," + update + "," + body + "}";
+  return "{" + type + "," + loc + "," + init + "," + condition + "," + update + "," + body + "}";
 }
 
 // Expressions to json
@@ -628,10 +650,11 @@ string JSON::stringify_binary_expr(const string &exprType, const Expression *exp
 string JSON::stringify_assignment_expr(const AssignmentExpression *assExpr)
 {
   string type = node_type(assExpr);
+  string loc = node_loc(assExpr);
   string assignee = quote("assignee") + ":" + stringify_assignable_expr(assExpr->assignee);
   string value = quote("value") + ":" + stringify_expr(assExpr->value);
 
-  return "{" + type + "," + assignee + "," + value + "}";
+  return "{" + type + "," + loc + "," + assignee + "," + value + "}";
 }
 
 string JSON::stringify_or_expr(const OrExpression *orExpr)
@@ -667,16 +690,18 @@ string JSON::stringify_multiplicative_expr(const MultiplicativeExpression *mulEx
 string JSON::stringify_unary_expr(const UnaryExpression *unaryExpr)
 {
   string type = node_type(unaryExpr);
+  string loc = node_loc(unaryExpr);
   string operand = quote("operand") + ":" + stringify_expr(unaryExpr->operand);
   string optr = quote("operator") + ":" + quote(unaryExpr->optr);
   string postfix = quote("postfix") + ":" + (unaryExpr->postfix ? "true" : "false");
 
-  return "{" + type + "," + operand + "," + optr + "," + postfix + "}";
+  return "{" + type + "," + loc + "," + operand + "," + optr + "," + postfix + "}";
 }
 
 string JSON::stringify_call_function_expr(const CallFunctionExpression *cfExpr)
 {
   string type = node_type(cfExpr);
+  string loc = node_loc(cfExpr);
   string function = quote("function") + ":" + stringify_identifier(cfExpr->function);
   string args = quote("arguments") + ":[";
 
@@ -692,16 +717,17 @@ string JSON::stringify_call_function_expr(const CallFunctionExpression *cfExpr)
 
   args += "]";
 
-  return "{" + type + "," + function + "," + args + "}";
+  return "{" + type + "," + loc + "," + function + "," + args + "}";
 }
 
 string JSON::stringify_index_expr(const IndexExpression *idxExpr)
 {
   string type = node_type(idxExpr);
+  string loc = node_loc(idxExpr);
   string base = quote("base") + ":" + stringify_expr(idxExpr->base);
   string index = quote("index") + ":" + stringify_expr(idxExpr->index);
 
-  return "{" + type + "," + base + "," + index + "}";
+  return "{" + type + "," + loc + "," + base + "," + index + "}";
 }
 
 string JSON::stringify_primary_expr(const PrimaryExpression *primaryExpr)
@@ -729,26 +755,29 @@ string JSON::stringify_type(const DataType *type)
 string JSON::stringify_primitive_type(const PrimitiveType *prime)
 {
   string type = node_type(prime);
+  string loc = node_loc(prime);
   string datatype = quote("datatype") + ":" + quote(prime->datatype);
 
-  return "{" + type + "," + datatype + "}";
+  return "{" + type + "," + loc + "," + datatype + "}";
 }
 
 string JSON::stringify_array_type(const ArrayType *array)
 {
   string type = node_type(array);
+  string loc = node_loc(array);
   string datatype = quote("datatype") + ":" + quote(array->datatype);
   string dim = quote("dimension") + ":" + to_string(array->dimension);
 
-  return "{" + type + "," + datatype + "," + dim + "}";
+  return "{" + type + "," + loc + "," + datatype + "," + dim + "}";
 }
 
 string JSON::stringify_return_type(const ReturnType *ret)
 {
   string type = node_type(ret);
+  string loc = node_loc(ret);
   string datatype = quote("return_type") + ":" + stringify_type(ret->return_type);
 
-  return "{" + type + "," + datatype + "}";
+  return "{" + type + "," + loc + "," + datatype + "}";
 }
 
 // Literals to json
@@ -812,6 +841,7 @@ string JSON::stringify_boolean_literal(const BooleanLiteral *boolNode)
 string JSON::stringify_array_literal(const ArrayLiteral *arrNode)
 {
   string type = node_type(arrNode);
+  string loc = node_loc(arrNode);
   string elements = quote("elements") + ":[";
 
   for (int i = 0; i < arrNode->elements.size(); ++i)
@@ -826,5 +856,5 @@ string JSON::stringify_array_literal(const ArrayLiteral *arrNode)
 
   elements += "]";
 
-  return "{" + type + "," + elements + "}";
+  return "{" + type + "," + loc + "," + elements + "}";
 }

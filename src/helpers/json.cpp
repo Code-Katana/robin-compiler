@@ -280,7 +280,7 @@ string JSON::stringify_function(const Function *node)
   parameters += "]";
   body += "]";
 
-  return "{" + type + "," + name + "," + return_type + "," + parameters + "," + body + "}";
+  return "{" + type + "," + loc + "," + name + "," + return_type + "," + parameters + "," + body + "}";
 }
 
 string JSON::stringify_var_def(const VariableDefinition *node)

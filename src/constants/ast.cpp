@@ -1,6 +1,9 @@
 #include "ast.h"
 
 // AstNode
+AstNode::AstNode() {}
+
+AstNode::AstNode(int sl, int el, int s, int e) : start_line(sl), end_line(el), node_start(s), node_end(e) {}
 
 map<AstNodeType, string> AstNode::NodeNames = {
     // Root Node
@@ -73,38 +76,56 @@ string AstNode::get_node_name(const AstNode *node)
   return NodeNames[node->type];
 }
 
+// Basic Nodes Implementation
+
+Statement::Statement() {}
+
+Statement::Statement(int sl, int el, int s, int e) : AstNode(sl, el, s, e) {}
+
+Expression::Expression() {}
+
+Expression::Expression(int sl, int el, int s, int e) : Statement(sl, el, s, e) {}
+
+BooleanExpression::BooleanExpression(int sl, int el, int s, int e) : Expression(sl, el, s, e) {}
+
+AssignableExpression::AssignableExpression(int sl, int el, int s, int e) : Expression(sl, el, s, e) {}
+
+DataType::DataType(int sl, int el, int s, int e) : AstNode(sl, el, s, e) {}
+
+Literal::Literal(int sl, int el, int s, int e) : Expression(sl, el, s, e) {}
+
 // Identifier Node Implementation
-Identifier::Identifier(const string &name) : name(name)
+Identifier::Identifier(const string &name, int sl, int el, int s, int e) : AssignableExpression(sl, el, s, e), name(name)
 {
   type = AstNodeType::Identifier;
 }
 
 // IntegerLiteral Node Implementation
-IntegerLiteral::IntegerLiteral(int val) : value(val)
+IntegerLiteral::IntegerLiteral(int val, int sl, int el, int s, int e) : Literal(sl, el, s, e), value(val)
 {
   type = AstNodeType::IntegerLiteral;
 }
 
 // FloatLiteral Node Implementation
-FloatLiteral::FloatLiteral(float val) : value(val)
+FloatLiteral::FloatLiteral(float val, int sl, int el, int s, int e) : Literal(sl, el, s, e), value(val)
 {
   type = AstNodeType::FloatLiteral;
 }
 
 // StringLiteral Node Implementation
-StringLiteral::StringLiteral(const string &val) : value(val)
+StringLiteral::StringLiteral(const string &val, int sl, int el, int s, int e) : Literal(sl, el, s, e), value(val)
 {
   type = AstNodeType::StringLiteral;
 }
 
 // BooleanLiteral Node Implementation
-BooleanLiteral::BooleanLiteral(bool val) : value(val)
+BooleanLiteral::BooleanLiteral(bool val, int sl, int el, int s, int e) : Literal(sl, el, s, e), value(val)
 {
   type = AstNodeType::BooleanLiteral;
 }
 
 // ArrayLiteral Node Implementation
-ArrayLiteral::ArrayLiteral(const vector<Expression *> &elems) : elements(elems)
+ArrayLiteral::ArrayLiteral(const vector<Expression *> &elems, int sl, int el, int s, int e) : Literal(sl, el, s, e), elements(elems)
 {
   type = AstNodeType::ArrayLiteral;
 }
@@ -118,7 +139,7 @@ ArrayLiteral::~ArrayLiteral()
 }
 
 // Primitive Data Type Implementation
-ReturnType::ReturnType(DataType *rt) : return_type(rt)
+ReturnType::ReturnType(DataType *rt, int sl, int el, int s, int e) : return_type(rt), DataType(sl, el, s, e)
 {
   type = AstNodeType::ReturnType;
 }
@@ -128,20 +149,20 @@ ReturnType::~ReturnType()
   delete return_type;
 }
 
-PrimitiveType::PrimitiveType(const string &ty) : datatype(ty)
+PrimitiveType::PrimitiveType(const string &ty, int sl, int el, int s, int e) : DataType(sl, el, s, e), datatype(ty)
 {
   type = AstNodeType::PrimitiveType;
 }
 
 // Array Data Type Implementation
-ArrayType::ArrayType(const string &ty, int dim) : datatype(ty), dimension(dim)
+ArrayType::ArrayType(const string &ty, int dim, int sl, int el, int s, int e) : DataType(sl, el, s, e), datatype(ty), dimension(dim)
 {
   type = AstNodeType::ArrayType;
 }
 
 // AssignmentExpression Node Implementation
-AssignmentExpression::AssignmentExpression(AssignableExpression *var, Expression *val)
-    : assignee(var), value(val)
+AssignmentExpression::AssignmentExpression(AssignableExpression *var, Expression *val, int sl, int el, int s, int e)
+    : Expression(sl, el, s, e), assignee(var), value(val)
 {
   type = AstNodeType::AssignmentExpression;
 }
@@ -153,8 +174,8 @@ AssignmentExpression::~AssignmentExpression()
 }
 
 // OrExpression Node Implementation
-OrExpression::OrExpression(Expression *lhs, Expression *rhs)
-    : left(lhs), right(rhs)
+OrExpression::OrExpression(Expression *lhs, Expression *rhs, int sl, int el, int s, int e)
+    : Expression(sl, el, s, e), left(lhs), right(rhs)
 {
   type = AstNodeType::OrExpression;
 }
@@ -166,8 +187,8 @@ OrExpression::~OrExpression()
 }
 
 // AndExpression Node Implementation
-AndExpression::AndExpression(Expression *lhs, Expression *rhs)
-    : left(lhs), right(rhs)
+AndExpression::AndExpression(Expression *lhs, Expression *rhs, int sl, int el, int s, int e)
+    : Expression(sl, el, s, e), left(lhs), right(rhs)
 {
   type = AstNodeType::AndExpression;
 }
@@ -179,8 +200,8 @@ AndExpression::~AndExpression()
 }
 
 // EqualityExpression Node Implementation
-EqualityExpression::EqualityExpression(Expression *lhs, Expression *rhs, const string &op)
-    : left(lhs), right(rhs), optr(op)
+EqualityExpression::EqualityExpression(Expression *lhs, Expression *rhs, const string &op, int sl, int el, int s, int e)
+    : BooleanExpression(sl, el, s, e), left(lhs), right(rhs), optr(op)
 {
   type = AstNodeType::EqualityExpression;
 }
@@ -192,8 +213,8 @@ EqualityExpression::~EqualityExpression()
 }
 
 // RelationalExpression Node Implementation
-RelationalExpression::RelationalExpression(Expression *lhs, Expression *rhs, const string &op)
-    : left(lhs), right(rhs), optr(op)
+RelationalExpression::RelationalExpression(Expression *lhs, Expression *rhs, const string &op, int sl, int el, int s, int e)
+    : BooleanExpression(sl, el, s, e), left(lhs), right(rhs), optr(op)
 {
   type = AstNodeType::RelationalExpression;
 }
@@ -205,8 +226,8 @@ RelationalExpression::~RelationalExpression()
 }
 
 // AdditiveExpression Node Implementation
-AdditiveExpression::AdditiveExpression(Expression *lhs, Expression *rhs, const string &op)
-    : left(lhs), right(rhs), optr(op)
+AdditiveExpression::AdditiveExpression(Expression *lhs, Expression *rhs, const string &op, int sl, int el, int s, int e)
+    : Expression(sl, el, s, e), left(lhs), right(rhs), optr(op)
 {
   type = AstNodeType::AdditiveExpression;
 }
@@ -218,8 +239,8 @@ AdditiveExpression::~AdditiveExpression()
 }
 
 // MultiplicativeExpression Node Implementation
-MultiplicativeExpression::MultiplicativeExpression(Expression *lhs, Expression *rhs, const string &op)
-    : left(lhs), right(rhs), optr(op)
+MultiplicativeExpression::MultiplicativeExpression(Expression *lhs, Expression *rhs, const string &op, int sl, int el, int s, int e)
+    : Expression(sl, el, s, e), left(lhs), right(rhs), optr(op)
 {
   type = AstNodeType::MultiplicativeExpression;
 }
@@ -231,8 +252,8 @@ MultiplicativeExpression::~MultiplicativeExpression()
 }
 
 // UnaryExpression Node Implementation
-UnaryExpression::UnaryExpression(Expression *operand, const string &op, const bool &post)
-    : operand(operand), optr(op), postfix(post)
+UnaryExpression::UnaryExpression(Expression *operand, const string &op, const bool &post, int sl, int el, int s, int e)
+    : Expression(sl, el, s, e), operand(operand), optr(op), postfix(post)
 {
   type = AstNodeType::UnaryExpression;
 }
@@ -243,8 +264,8 @@ UnaryExpression::~UnaryExpression()
 }
 
 // CallFunctionExpression Node Implementation
-CallFunctionExpression::CallFunctionExpression(Identifier *func, const vector<Expression *> &args)
-    : function(func), arguments(args)
+CallFunctionExpression::CallFunctionExpression(Identifier *func, const vector<Expression *> &args, int sl, int el, int s, int e)
+    : Expression(sl, el, s, e), function(func), arguments(args)
 {
   type = AstNodeType::CallFunctionExpression;
 }
@@ -259,8 +280,8 @@ CallFunctionExpression::~CallFunctionExpression()
 }
 
 // IndexExpression Node Implementation
-IndexExpression::IndexExpression(Expression *baseExpr, Expression *indexExpr)
-    : base(baseExpr), index(indexExpr)
+IndexExpression::IndexExpression(Expression *baseExpr, Expression *indexExpr, int sl, int el, int s, int e)
+    : AssignableExpression(sl, el, s, e), base(baseExpr), index(indexExpr)
 {
   type = AstNodeType::IndexExpression;
 }
@@ -272,7 +293,8 @@ IndexExpression::~IndexExpression()
 }
 
 // PrimaryExpression Node Implementation
-PrimaryExpression::PrimaryExpression(Literal *val) : value(val)
+PrimaryExpression::PrimaryExpression(Literal *val, int sl, int el, int s, int e)
+    : Expression(sl, el, s, e), value(val)
 {
   type = AstNodeType::PrimaryExpression;
 }
@@ -283,8 +305,8 @@ PrimaryExpression::~PrimaryExpression()
 }
 
 // VariableDeclaration Node Implementation
-VariableDeclaration::VariableDeclaration(const vector<Identifier *> &vars, DataType *dt)
-    : variables(vars), datatype(dt)
+VariableDeclaration::VariableDeclaration(const vector<Identifier *> &vars, DataType *dt, int sl, int el, int s, int e)
+    : Statement(sl, el, s, e), variables(vars), datatype(dt)
 {
   type = AstNodeType::VariableDeclaration;
 }
@@ -300,8 +322,8 @@ VariableDeclaration::~VariableDeclaration()
 }
 
 // VariableInitialization Node Implementation
-VariableInitialization::VariableInitialization(Identifier *name, DataType *datatype, Expression *init)
-    : name(name), datatype(datatype), initializer(init)
+VariableInitialization::VariableInitialization(Identifier *name, DataType *datatype, Expression *init, int sl, int el, int s, int e)
+    : Statement(sl, el, s, e), name(name), datatype(datatype), initializer(init)
 {
   type = AstNodeType::VariableInitialization;
 }
@@ -314,7 +336,7 @@ VariableInitialization::~VariableInitialization()
 }
 
 // VariableDefinition Node Implementation
-VariableDefinition::VariableDefinition(Statement *def) : def(def)
+VariableDefinition::VariableDefinition(Statement *def, int sl, int el, int s, int e) : Statement(sl, el, s, e), def(def)
 {
   type = AstNodeType::VariableDefinition;
 }
@@ -325,8 +347,8 @@ VariableDefinition::~VariableDefinition()
 }
 
 // FunctionDeclaration Node Implementation
-Function::Function(Identifier *name, ReturnType *ret, const vector<VariableDefinition *> &params, const vector<Statement *> &body)
-    : funcname(name), return_type(ret), parameters(params), body(body)
+Function::Function(Identifier *name, ReturnType *ret, const vector<VariableDefinition *> &params, const vector<Statement *> &body, int sl, int el, int s, int e)
+    : AstNode(sl, el, s, e), funcname(name), return_type(ret), parameters(params), body(body)
 {
   type = AstNodeType::Function;
 }
@@ -342,8 +364,8 @@ Function::~Function()
 }
 
 // ProgramDeclaration Node Implementation
-Program::Program(Identifier *prog, const vector<VariableDefinition *> &glob, const vector<Statement *> &body)
-    : program_name(prog), globals(glob), body(body)
+Program::Program(Identifier *prog, const vector<VariableDefinition *> &glob, const vector<Statement *> &body, int sl, int el, int s, int e)
+    : AstNode(sl, el, s, e), program_name(prog), globals(glob), body(body)
 {
   type = AstNodeType::Program;
 }
@@ -362,8 +384,8 @@ Program::~Program()
 }
 
 // IfStatement Node Implementation
-IfStatement::IfStatement(Expression *cond, const vector<Statement *> &consequent, const vector<Statement *> &alternate)
-    : condition(cond), consequent(consequent), alternate(alternate)
+IfStatement::IfStatement(Expression *cond, const vector<Statement *> &consequent, const vector<Statement *> &alternate, int sl, int el, int s, int e)
+    : Statement(sl, el, s, e), condition(cond), consequent(consequent), alternate(alternate)
 {
   type = AstNodeType::IfStatement;
 }
@@ -382,7 +404,7 @@ IfStatement::~IfStatement()
 }
 
 // ReturnStatement Node Implementation
-ReturnStatement::ReturnStatement(Expression *value) : returnValue(value)
+ReturnStatement::ReturnStatement(Expression *value, int sl, int el, int s, int e) : Statement(sl, el, s, e), returnValue(value)
 {
   type = AstNodeType::ReturnStatement;
 }
@@ -393,19 +415,19 @@ ReturnStatement::~ReturnStatement()
 }
 
 // StopStatement Node Implementation
-StopStatement::StopStatement()
+StopStatement::StopStatement(int sl, int el, int s, int e) : Statement(sl, el, s, e)
 {
   type = AstNodeType::StopStatement;
 }
 
 // SkipStatement Node Implementation
-SkipStatement::SkipStatement()
+SkipStatement::SkipStatement(int sl, int el, int s, int e) : Statement(sl, el, s, e)
 {
   type = AstNodeType::SkipStatement;
 }
 
 // ReadStatement Node Implementation
-ReadStatement::ReadStatement(const vector<Identifier *> &vars) : variables(vars)
+ReadStatement::ReadStatement(const vector<Identifier *> &vars, int sl, int el, int s, int e) : Statement(sl, el, s, e), variables(vars)
 {
   type = AstNodeType::ReadStatement;
 }
@@ -419,7 +441,7 @@ ReadStatement::~ReadStatement()
 }
 
 // WriteStatement Node Implementation
-WriteStatement::WriteStatement(const vector<Expression *> &values) : args(values)
+WriteStatement::WriteStatement(const vector<Expression *> &values, int sl, int el, int s, int e) : Statement(sl, el, s, e), args(values)
 {
   type = AstNodeType::WriteStatement;
 }
@@ -433,8 +455,8 @@ WriteStatement::~WriteStatement()
 }
 
 // WhileLoop Node Implementation
-WhileLoop::WhileLoop(Expression *cond, const vector<Statement *> &stmts)
-    : condition(cond), body(stmts)
+WhileLoop::WhileLoop(Expression *cond, const vector<Statement *> &stmts, int sl, int el, int s, int e)
+    : Statement(sl, el, s, e), condition(cond), body(stmts)
 {
   type = AstNodeType::WhileLoop;
 }
@@ -449,8 +471,8 @@ WhileLoop::~WhileLoop()
 }
 
 // ForLoop Node Implementation
-ForLoop::ForLoop(AssignmentExpression *init, BooleanExpression *cond, Expression *iter, const vector<Statement *> &stmts)
-    : init(init), condition(cond), update(iter), body(stmts)
+ForLoop::ForLoop(AssignmentExpression *init, BooleanExpression *cond, Expression *iter, const vector<Statement *> &stmts, int sl, int el, int s, int e)
+    : Statement(sl, el, s, e), init(init), condition(cond), update(iter), body(stmts)
 {
   type = AstNodeType::ForLoop;
 }
@@ -467,8 +489,8 @@ ForLoop::~ForLoop()
 }
 
 // Root Node Implementation
-Source::Source(Program *prog, const vector<Function *> &funcs)
-    : program(prog), functions(funcs)
+Source::Source(Program *prog, const vector<Function *> &funcs, int sl, int el, int s, int e)
+    : AstNode(sl, el, s, e), program(prog), functions(funcs)
 {
   type = AstNodeType::Source;
 }

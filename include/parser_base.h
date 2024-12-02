@@ -19,6 +19,7 @@ public:
 protected:
   ScannerBase *sc;
   Token current_token;
+  Token previous_token;
 
   Token match(TokenType type);
   void syntax_error(string message);

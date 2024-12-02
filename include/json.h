@@ -29,8 +29,6 @@ private:
 
   // Helpers
   static string quote(string str);
-  static string pair(string type, string value);
-  static string quoted_pair(string type, string value);
   static string node_type(const AstNode *node);
   static string node_loc(const AstNode *node);
   static string stringify_ast_node(const AstNode *node);

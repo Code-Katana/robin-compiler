@@ -24,16 +24,6 @@ string JSON::quote(string str)
   return "\\\"" + str + "\\\"";
 }
 
-string JSON::pair(string type, string value)
-{
-  return "{" + quote("type") + ":" + type + "," + quote("value") + ":" + value + "}";
-}
-
-string JSON::quoted_pair(string type, string value)
-{
-  return pair(quote(type), quote(value));
-}
-
 string JSON::node_type(const AstNode *node)
 {
   return quote("type") + ":" + quote(AstNode::get_node_name(node));
@@ -732,7 +722,11 @@ string JSON::stringify_index_expr(const IndexExpression *idxExpr)
 
 string JSON::stringify_primary_expr(const PrimaryExpression *primaryExpr)
 {
-  return pair(quote(AstNode::get_node_name(primaryExpr)), stringify_literal(primaryExpr->value));
+  string type = node_type(primaryExpr);
+  string loc = node_loc(primaryExpr);
+  string value = quote("value") + ":" + stringify_literal(primaryExpr->value);
+
+  return "{" + type + "," + loc + "," + value + "}";
 }
 
 // Types
@@ -814,28 +808,48 @@ string JSON::stringify_literal(const Literal *litNode)
 
 string JSON::stringify_identifier(const Identifier *idNode)
 {
-  return quoted_pair(AstNode::get_node_name(idNode), idNode->name);
+  string type = node_type(idNode);
+  string loc = node_loc(idNode);
+  string value = quote("name") + ":" + quote(idNode->name);
+
+  return "{" + type + "," + loc + "," + value + "}";
 }
 
 string JSON::stringify_integer_literal(const IntegerLiteral *intNode)
 {
-  return pair(quote(AstNode::get_node_name(intNode)), to_string(intNode->value));
+  string type = node_type(intNode);
+  string loc = node_loc(intNode);
+  string value = quote("value") + ":" + to_string(intNode->value);
+
+  return "{" + type + "," + loc + "," + value + "}";
 }
 
 string JSON::stringify_float_literal(const FloatLiteral *fNode)
 {
-  return pair(quote(AstNode::get_node_name(fNode)), to_string(fNode->value));
+  string type = node_type(fNode);
+  string loc = node_loc(fNode);
+  string value = quote("value") + ":" + to_string(fNode->value);
+
+  return "{" + type + "," + loc + "," + value + "}";
 }
 
 string JSON::stringify_string_literal(const StringLiteral *strNode)
 {
-  return quoted_pair(AstNode::get_node_name(strNode), strNode->value);
+  string type = node_type(strNode);
+  string loc = node_loc(strNode);
+  string value = quote("value") + ":" + quote(strNode->value);
+
+  return "{" + type + "," + loc + "," + value + "}";
 }
 
 string JSON::stringify_boolean_literal(const BooleanLiteral *boolNode)
 {
-  string value = boolNode->value ? "true" : "false";
-  return pair(quote(AstNode::get_node_name(boolNode)), value);
+
+  string type = node_type(boolNode);
+  string loc = node_loc(boolNode);
+  string value = quote("value") + ":" + (boolNode->value ? "true" : "false");
+
+  return "{" + type + "," + loc + "," + value + "}";
 }
 
 string JSON::stringify_array_literal(const ArrayLiteral *arrNode)

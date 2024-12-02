@@ -32,13 +32,7 @@ int Debugger::run()
 
   AstNode *tree = wc.parser->parse_ast();
 
-  cout << "start line = " << tree->start_line << endl;
-  cout << "end line = " << tree->end_line << endl;
-  cout << "node start = " << tree->node_start << endl;
-  cout << "node end = " << tree->node_end << endl;
-
   JSON::debug_file(DEBUGGING_FOLDER + "/parse_tree.json", JSON::stringify_node(tree));
 
-  system("pause");
   return 0;
 }

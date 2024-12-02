@@ -28,9 +28,9 @@ int Debugger::run()
 {
   string program = read_program(DEBUGGING_FOLDER + "/" + PROGRAM_FILE);
 
-  WrenCompiler wc(program, ScannerOptions::HandCoded, ParserOptions::RecursiveDecent);
+  WrenCompiler *wc = new WrenCompiler(program, ScannerOptions::HandCoded, ParserOptions::RecursiveDecent);
 
-  AstNode *tree = wc.parser->parse_ast();
+  AstNode *tree = wc->parser->parse_ast();
 
   JSON::debug_file(DEBUGGING_FOLDER + "/parse_tree.json", JSON::stringify_node(tree));
 

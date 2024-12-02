@@ -21,8 +21,10 @@ Source *RecursiveDecentParser::parse_source()
 
   Program *program = parse_program();
 
-  int node_end = current_token.end;
-  int end_line = current_token.line;
+  match(TokenType::END_OF_FILE);
+
+  int node_end = previous_token.end;
+  int end_line = previous_token.line;
   return new Source(program, funcs, start_line, end_line, node_start, node_end);
 }
 
@@ -58,8 +60,8 @@ Function *RecursiveDecentParser::parse_function()
   match(TokenType::END_KW);
   match(TokenType::FUNC_KW);
 
-  int node_end = current_token.end;
-  int end_line = current_token.line;
+  int node_end = previous_token.end;
+  int end_line = previous_token.line;
   return new Function(id, return_type, params, body, start_line, end_line, node_start, node_end);
 }
 
@@ -87,10 +89,9 @@ Program *RecursiveDecentParser::parse_program()
   }
 
   match(TokenType::END_KW);
-  match(TokenType::END_OF_FILE);
 
-  int node_end = current_token.end;
-  int end_line = current_token.line;
+  int node_end = previous_token.end;
+  int end_line = previous_token.line;
 
   return new Program(id, globals, body, start_line, end_line, node_start, node_end);
 }
@@ -108,8 +109,8 @@ DataType *RecursiveDecentParser::parse_data_type()
     datatype = current_token.value;
     match(current_token.type);
 
-    int node_end = current_token.end;
-    int end_line = current_token.line;
+    int node_end = previous_token.end;
+    int end_line = previous_token.line;
 
     return new PrimitiveType(datatype, start_line, end_line, node_start, node_end);
   }
@@ -134,8 +135,8 @@ DataType *RecursiveDecentParser::parse_data_type()
     match(TokenType::RIGHT_SQUARE_PR);
   }
 
-  int node_end = current_token.end;
-  int end_line = current_token.line;
+  int node_end = previous_token.end;
+  int end_line = previous_token.line;
 
   return new ArrayType(datatype, dim, start_line, end_line, node_start, node_end);
 }
@@ -155,8 +156,8 @@ ReturnType *RecursiveDecentParser::parse_return_type()
     datatype = current_token.value;
     match(current_token.type);
 
-    int node_end = current_token.end;
-    int end_line = current_token.line;
+    int node_end = previous_token.end;
+    int end_line = previous_token.line;
 
     return_type = new PrimitiveType(datatype, start_line, end_line, node_start, node_end);
     return new ReturnType(return_type, start_line, end_line, node_start, node_end);
@@ -182,8 +183,8 @@ ReturnType *RecursiveDecentParser::parse_return_type()
     match(TokenType::RIGHT_SQUARE_PR);
   }
 
-  int node_end = current_token.end;
-  int end_line = current_token.line;
+  int node_end = previous_token.end;
+  int end_line = previous_token.line;
 
   return_type = new ArrayType(datatype, dim, start_line, end_line, node_start, node_end);
   return new ReturnType(return_type, start_line, end_line, node_start, node_end);
@@ -217,8 +218,8 @@ VariableDefinition *RecursiveDecentParser::parse_var_def()
     {
       match(TokenType::SEMI_COLON_SY);
 
-      int node_end = current_token.end;
-      int end_line = current_token.line;
+      int node_end = previous_token.end;
+      int end_line = previous_token.line;
 
       Statement *declaration = new VariableDeclaration(variables, datatype, start_line, end_line, node_start, node_end);
 
@@ -232,8 +233,8 @@ VariableDefinition *RecursiveDecentParser::parse_var_def()
 
       match(TokenType::SEMI_COLON_SY);
 
-      int node_end = current_token.end;
-      int end_line = current_token.line;
+      int node_end = previous_token.end;
+      int end_line = previous_token.line;
 
       Statement *initialization = new VariableInitialization(variables[0], datatype, initializer, start_line, end_line, node_start, node_end);
 
@@ -247,8 +248,8 @@ VariableDefinition *RecursiveDecentParser::parse_var_def()
 
   match(TokenType::SEMI_COLON_SY);
 
-  int node_end = current_token.end;
-  int end_line = current_token.line;
+  int node_end = previous_token.end;
+  int end_line = previous_token.line;
 
   Statement *declaration = new VariableDeclaration(variables, datatype, start_line, end_line, node_start, node_end);
 
@@ -313,8 +314,8 @@ SkipStatement *RecursiveDecentParser::parse_skip_expr()
   match(TokenType::SKIP_KW);
   match(TokenType::SEMI_COLON_SY);
 
-  int node_end = current_token.end;
-  int end_line = current_token.line;
+  int node_end = previous_token.end;
+  int end_line = previous_token.line;
 
   return new SkipStatement(start_line, end_line, node_start, node_end);
 }
@@ -327,8 +328,8 @@ StopStatement *RecursiveDecentParser::parse_stop_expr()
   match(TokenType::STOP_KW);
   match(TokenType::SEMI_COLON_SY);
 
-  int node_end = current_token.end;
-  int end_line = current_token.line;
+  int node_end = previous_token.end;
+  int end_line = previous_token.line;
 
   return new StopStatement(start_line, end_line, node_start, node_end);
 }
@@ -349,8 +350,8 @@ ReadStatement *RecursiveDecentParser::parse_read()
   }
   match(TokenType::SEMI_COLON_SY);
 
-  int node_end = current_token.end;
-  int end_line = current_token.line;
+  int node_end = previous_token.end;
+  int end_line = previous_token.line;
 
   return new ReadStatement(variables, start_line, end_line, node_start, node_end);
 }
@@ -372,8 +373,8 @@ WriteStatement *RecursiveDecentParser::parse_write()
   }
   match(TokenType::SEMI_COLON_SY);
 
-  int node_end = current_token.end;
-  int end_line = current_token.line;
+  int node_end = previous_token.end;
+  int end_line = previous_token.line;
 
   return new WriteStatement(args, start_line, end_line, node_start, node_end);
 }
@@ -393,8 +394,8 @@ ReturnStatement *RecursiveDecentParser::parse_return_stmt()
 
   match(TokenType::SEMI_COLON_SY);
 
-  int node_end = current_token.end;
-  int end_line = current_token.line;
+  int node_end = previous_token.end;
+  int end_line = previous_token.line;
   return new ReturnStatement(val, start_line, end_line, node_start, node_end);
 }
 
@@ -420,8 +421,8 @@ IfStatement *RecursiveDecentParser::parse_if()
 
   if (lookahead(TokenType::ELSE_KW))
   {
-    int node_end = current_token.end;
-    int end_line = current_token.line;
+    int node_end = previous_token.end;
+    int end_line = previous_token.line;
 
     match(TokenType::ELSE_KW);
 
@@ -440,8 +441,8 @@ IfStatement *RecursiveDecentParser::parse_if()
   match(TokenType::END_KW);
   match(TokenType::IF_KW);
 
-  int node_end = current_token.end;
-  int end_line = current_token.line;
+  int node_end = previous_token.end;
+  int end_line = previous_token.line;
 
   return new IfStatement(condition, consequent, alternate, start_line, end_line, node_start, node_end);
 }
@@ -470,8 +471,8 @@ ForLoop *RecursiveDecentParser::parse_for()
   match(TokenType::END_KW);
   match(TokenType::FOR_KW);
 
-  int node_end = current_token.end;
-  int end_line = current_token.line;
+  int node_end = previous_token.end;
+  int end_line = previous_token.line;
 
   return new ForLoop(init, condition, update, body, start_line, end_line, node_start, node_end);
 }
@@ -487,8 +488,8 @@ AssignmentExpression *RecursiveDecentParser::parse_int_assign()
 
   Expression *val = parse_expr();
 
-  int node_end = current_token.end;
-  int end_line = current_token.line;
+  int node_end = previous_token.end;
+  int end_line = previous_token.line;
   return new AssignmentExpression(id, val, start_line, end_line, node_start, node_end);
 }
 
@@ -510,8 +511,8 @@ WhileLoop *RecursiveDecentParser::parse_while()
   match(TokenType::END_KW);
   match(TokenType::WHILE_KW);
 
-  int node_end = current_token.end;
-  int end_line = current_token.line;
+  int node_end = previous_token.end;
+  int end_line = previous_token.line;
   return new WhileLoop(condition, body, start_line, end_line, node_start, node_end);
 }
 
@@ -549,8 +550,8 @@ Expression *RecursiveDecentParser::parse_assign_expr()
 
   match(TokenType::EQUAL_OP);
 
-  int node_end = current_token.end;
-  int end_line = current_token.line;
+  int node_end = previous_token.end;
+  int end_line = previous_token.line;
 
   Expression *assExpr = new AssignmentExpression(assignee, parse_assign_expr(), start_line, end_line, node_start, node_end);
 
@@ -580,8 +581,8 @@ Expression *RecursiveDecentParser::parse_or_expr()
 
     Expression *right = parse_and_expr();
 
-    int node_end = current_token.end;
-    int end_line = current_token.line;
+    int node_end = previous_token.end;
+    int end_line = previous_token.line;
 
     left = new OrExpression(left, right, start_line, end_line, node_start, node_end);
   }
@@ -602,8 +603,8 @@ Expression *RecursiveDecentParser::parse_and_expr()
 
     Expression *right = parse_equality_expr();
 
-    int node_end = current_token.end;
-    int end_line = current_token.line;
+    int node_end = previous_token.end;
+    int end_line = previous_token.line;
 
     left = new AndExpression(left, right, start_line, end_line, node_start, node_end);
   }
@@ -626,8 +627,8 @@ Expression *RecursiveDecentParser::parse_equality_expr()
 
     Expression *right = parse_relational_expr();
 
-    int node_end = current_token.end;
-    int end_line = current_token.line;
+    int node_end = previous_token.end;
+    int end_line = previous_token.line;
 
     left = new EqualityExpression(left, right, op, start_line, end_line, node_start, node_end);
   }
@@ -667,8 +668,8 @@ Expression *RecursiveDecentParser::parse_relational_expr()
 
     Expression *right = parse_additive_expr();
 
-    int node_end = current_token.end;
-    int end_line = current_token.line;
+    int node_end = previous_token.end;
+    int end_line = previous_token.line;
 
     left = new RelationalExpression(left, right, op, start_line, end_line, node_start, node_end);
   }
@@ -691,8 +692,8 @@ Expression *RecursiveDecentParser::parse_additive_expr()
 
     Expression *right = parse_multiplicative_expr();
 
-    int node_end = current_token.end;
-    int end_line = current_token.line;
+    int node_end = previous_token.end;
+    int end_line = previous_token.line;
 
     left = new AdditiveExpression(left, right, op, start_line, end_line, node_start, node_end);
   }
@@ -728,8 +729,8 @@ Expression *RecursiveDecentParser::parse_multiplicative_expr()
 
     Expression *right = parse_unary_expr();
 
-    int node_end = current_token.end;
-    int end_line = current_token.line;
+    int node_end = previous_token.end;
+    int end_line = previous_token.line;
 
     left = new MultiplicativeExpression(left, right, op, start_line, end_line, node_start, node_end);
   }
@@ -748,8 +749,8 @@ Expression *RecursiveDecentParser::parse_unary_expr()
     match(TokenType::MINUS_OP);
     Expression *operand = parse_expr();
 
-    int node_end = current_token.end;
-    int end_line = current_token.line;
+    int node_end = previous_token.end;
+    int end_line = previous_token.line;
 
     return new UnaryExpression(operand, op, false, start_line, end_line, node_start, node_end);
   }
@@ -760,8 +761,8 @@ Expression *RecursiveDecentParser::parse_unary_expr()
     match(op == "++" ? TokenType::INCREMENT_OP : TokenType::DECREMENT_OP);
     Expression *operand = parse_expr();
 
-    int node_end = current_token.end;
-    int end_line = current_token.line;
+    int node_end = previous_token.end;
+    int end_line = previous_token.line;
 
     return new UnaryExpression(operand, op, false, start_line, end_line, node_start, node_end);
   }
@@ -772,8 +773,8 @@ Expression *RecursiveDecentParser::parse_unary_expr()
     match(TokenType::NOT_KW);
     Expression *operand = parse_index_expr();
 
-    int node_end = current_token.end;
-    int end_line = current_token.line;
+    int node_end = previous_token.end;
+    int end_line = previous_token.line;
 
     return new UnaryExpression(operand, op, false, start_line, end_line, node_start, node_end);
   }
@@ -785,8 +786,8 @@ Expression *RecursiveDecentParser::parse_unary_expr()
     string op = current_token.value;
     match(op == "++" ? TokenType::INCREMENT_OP : TokenType::DECREMENT_OP);
 
-    int node_end = current_token.end;
-    int end_line = current_token.line;
+    int node_end = previous_token.end;
+    int end_line = previous_token.line;
 
     return new UnaryExpression(primary, op, false, start_line, end_line, node_start, node_end);
   }
@@ -810,8 +811,8 @@ Expression *RecursiveDecentParser::parse_index_expr()
   Expression *index = parse_expr();
   match(TokenType::RIGHT_SQUARE_PR);
 
-  int node_end = current_token.end;
-  int end_line = current_token.line;
+  int node_end = previous_token.end;
+  int end_line = previous_token.line;
 
   return new IndexExpression(base, index, start_line, end_line, node_start, node_end);
 }
@@ -851,8 +852,8 @@ Expression *RecursiveDecentParser::parse_call_expr(Identifier *id)
 
   match(TokenType::RIGHT_PR);
 
-  int node_end = current_token.end;
-  int end_line = current_token.line;
+  int node_end = previous_token.end;
+  int end_line = previous_token.line;
 
   return new CallFunctionExpression(id, args, start_line, end_line, node_start, node_end);
 }
@@ -897,8 +898,8 @@ Identifier *RecursiveDecentParser::parse_identifier()
   string name = current_token.value;
   match(TokenType::ID_SY);
 
-  int node_end = current_token.end;
-  int end_line = current_token.line;
+  int node_end = previous_token.end;
+  int end_line = previous_token.line;
 
   return new Identifier(name, start_line, end_line, node_start, node_end);
 }
@@ -911,8 +912,8 @@ IntegerLiteral *RecursiveDecentParser::parse_int()
   int value = stoi(current_token.value);
   match(TokenType::INTEGER_NUM);
 
-  int node_end = current_token.end;
-  int end_line = current_token.line;
+  int node_end = previous_token.end;
+  int end_line = previous_token.line;
   return new IntegerLiteral(value, start_line, end_line, node_start, node_end);
 }
 
@@ -924,8 +925,8 @@ FloatLiteral *RecursiveDecentParser::parse_float()
   float value = stof(current_token.value);
   match(TokenType::FLOAT_NUM);
 
-  int node_end = current_token.end;
-  int end_line = current_token.line;
+  int node_end = previous_token.end;
+  int end_line = previous_token.line;
   return new FloatLiteral(value, start_line, end_line, node_start, node_end);
 }
 
@@ -937,8 +938,8 @@ StringLiteral *RecursiveDecentParser::parse_string()
   string value = current_token.value;
   match(TokenType::STRING_SY);
 
-  int node_end = current_token.end;
-  int end_line = current_token.line;
+  int node_end = previous_token.end;
+  int end_line = previous_token.line;
   return new StringLiteral(value, start_line, end_line, node_start, node_end);
 }
 
@@ -957,8 +958,8 @@ BooleanLiteral *RecursiveDecentParser::parse_bool()
     match(TokenType::FALSE_KW);
   }
 
-  int node_end = current_token.end;
-  int end_line = current_token.line;
+  int node_end = previous_token.end;
+  int end_line = previous_token.line;
   return new BooleanLiteral(value, start_line, end_line, node_start, node_end);
 }
 
@@ -984,7 +985,7 @@ ArrayLiteral *RecursiveDecentParser::parse_array()
 
   match(TokenType::RIGHT_CURLY_PR);
 
-  int node_end = current_token.end;
-  int end_line = current_token.line;
+  int node_end = previous_token.end;
+  int end_line = previous_token.line;
   return new ArrayLiteral(elements, start_line, end_line, node_start, node_end);
 }

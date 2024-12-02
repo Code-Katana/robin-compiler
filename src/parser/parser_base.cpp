@@ -4,11 +4,12 @@ ParserBase::ParserBase(ScannerBase *scanner)
 {
   sc = scanner;
   current_token = sc->get_token();
+  previous_token = Token();
 }
 
 Token ParserBase::match(TokenType type)
 {
-  Token placeholder = current_token;
+  previous_token = current_token;
 
   if (current_token.type != type)
   {
@@ -17,7 +18,7 @@ Token ParserBase::match(TokenType type)
   }
 
   current_token = sc->get_token();
-  return placeholder;
+  return previous_token;
 }
 
 void ParserBase::syntax_error(string message)

@@ -1,6 +1,6 @@
 #include "symbol_table.h"
 
-SymbolTable::SymbolTable(int initialSize = 10)
+SymbolTable::SymbolTable(int initialSize)
 {
   hashtable.resize(initialSize);
 }
@@ -153,4 +153,5 @@ vector<SymbolType> SymbolTable::get_parameters_type(string func_name)
   }
 
   semantic_error("Function with name " + func_name + " not found!");
+  return {};
 }

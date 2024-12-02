@@ -11,6 +11,8 @@
 #include "parser_base.h"
 #include "recursive_decent_parser.h"
 
+#include "symbol_table.h"
+
 class WrenCompiler
 {
 public:
@@ -19,4 +21,5 @@ public:
 
   ScannerBase *scanner;
   ParserBase *parser;
+  SymbolTable *symboltable;
 };

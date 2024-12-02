@@ -2,6 +2,8 @@
 
 WrenCompiler::WrenCompiler(string src, ScannerOptions scOpt, ParserOptions prOpt)
 {
+  symboltable = new SymbolTable();
+  
   switch (scOpt)
   {
   case ScannerOptions::HandCoded:
@@ -13,7 +15,7 @@ WrenCompiler::WrenCompiler(string src, ScannerOptions scOpt, ParserOptions prOpt
   switch (prOpt)
   {
   case ParserOptions::RecursiveDecent:
-    parser = new RecursiveDecentParser(scanner);
+    parser = new RecursiveDecentParser(scanner, symboltable);
     break;
   }
 }

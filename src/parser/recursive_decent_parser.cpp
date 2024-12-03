@@ -1,13 +1,13 @@
 #include "recursive_decent_parser.h"
 
-RecursiveDecentParser::RecursiveDecentParser(ScannerBase *sc, stack<SymbolTable *> *env) : ParserBase(sc, env) {}
+RecursiveDecentParser::RecursiveDecentParser(ScannerBase *sc, vector<SymbolTable *> *env) : ParserBase(sc, env) {}
 
 AstNode *RecursiveDecentParser::parse_ast()
 {
-  return parse_source();
+  return parse_source(env);
 }
 
-Source *RecursiveDecentParser::parse_source()
+Source *RecursiveDecentParser::parse_source(vector<SymbolTable *> *env)
 {
   int node_start = current_token.start;
   int start_line = current_token.line;

@@ -2,7 +2,7 @@
 
 WrenCompiler::WrenCompiler(string src, ScannerOptions scOpt, ParserOptions prOpt)
 {
-  env = stack<SymbolTable *>();
+  env = vector<SymbolTable *>();
 
   switch (scOpt)
   {

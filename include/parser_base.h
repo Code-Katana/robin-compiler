@@ -2,7 +2,7 @@
 
 #include <iostream>
 #include <string>
-#include <stack>
+#include <vector>
 
 #include "ast.h"
 #include "symbol_table.h"
@@ -13,14 +13,14 @@ using namespace std;
 class ParserBase
 {
 public:
-  ParserBase(ScannerBase *sc, stack<SymbolTable *> *stack);
+  ParserBase(ScannerBase *sc, vector<SymbolTable *> *vector);
   virtual ~ParserBase() = default;
 
   virtual AstNode *parse_ast() = 0;
 
 protected:
   ScannerBase *sc;
-  stack<SymbolTable *> *env;
+  vector<SymbolTable *> *env;
   Token current_token;
   Token previous_token;
 

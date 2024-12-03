@@ -1,6 +1,6 @@
 #include "recursive_decent_parser.h"
 
-RecursiveDecentParser::RecursiveDecentParser(ScannerBase *sc, SymbolTable *st) : ParserBase(sc, st) {}
+RecursiveDecentParser::RecursiveDecentParser(ScannerBase *sc, stack<SymbolTable *> *env) : ParserBase(sc, env) {}
 
 AstNode *RecursiveDecentParser::parse_ast()
 {

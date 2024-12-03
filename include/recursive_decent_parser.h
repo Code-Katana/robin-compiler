@@ -10,7 +10,7 @@ using namespace std;
 class RecursiveDecentParser : public ParserBase
 {
 public:
-  RecursiveDecentParser(ScannerBase *sc, SymbolTable *st);
+  RecursiveDecentParser(ScannerBase *sc, stack<SymbolTable *> *env);
   AstNode *parse_ast();
 
 private:

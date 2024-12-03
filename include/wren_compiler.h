@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <stack>
 
 #include "compiler_components.h"
 
@@ -21,5 +22,5 @@ public:
 
   ScannerBase *scanner;
   ParserBase *parser;
-  SymbolTable *symboltable;
+  stack<SymbolTable *> env;
 };

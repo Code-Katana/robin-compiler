@@ -1,7 +1,8 @@
 #include "symbol_table.h"
 
-SymbolTable::SymbolTable(int initialSize)
+SymbolTable::SymbolTable(SymbolTable *pr, int initialSize)
 {
+  parent = pr;
   hashtable.resize(initialSize);
 }
 

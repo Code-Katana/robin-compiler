@@ -10,11 +10,12 @@ class SymbolTable
 {
 private:
   vector<vector<Symbol *>> hashtable;
-
+  SymbolTable *parent;
   int hash(string word);
 
 public:
-  SymbolTable(int initialSize = 10);
+  SymbolTable(SymbolTable *pr = nullptr, int initialSize = 10);
+
   void semantic_error(string err);
   void insert(string s, SymbolType t, SymbolKind k, vector<SymbolType> parameters = {});
   void insert_vars_list(SymbolType t, vector<string> v);

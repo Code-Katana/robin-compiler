@@ -1,9 +1,9 @@
 #include "parser_base.h"
 
-ParserBase::ParserBase(ScannerBase *scanner, SymbolTable *st)
+ParserBase::ParserBase(ScannerBase *scanner, stack<SymbolTable *> *stack)
 {
   sc = scanner;
-  symboltable = st;
+  env = stack;
   current_token = sc->get_token();
   previous_token = Token();
 }

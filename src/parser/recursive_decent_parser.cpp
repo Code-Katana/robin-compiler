@@ -4,34 +4,63 @@ RecursiveDecentParser::RecursiveDecentParser(ScannerBase *sc, vector<SymbolTable
 
 AstNode *RecursiveDecentParser::parse_ast()
 {
-  return parse_source(env);
+
+  return parse_source();
 }
 
-Source *RecursiveDecentParser::parse_source(vector<SymbolTable *> *env)
+Source *RecursiveDecentParser::parse_source()
 {
   int node_start = current_token.start;
   int start_line = current_token.line;
 
-  vector<Function *> funcs = {};
+  vector<Function *> funcs_nodes = {};
+  vector<vector<Token>> funcs_body = {};
 
   while (lookahead(TokenType::FUNC_KW))
   {
-    funcs.push_back(parse_function());
+    funcs_body.push_back(parse_function_header());
   }
 
   Program *program = parse_program();
 
-  match(TokenType::END_OF_FILE);
+  for (int i = 0; i < funcs_body.size(); ++i)
+  {
+    funcs_nodes.push_back(parse_function_body(funcs_body[i]));
+  }
+
+  // todo: delete the vector funcs_body
+  funcs_body.clear(); 
+  funcs_body.shrink_to_fit();
 
   int node_end = previous_token.end;
   int end_line = previous_token.line;
-  return new Source(program, funcs, start_line, end_line, node_start, node_end);
+
+  return new Source(program, funcs_nodes, start_line, end_line, node_start, node_end);
 }
 
-Function *RecursiveDecentParser::parse_function()
+vector<Token> RecursiveDecentParser::parse_function_header()
+{
+  vector<Token> tokens = {current_token};
+  current_token = sc->get_token();
+
+  while (current_token.type != TokenType::FUNC_KW && current_token.type != TokenType::END_OF_FILE)
+  {
+    tokens.push_back(current_token);
+    current_token = sc->get_token();
+  }
+
+  tokens.push_back(current_token);
+  current_token = sc->get_token();
+
+  return tokens;
+}
+
+Function *RecursiveDecentParser::parse_function_body(vector<Token> func_body)
 {
   int node_start = current_token.start;
   int start_line = current_token.line;
+
+  set_token_stream(func_body);
 
   match(TokenType::FUNC_KW);
   ReturnType *return_type;
@@ -92,6 +121,8 @@ Program *RecursiveDecentParser::parse_program()
 
   int node_end = previous_token.end;
   int end_line = previous_token.line;
+
+  match(TokenType::END_OF_FILE);
 
   return new Program(id, globals, body, start_line, end_line, node_start, node_end);
 }
@@ -897,7 +928,7 @@ Identifier *RecursiveDecentParser::parse_identifier()
 
   string name = current_token.value;
   match(TokenType::ID_SY);
-
+  // cout << JSON::stringify_token(current_token) << endl;
   int node_end = previous_token.end;
   int end_line = previous_token.line;
 

@@ -17,7 +17,6 @@ Token ParserBase::match(TokenType type)
 
   if (!tokens_stream.empty())
   {
-    current_token = tokens_stream.front();
     if (current_token.type != type)
     {
       syntax_error("expecting " + Token::get_token_name(type) +
@@ -43,6 +42,7 @@ Token ParserBase::match(TokenType type)
 void ParserBase::set_token_stream(vector<Token> stream)
 {
   tokens_stream = stream;
+  current_token = tokens_stream.front();
 }
 
 void ParserBase::syntax_error(string message)
@@ -81,7 +81,10 @@ SymbolTable *ParserBase::delete_scope()
   return last_scope;
 }
 
-// SymbolTable *ParserBase::init_global_scope()
-// {
-//   env->insert(env->begin(), new SymbolTable());
-// }
+SymbolTable *ParserBase::init_global_scope()
+{
+  SymbolTable *globalScope = new SymbolTable();
+  env->insert(env->begin(), globalScope);
+
+  return globalScope;
+}

@@ -5,10 +5,10 @@ RecursiveDecentParser::RecursiveDecentParser(ScannerBase *sc, vector<SymbolTable
 AstNode *RecursiveDecentParser::parse_ast()
 {
 
-  return parse_source();
+  return parse_source(env);
 }
 
-Source *RecursiveDecentParser::parse_source()
+Source *RecursiveDecentParser::parse_source(vector<SymbolTable *> *env)
 {
   int node_start = current_token.start;
   int start_line = current_token.line;
@@ -18,18 +18,18 @@ Source *RecursiveDecentParser::parse_source()
 
   while (lookahead(TokenType::FUNC_KW))
   {
-    funcs_body.push_back(parse_function_header());
+    funcs_body.push_back(parse_function_header(env));
   }
 
-  Program *program = parse_program();
+  Program *program = parse_program(env);
 
   for (int i = 0; i < funcs_body.size(); ++i)
   {
-    funcs_nodes.push_back(parse_function_body(funcs_body[i]));
+    funcs_nodes.push_back(parse_function_body(funcs_body[i], env));
   }
 
   // todo: delete the vector funcs_body
-  funcs_body.clear(); 
+  funcs_body.clear();
   funcs_body.shrink_to_fit();
 
   int node_end = previous_token.end;
@@ -38,10 +38,72 @@ Source *RecursiveDecentParser::parse_source()
   return new Source(program, funcs_nodes, start_line, end_line, node_start, node_end);
 }
 
-vector<Token> RecursiveDecentParser::parse_function_header()
+vector<Token> RecursiveDecentParser::parse_function_header(vector<SymbolTable *> *env)
 {
   vector<Token> tokens = {current_token};
   current_token = sc->get_token();
+
+  string return_type = current_token.value;
+
+  tokens.push_back(current_token);
+  current_token = sc->get_token();
+  string function_name = current_token.value;
+
+  if (env->front()->is_exist(function_name))
+  {
+    env->front()->semantic_error("Function '" + function_name + "' is already defined.");
+  }
+
+  tokens.push_back(current_token);
+  current_token = sc->get_token();
+
+  vector<string> param_names;
+  vector<string> param_types;
+
+  while (current_token.type != TokenType::BEGIN_KW && current_token.type != TokenType::END_OF_FILE)
+  {
+    tokens.push_back(current_token);
+    current_token = sc->get_token();
+    while (current_token.type == TokenType::VAR_KW)
+    {
+      vector<string> variables;
+
+      tokens.push_back(current_token);
+      current_token = sc->get_token();
+
+      variables.push_back(current_token.value);
+
+      tokens.push_back(current_token);
+      current_token = sc->get_token();
+
+      while (current_token.type == TokenType::COMMA_SY)
+      {
+        tokens.push_back(current_token);
+        current_token = sc->get_token();
+        variables.push_back(current_token.value);
+        tokens.push_back(current_token);
+        current_token = sc->get_token();
+      }
+      tokens.push_back(current_token);
+      current_token = sc->get_token();
+      string datatype = current_token.value;
+      tokens.push_back(current_token);
+      current_token = sc->get_token();
+      tokens.push_back(current_token);
+      for (int i = 0; i < variables.size(); ++i)
+      {
+        const string &var = variables[i];
+
+        if (find(param_names.begin(), param_names.end(), var) != param_names.end())
+        {
+          env->front()->semantic_error("Parameter '" + var + "' is already defined in function '" + function_name + "'.");
+        }
+
+        param_names.push_back(var);
+        param_types.push_back(datatype);
+      }
+    }
+  }
 
   while (current_token.type != TokenType::FUNC_KW && current_token.type != TokenType::END_OF_FILE)
   {
@@ -52,10 +114,19 @@ vector<Token> RecursiveDecentParser::parse_function_header()
   tokens.push_back(current_token);
   current_token = sc->get_token();
 
+  vector<SymbolType> parameters;
+
+  for (int i = 0; i < param_types.size(); ++i)
+  {
+    parameters.push_back(Symbol::get_type_name(param_types[i]));
+  }
+
+  env->front()->insert(function_name, Symbol::get_type_name(return_type), SymbolKind::Function, parameters);
+
   return tokens;
 }
 
-Function *RecursiveDecentParser::parse_function_body(vector<Token> func_body)
+Function *RecursiveDecentParser::parse_function_body(vector<Token> func_body, vector<SymbolTable *> *env)
 {
   int node_start = current_token.start;
   int start_line = current_token.line;
@@ -74,16 +145,19 @@ Function *RecursiveDecentParser::parse_function_body(vector<Token> func_body)
 
   match(TokenType::HAS_KW);
 
+  vector<Identifier *> variables;
+  string dt;
+
   while (!lookahead(TokenType::BEGIN_KW))
   {
-    params.push_back(parse_var_def());
+    params.push_back(parse_var_def(variables, dt));
   }
 
   match(TokenType::BEGIN_KW);
 
   while (!lookahead(TokenType::END_KW))
   {
-    body.push_back(parse_command());
+    body.push_back(parse_command(env));
   }
 
   match(TokenType::END_KW);
@@ -94,27 +168,53 @@ Function *RecursiveDecentParser::parse_function_body(vector<Token> func_body)
   return new Function(id, return_type, params, body, start_line, end_line, node_start, node_end);
 }
 
-Program *RecursiveDecentParser::parse_program()
+Program *RecursiveDecentParser::parse_program(vector<SymbolTable *> *env)
 {
   int node_start = current_token.start;
   int start_line = current_token.line;
 
+  init_global_scope();
+
   match(TokenType::PROGRAM_KW);
   Identifier *id = parse_identifier();
+  // nothing here to check
+  if ((env)->front()->is_exist(id->name))
+  {
+    env->front()->semantic_error("Program '" + id->name + "' is already defined.");
+  }
+
+  env->front()->insert(current_token.value, SymbolType::Program, SymbolKind::Function);
+
   vector<VariableDefinition *> globals = {};
   vector<Statement *> body = {};
   match(TokenType::IS_KW);
 
+  vector<Identifier *> variables;
+  string dt;
+
   while (!lookahead(TokenType::BEGIN_KW))
   {
-    globals.push_back(parse_var_def());
+    VariableDefinition *var = parse_var_def(variables, dt);
+
+    for (int i = 0; i < variables.size(); ++i)
+    {
+      Identifier *var = variables[i];
+
+      if ((env)->front()->is_exist(var->name))
+      {
+        env->front()->semantic_error("Variable '" + var->name + "' is already defined globally.");
+      }
+
+      (env)->front()->insert(var->name, Symbol::get_type_name(dt), SymbolKind::Variable);
+    }
+    globals.push_back(var);
   }
 
   match(TokenType::BEGIN_KW);
 
   while (!lookahead(TokenType::END_KW))
   {
-    body.push_back(parse_command());
+    body.push_back(parse_command(env));
   }
 
   match(TokenType::END_KW);
@@ -127,23 +227,23 @@ Program *RecursiveDecentParser::parse_program()
   return new Program(id, globals, body, start_line, end_line, node_start, node_end);
 }
 
-DataType *RecursiveDecentParser::parse_data_type()
+DataType *RecursiveDecentParser::parse_data_type(string &dt)
 {
   int node_start = current_token.start;
   int start_line = current_token.line;
 
-  string datatype;
+  // string datatype;
   int dim = 0;
 
   if (!lookahead(TokenType::LEFT_SQUARE_PR) && AstNode::is_data_type(current_token.type))
   {
-    datatype = current_token.value;
+    dt = current_token.value;
     match(current_token.type);
 
     int node_end = previous_token.end;
     int end_line = previous_token.line;
 
-    return new PrimitiveType(datatype, start_line, end_line, node_start, node_end);
+    return new PrimitiveType(dt, start_line, end_line, node_start, node_end);
   }
 
   match(TokenType::LEFT_SQUARE_PR);
@@ -157,7 +257,7 @@ DataType *RecursiveDecentParser::parse_data_type()
 
   if (AstNode::is_data_type(current_token.type))
   {
-    datatype = current_token.value;
+    dt = current_token.value;
     match(current_token.type);
   }
 
@@ -169,7 +269,7 @@ DataType *RecursiveDecentParser::parse_data_type()
   int node_end = previous_token.end;
   int end_line = previous_token.line;
 
-  return new ArrayType(datatype, dim, start_line, end_line, node_start, node_end);
+  return new ArrayType(dt, dim, start_line, end_line, node_start, node_end);
 }
 
 ReturnType *RecursiveDecentParser::parse_return_type()
@@ -221,12 +321,12 @@ ReturnType *RecursiveDecentParser::parse_return_type()
   return new ReturnType(return_type, start_line, end_line, node_start, node_end);
 }
 
-VariableDefinition *RecursiveDecentParser::parse_var_def()
+VariableDefinition *RecursiveDecentParser::parse_var_def(vector<Identifier *> &variables, string &dt)
 {
   int node_start = current_token.start;
   int start_line = current_token.line;
 
-  vector<Identifier *> variables;
+  // vector<Identifier *> variables;
   DataType *datatype;
 
   match(TokenType::VAR_KW);
@@ -243,7 +343,7 @@ VariableDefinition *RecursiveDecentParser::parse_var_def()
   {
     match(TokenType::COLON_SY);
 
-    datatype = parse_data_type();
+    datatype = parse_data_type(dt);
 
     if (lookahead(TokenType::SEMI_COLON_SY))
     {
@@ -287,7 +387,7 @@ VariableDefinition *RecursiveDecentParser::parse_var_def()
   return new VariableDefinition(declaration, start_line, end_line, node_start, node_end);
 }
 
-Statement *RecursiveDecentParser::parse_command()
+Statement *RecursiveDecentParser::parse_command(vector<SymbolTable *> *env)
 {
   // skip
   if (lookahead(TokenType::SKIP_KW))

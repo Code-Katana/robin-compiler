@@ -14,14 +14,14 @@ public:
   AstNode *parse_ast();
 
 private:
-  Source *parse_source();
-  Program *parse_program();
+  Source *parse_source(vector<SymbolTable *> *env);
+  Program *parse_program(vector<SymbolTable *> *env);
   ReturnType *parse_return_type();
-  vector<Token> parse_function_header();
-  Function *parse_function_body(vector<Token> body);
-  DataType *parse_data_type();
-  VariableDefinition *parse_var_def();
-  Statement *parse_command();
+  vector<Token> parse_function_header(vector<SymbolTable *> *env);
+  Function *parse_function_body(vector<Token> body, vector<SymbolTable *> *env);
+  DataType *parse_data_type(string &dt);
+  VariableDefinition *parse_var_def(vector<Identifier *> &variables, string &dt);
+  Statement *parse_command(vector<SymbolTable *> *env);
   SkipStatement *parse_skip_expr();
   StopStatement *parse_stop_expr();
   ReadStatement *parse_read();

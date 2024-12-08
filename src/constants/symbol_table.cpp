@@ -16,6 +16,7 @@ void SymbolTable::semantic_error(string err)
 int SymbolTable::hash(string word)
 {
   int sum = 0;
+  
   for (char ch : word)
   {
     sum += int(ch);

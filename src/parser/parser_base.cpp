@@ -7,6 +7,13 @@ ParserBase::ParserBase(ScannerBase *scanner)
   previous_token = Token();
 }
 
+void ParserBase::reset_parser()
+{
+  sc->reset_scanner();
+  current_token = sc->get_token();
+  previous_token = Token();
+}
+
 Token ParserBase::match(TokenType type)
 {
   previous_token = current_token;
@@ -24,7 +31,7 @@ Token ParserBase::match(TokenType type)
 void ParserBase::syntax_error(string message)
 {
   current_token = Token("$", TokenType::END_OF_FILE, 0, 0, 0);
-  cerr << message << endl;
+  cerr << message << " at line " << previous_token.line << endl;
   system("pause");
   throw runtime_error(message);
 }

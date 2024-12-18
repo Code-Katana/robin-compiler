@@ -12,6 +12,7 @@ class ParserBase
 {
 public:
   ParserBase(ScannerBase *sc);
+  void reset_parser();
   virtual ~ParserBase() = default;
 
   virtual AstNode *parse_ast() = 0;

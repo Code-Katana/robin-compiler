@@ -15,14 +15,14 @@ private:
 
 public:
   SymbolTable(int initialSize = 10);
-  void semantic_error(string err);
-  void insert(string s, SymbolType t, SymbolKind k, vector<SymbolType> parameters = {});
-  void insert_vars_list(SymbolType t, vector<string> v);
+  static vector<pair<SymbolType, int>> get_parameters_type(vector<VariableDefinition *> params);
+  static void semantic_error(string err);
+
+  void insert(Symbol *s);
+  void insert_vars_list(vector<VariableSymbol *> vars);
   bool is_exist(string s);
+  bool is_initialized(string s);
+  void set_initialized(string s);
   SymbolType get_type(string s);
-  SymbolKind get_kind(string s);
-  void union_symbol(SymbolTable &s2);
-  bool intersect_name(SymbolTable &s2);
-  void set_parameters_type(string func_name, vector<SymbolType> &parameters);
-  vector<SymbolType> get_parameters_type(string func_name);
+  vector<pair<SymbolType, int>> get_arguments(string func_name);
 };

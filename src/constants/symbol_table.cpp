@@ -1,8 +1,50 @@
 #include "symbol_table.h"
 
-SymbolTable::SymbolTable(int initialSize = 10)
+#include <set>
+
+SymbolTable::SymbolTable(int initialSize)
 {
   hashtable.resize(initialSize);
+}
+
+vector<pair<SymbolType, int>> SymbolTable::get_parameters_type(vector<VariableDefinition *> params)
+{
+  vector<pair<SymbolType, int>> params_type = {};
+  set<string> declared_names;
+
+  for (auto param : params)
+  {
+    if (dynamic_cast<VariableInitialization *>(param->def))
+    {
+      VariableInitialization *def = (VariableInitialization *)param->def;
+      if (declared_names.find(def->name->name) != declared_names.end())
+      {
+        SymbolTable::semantic_error("Error: Variable '" + def->name->name + "' is already defined.");
+      }
+      else
+      {
+        declared_names.insert(def->name->name);
+        params_type.emplace_back(Symbol::get_datatype(def->datatype), Symbol::get_dimension(def->datatype));
+      }
+    }
+    else if (dynamic_cast<VariableDeclaration *>(param->def))
+    {
+      VariableDeclaration *def = (VariableDeclaration *)param->def;
+      for (auto id : def->variables)
+      {
+        if (declared_names.find(id->name) != declared_names.end())
+        {
+          SymbolTable::semantic_error("Error: Variable '" + id->name + "' is already defined.");
+        }
+        else
+        {
+          declared_names.insert(id->name);
+          params_type.emplace_back(Symbol::get_datatype(def->datatype), Symbol::get_dimension(def->datatype));
+        }
+      }
+    }
+  }
+  return params_type;
 }
 
 void SymbolTable::semantic_error(string err)
@@ -22,28 +64,27 @@ int SymbolTable::hash(string word)
   return sum % hashtable.size();
 }
 
-void SymbolTable::insert(string s, SymbolType t, SymbolKind k, vector<SymbolType> parameters)
+void SymbolTable::insert(Symbol *s)
 {
-  int index = hash(s);
-  Symbol *newSymbol = new Symbol(s, t, k, parameters);
+  int index = hash(s->name);
 
   for (Symbol *symbol : hashtable[index])
   {
-    if (symbol->name == s)
+    if (symbol->name == s->name)
     {
-      semantic_error("Semantic error: Symbol '" + s + "' already exists.");
+      semantic_error("Semantic error: Symbol '" + s->name + "' already exists.");
       return;
     }
   }
 
-  hashtable[index].push_back(newSymbol);
+  hashtable[index].push_back(s);
 }
 
-void SymbolTable::insert_vars_list(SymbolType t, vector<string> names)
+void SymbolTable::insert_vars_list(vector<VariableSymbol *> vars)
 {
-  for (const string &name : names)
+  for (auto var : vars)
   {
-    insert(name, t, SymbolKind::Variable);
+    insert(var);
   }
 }
 
@@ -62,6 +103,42 @@ bool SymbolTable::is_exist(string s)
   return false;
 }
 
+bool SymbolTable::is_initialized(string s)
+{
+  int index = hash(s);
+
+  for (Symbol *symbol : hashtable[index])
+  {
+    if (static_cast<VariableSymbol *>(symbol))
+    {
+      VariableSymbol *varSymbol = static_cast<VariableSymbol *>(symbol);
+      if (varSymbol->name == s)
+      {
+        return varSymbol->is_initialized;
+      }
+    }
+  }
+
+  return NULL;
+}
+
+void SymbolTable::set_initialized(string s)
+{
+  int index = hash(s);
+
+  for (Symbol *symbol : hashtable[index])
+  {
+    if (static_cast<VariableSymbol *>(symbol))
+    {
+      VariableSymbol *varSymbol = static_cast<VariableSymbol *>(symbol);
+      if (varSymbol->name == s)
+      {
+        varSymbol->is_initialized = true;
+      }
+    }
+  }
+}
+
 SymbolType SymbolTable::get_type(string s)
 {
   int index = hash(s);
@@ -77,80 +154,23 @@ SymbolType SymbolTable::get_type(string s)
   return SymbolType::Undefined;
 }
 
-SymbolKind SymbolTable::get_kind(string s)
-{
-  int index = hash(s);
-
-  for (Symbol *symbol : hashtable[index])
-  {
-    if (symbol->name == s)
-    {
-      return symbol->kind;
-    }
-  }
-
-  return SymbolKind::Undefined;
-}
-
-void SymbolTable::union_symbol(SymbolTable &s)
-{
-  for (int i = 0; i < s.hashtable.size(); i++)
-  {
-    for (Symbol *symbol : s.hashtable[i])
-    {
-      if (!is_exist(symbol->name))
-      {
-        insert(symbol->name, symbol->type, symbol->kind);
-      }
-    }
-  }
-}
-
-bool SymbolTable::intersect_name(SymbolTable &s)
+vector<pair<SymbolType, int>> SymbolTable::get_arguments(string func_name)
 {
   for (int i = 0; i < hashtable.size(); i++)
   {
     for (Symbol *symbol : hashtable[i])
     {
-      if (s.is_exist(symbol->name))
+      if (symbol->kind == SymbolKind::Function)
       {
-        return true;
+        FunctionSymbol *func_symbol = static_cast<FunctionSymbol *>(symbol);
+        if (func_symbol && func_symbol->name == func_name)
+        {
+          return func_symbol->parameters;
+        }
       }
     }
   }
-
-  return false;
-}
-
-void SymbolTable::set_parameters_type(string func_name, vector<SymbolType> &parameters)
-{
-  for (int i = 0; i < hashtable.size(); i++)
-  {
-    for (Symbol *symbol : hashtable[i])
-    {
-      if (symbol->name == func_name && symbol->kind == SymbolKind::Function)
-      {
-        symbol->parameters = parameters;
-        return;
-      }
-    }
-  }
-
   semantic_error("Function with name " + func_name + " not found!");
-}
 
-vector<SymbolType> SymbolTable::get_parameters_type(string func_name)
-{
-  for (int i = 0; i < hashtable.size(); i++)
-  {
-    for (Symbol *symbol : hashtable[i])
-    {
-      if (symbol->name == func_name && symbol->kind == SymbolKind::Function)
-      {
-        return symbol->parameters;
-      }
-    }
-  }
-
-  semantic_error("Function with name " + func_name + " not found!");
+  return {};
 }

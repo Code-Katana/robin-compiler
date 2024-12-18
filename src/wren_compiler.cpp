@@ -16,4 +16,6 @@ WrenCompiler::WrenCompiler(string src, ScannerOptions scOpt, ParserOptions prOpt
     parser = new RecursiveDecentParser(scanner);
     break;
   }
+
+  semantic = new SemanticAnalyzer(parser);
 }

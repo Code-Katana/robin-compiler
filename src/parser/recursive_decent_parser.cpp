@@ -4,7 +4,10 @@ RecursiveDecentParser::RecursiveDecentParser(ScannerBase *sc) : ParserBase(sc) {
 
 AstNode *RecursiveDecentParser::parse_ast()
 {
-  return parse_source();
+  AstNode *ast_tree = parse_source();
+  reset_parser();
+
+  return ast_tree;
 }
 
 Source *RecursiveDecentParser::parse_source()
@@ -229,7 +232,16 @@ VariableDefinition *RecursiveDecentParser::parse_var_def()
     {
       match(TokenType::EQUAL_OP);
 
-      Expression *initializer = parse_expr();
+      Expression *initializer;
+
+      if (lookahead(TokenType::LEFT_CURLY_PR))
+      {
+        initializer = (Expression *)parse_array();
+      }
+      else
+      {
+        initializer = parse_or_expr();
+      }
 
       match(TokenType::SEMI_COLON_SY);
 
@@ -550,12 +562,21 @@ Expression *RecursiveDecentParser::parse_assign_expr()
 
   match(TokenType::EQUAL_OP);
 
+  Expression *value;
+
+  if (lookahead(TokenType::LEFT_CURLY_PR))
+  {
+    value = (Expression *)parse_array();
+  }
+  else
+  {
+    value = parse_or_expr();
+  }
+
   int node_end = previous_token.end;
   int end_line = previous_token.line;
-
-  Expression *assExpr = new AssignmentExpression(assignee, parse_assign_expr(), start_line, end_line, node_start, node_end);
-
-  return assExpr;
+  return new AssignmentExpression(assignee, value, start_line, end_line, node_start, node_end);
+  ;
 }
 
 AssignableExpression *RecursiveDecentParser::parse_assignable_expr(Expression *expr)
@@ -875,9 +896,6 @@ Literal *RecursiveDecentParser::parse_literal()
   case TokenType::FALSE_KW:
     return parse_bool();
 
-  case TokenType::LEFT_CURLY_PR:
-    return parse_array();
-
   default:
     Identifier *id = parse_identifier();
 
@@ -972,6 +990,38 @@ ArrayLiteral *RecursiveDecentParser::parse_array()
 
   match(TokenType::LEFT_CURLY_PR);
 
+  if (!lookahead(TokenType::LEFT_CURLY_PR))
+  {
+    elements = parse_array_value();
+
+    match(TokenType::RIGHT_CURLY_PR);
+
+    int node_end = previous_token.end;
+    int end_line = previous_token.line;
+
+    return new ArrayLiteral(elements, start_line, end_line, node_start, node_end);
+  }
+
+  elements.push_back(parse_array());
+
+  while (!lookahead(TokenType::RIGHT_CURLY_PR))
+  {
+    match(TokenType::COMMA_SY);
+    elements.push_back(parse_array());
+  }
+
+  match(TokenType::RIGHT_CURLY_PR);
+
+  int node_end = previous_token.end;
+  int end_line = previous_token.line;
+
+  return new ArrayLiteral(elements, start_line, end_line, node_start, node_end);
+}
+
+vector<Expression *> RecursiveDecentParser::parse_array_value()
+{
+  vector<Expression *> elements = {};
+
   if (!lookahead(TokenType::RIGHT_CURLY_PR))
   {
     elements.push_back(parse_or_expr());
@@ -983,9 +1033,5 @@ ArrayLiteral *RecursiveDecentParser::parse_array()
     }
   }
 
-  match(TokenType::RIGHT_CURLY_PR);
-
-  int node_end = previous_token.end;
-  int end_line = previous_token.line;
-  return new ArrayLiteral(elements, start_line, end_line, node_start, node_end);
+  return elements;
 }

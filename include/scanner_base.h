@@ -11,6 +11,7 @@ class ScannerBase
 {
 public:
   Token check_reserved(string s);
+  void reset_scanner();
   virtual Token get_token() = 0;
   virtual vector<Token> get_tokens_stream() = 0;
 

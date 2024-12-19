@@ -30,7 +30,7 @@ Token ParserBase::match(TokenType type)
 
 void ParserBase::syntax_error(string message)
 {
-  current_token = Token("$", TokenType::END_OF_FILE, 0, 0, 0);
+  current_token = Token("Φ", TokenType::END_OF_FILE, 0, 0, 0);
   cerr << message << " at line " << previous_token.line << endl;
   system("pause");
   throw runtime_error(message);

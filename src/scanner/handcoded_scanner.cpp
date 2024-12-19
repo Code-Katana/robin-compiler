@@ -26,7 +26,7 @@ Token HandCodedScanner::get_token()
 
   if (is_eof())
   {
-    return create_token("$", TokenType::END_OF_FILE);
+    return create_token("Φ", TokenType::END_OF_FILE);
   }
   // bracket
   else if (expect('['))
@@ -95,6 +95,26 @@ Token HandCodedScanner::get_token()
     }
 
     return create_token(str, TokenType::MINUS_OP);
+  }
+  else if (expect('$'))
+  {
+    eat();
+    return create_token("$", TokenType::STRINGIFY_OP);
+  }
+  else if (expect('?'))
+  {
+    eat();
+    return create_token("?", TokenType::BOOLEAN_OP);
+  }
+  else if (expect('@'))
+  {
+    eat();
+    return create_token("@", TokenType::ROUND_OP);
+  }
+  else if (expect('#'))
+  {
+    eat();
+    return create_token("#", TokenType::LENGTH_OP);
   }
   else if (expect('*'))
   {

@@ -10,7 +10,7 @@ Token FAScanner::get_token()
 
   if (is_eof())
   {
-    return create_token("$", TokenType::END_OF_FILE);
+    return create_token("Φ", TokenType::END_OF_FILE);
   }
 
   while (state >= START_STATE && state <= END_STATE)
@@ -22,7 +22,7 @@ Token FAScanner::get_token()
 
       if (is_eof())
       {
-        state = 46;
+        state = 50;
       }
       else if (isspace(ch))
       {
@@ -111,10 +111,25 @@ Token FAScanner::get_token()
         eat();
         state = 20;
       }
-      else if (expect('<'))
+      else if (expect('$'))
       {
         eat();
-        state = 23;
+        state = 46;
+      }
+      else if (expect('@'))
+      {
+        eat();
+        state = 47;
+      }
+      else if (expect('?'))
+      {
+        eat();
+        state = 48;
+      }
+      else if (expect('#'))
+      {
+        eat();
+        state = 49;
       }
       else if (expect('>'))
       {
@@ -361,7 +376,7 @@ Token FAScanner::get_token()
       else
       {
         eat();
-        state = 46;
+        state = 50;
       }
 
       break;
@@ -477,7 +492,19 @@ Token FAScanner::get_token()
       return error_token;
 
     case 46:
-      return create_token("$", TokenType::END_OF_FILE);
+      return create_token("$", TokenType::STRINGIFY_OP);
+
+    case 47:
+      return create_token("@", TokenType::ROUND_OP);
+
+    case 48:
+      return create_token("?", TokenType::BOOLEAN_OP);
+
+    case 49:
+      return create_token("#", TokenType::LENGTH_OP);
+
+    case 50:
+      return create_token("Φ", TokenType::END_OF_FILE);
 
     default:
       error_token = create_token("Unexpected end of input.", TokenType::ERROR);
@@ -485,7 +512,7 @@ Token FAScanner::get_token()
     }
   }
 
-  return create_token("$", TokenType::END_OF_FILE);
+  return create_token("Φ", TokenType::END_OF_FILE);
 }
 
 vector<Token> FAScanner::get_tokens_stream(void)

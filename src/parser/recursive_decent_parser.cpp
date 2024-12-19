@@ -776,6 +776,53 @@ Expression *RecursiveDecentParser::parse_unary_expr()
     return new UnaryExpression(operand, op, false, start_line, end_line, node_start, node_end);
   }
 
+  if (lookahead(TokenType::STRINGIFY_OP))
+  {
+    string op = current_token.value;
+    match(TokenType::STRINGIFY_OP);
+    Expression *operand = parse_expr();
+
+    int node_end = previous_token.end;
+    int end_line = previous_token.line;
+
+    return new UnaryExpression(operand, op, false, start_line, end_line, node_start, node_end);
+  }
+
+  if (lookahead(TokenType::BOOLEAN_OP))
+  {
+    string op = current_token.value;
+    match(TokenType::BOOLEAN_OP);
+    Expression *operand = parse_expr();
+
+    int node_end = previous_token.end;
+    int end_line = previous_token.line;
+
+    return new UnaryExpression(operand, op, false, start_line, end_line, node_start, node_end);
+  }
+
+  if (lookahead(TokenType::ROUND_OP))
+  {
+    string op = current_token.value;
+    match(TokenType::ROUND_OP);
+    Expression *operand = parse_expr();
+
+    int node_end = previous_token.end;
+    int end_line = previous_token.line;
+
+    return new UnaryExpression(operand, op, false, start_line, end_line, node_start, node_end);
+  }
+  if (lookahead(TokenType::LENGTH_OP))
+  {
+    string op = current_token.value;
+    match(TokenType::LENGTH_OP);
+    Expression *operand = parse_expr();
+
+    int node_end = previous_token.end;
+    int end_line = previous_token.line;
+
+    return new UnaryExpression(operand, op, false, start_line, end_line, node_start, node_end);
+  }
+
   if (lookahead(TokenType::INCREMENT_OP) || lookahead(TokenType::DECREMENT_OP))
   {
     string op = current_token.value;

@@ -36,23 +36,24 @@ int Debugger::run()
 
   for (int i = 0; i < tokens_stream1.size(); ++i)
   {
-    cout << tokens_stream1[i].value << "... ";
     if (
-        tokens_stream1[i].line == tokens_stream2[i].line &&
-        tokens_stream1[i].start == tokens_stream2[i].start &&
-        tokens_stream1[i].end == tokens_stream2[i].end)
-    {
-      cout << "matches (line: " << tokens_stream2[i].line << ", start: " << tokens_stream2[i].start << ", end: " << tokens_stream2[i].end << ")" << endl;
-    }
-    else
+        tokens_stream1[i].line != tokens_stream2[i].line ||
+        tokens_stream1[i].start != tokens_stream2[i].start ||
+        tokens_stream1[i].end != tokens_stream2[i].end)
     {
       cout << "mismatch" << endl;
+
+      system("pause");
     }
   }
 
   JSON::debug_file(DEBUGGING_FOLDER + "/hand_coded_scanner.json", JSON::stringify_tokens_stream(tokens_stream1));
   JSON::debug_file(DEBUGGING_FOLDER + "/fa_scanner.json", JSON::stringify_tokens_stream(tokens_stream2));
 
-  system("pause");
+  WrenCompiler *wc = new WrenCompiler(program, ScannerOptions::FA, ParserOptions::RecursiveDecent);
+
+  AstNode *tree = wc->parser->parse_ast();
+
+  JSON::debug_file(DEBUGGING_FOLDER + "/parse_tree.json", JSON::stringify_node(tree));
   return 0;
 }

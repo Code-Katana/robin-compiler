@@ -12,5 +12,5 @@ public:
 
 protected:
   const int START_STATE = 0;
-  const int END_STATE = 46;
+  const int END_STATE = 50;
 };

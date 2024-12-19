@@ -18,8 +18,10 @@ private:
   Program *parse_program();
   ReturnType *parse_return_type();
   Function *parse_function();
+
   DataType *parse_data_type();
   VariableDefinition *parse_var_def();
+
   Statement *parse_command();
   SkipStatement *parse_skip_expr();
   StopStatement *parse_stop_expr();
@@ -31,12 +33,14 @@ private:
   AssignmentExpression *parse_int_assign();
   WhileLoop *parse_while();
   BooleanExpression *parse_bool_expr();
+
   Identifier *parse_identifier();
   IntegerLiteral *parse_int();
   FloatLiteral *parse_float();
   StringLiteral *parse_string();
   BooleanLiteral *parse_bool();
   ArrayLiteral *parse_array();
+  vector<Expression *> parse_array_value();
 
   Literal *parse_literal();
   Expression *parse_expr_stmt();

@@ -11,6 +11,8 @@
 #include "parser_base.h"
 #include "recursive_decent_parser.h"
 
+#include "semantic_analyzer.h"
+
 class WrenCompiler
 {
 public:
@@ -19,4 +21,5 @@ public:
 
   ScannerBase *scanner;
   ParserBase *parser;
+  SemanticAnalyzer *semantic;
 };

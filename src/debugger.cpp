@@ -55,5 +55,9 @@ int Debugger::run()
   AstNode *tree = wc->parser->parse_ast();
 
   JSON::debug_file(DEBUGGING_FOLDER + "/parse_tree.json", JSON::stringify_node(tree));
+
+  wc->semantic->analyze();
+
+  system("pause");
   return 0;
 }

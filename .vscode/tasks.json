@@ -9,18 +9,6 @@
       "group": "build",
       "problemMatcher": ["$gcc"],
       "detail": "Build using MinGW"
-    },
-    {
-      "label": "build-wasm",
-      "type": "shell",
-      "command": "cmake",
-      "args": ["--build", "${workspaceFolder}/build-wasm"],
-      "group": {
-        "kind": "build",
-        "isDefault": false
-      },
-      "problemMatcher": ["$gcc"],
-      "detail": "Build using Emscripten"
     }
   ]
 }

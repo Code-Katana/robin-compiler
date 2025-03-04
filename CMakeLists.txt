@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.12)
 project(wren-lang)
 
 # Set the C++ standard
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 14)
 
 # Source files
 file(GLOB_RECURSE SOURCES "src/*.cpp")
@@ -11,19 +11,26 @@ file(GLOB_RECURSE SOURCES "src/*.cpp")
 include_directories(include)
 
 # Native build configuration
-if(NOT EMS)
-    # Enforce MinGW generator
-    if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-        message(STATUS "Using MinGW")
-        message(STATUS ${SOURCES})
-        set(CMAKE_C_COMPILER "gcc")
-        set(CMAKE_CXX_COMPILER "g++")
-    endif()
-    add_executable(wren-lang ${SOURCES})
-else()
-    # WebAssembly build configuration
-    add_executable(wren-lang-wasm ${SOURCES})
-    set_target_properties(wren-lang-wasm PROPERTIES SUFFIX ".wasm")
-    set(CMAKE_C_COMPILER emcc)
-    set(CMAKE_CXX_COMPILER em++)
+# Enforce MinGW generator
+if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+    message(STATUS "Using MinGW")
+    set(CMAKE_C_COMPILER "gcc")
+    set(CMAKE_CXX_COMPILER "g++")
 endif()
+
+# Find LLVM
+find_package(LLVM REQUIRED CONFIG)
+
+# Include LLVM headers
+include_directories(${LLVM_INCLUDE_DIRS})
+add_definitions(${LLVM_DEFINITIONS})
+
+# Link LLVM libraries
+llvm_map_components_to_libnames(LLVM_LIBS core support)
+message(STATUS "LLVM Libraries: ${LLVM_LIBS}")
+
+# Create the executable
+add_executable(wren-lang ${SOURCES})
+
+# Link against LLVM
+target_link_libraries(wren-lang ${LLVM_LIBS})

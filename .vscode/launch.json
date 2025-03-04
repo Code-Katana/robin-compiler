@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Debug Native",
+      "name": "Build Native",
       "type": "cppdbg",
       "request": "launch",
       "program": "${workspaceFolder}/build/wren-lang.exe",
@@ -19,25 +19,6 @@
         }
       ],
       "preLaunchTask": "build-native"
-    },
-    {
-      "name": "Debug WebAssembly",
-      "type": "cppdbg",
-      "request": "launch",
-      "program": "${workspaceFolder}/build-wasm/wren-lang.wasm",
-      "args": [],
-      "stopAtEntry": false,
-      "cwd": "${workspaceFolder}",
-      "environment": [],
-      "externalConsole": true,
-      "MIMode": "gdb",
-      "setupCommands": [
-        {
-          "description": "Enable pretty-printing for gdb",
-          "text": "-enable-pretty-printing"
-        }
-      ],
-      "preLaunchTask": "build-wasm"
     }
   ]
 }

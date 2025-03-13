@@ -21,7 +21,7 @@ char ScannerBase::peek()
 {
   if (is_eof())
   {
-    return '$';
+    return 'Φ';
   }
 
   return source.at(curr);
@@ -31,7 +31,7 @@ char ScannerBase::eat()
 {
   if (is_eof())
   {
-    return '$';
+    return 'Φ';
   }
 
   return source.at(curr++);

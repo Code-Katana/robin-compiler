@@ -8,6 +8,8 @@ map<string, SymbolType> Symbol::TypeName = {
     {"void", SymbolType::Void},
 };
 
+Symbol::Symbol() {}
+
 Symbol::Symbol(string n, SymbolType t, SymbolKind k, int d)
 {
   name = n;
@@ -25,6 +27,7 @@ SymbolType Symbol::get_type_name(string type)
 
   return TypeName[type];
 }
+
 string Symbol::get_name_symboltype(SymbolType st)
 {
   for (auto &pair : TypeName)

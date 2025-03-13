@@ -19,7 +19,8 @@ vector<pair<SymbolType, int>> SymbolTable::get_parameters_type(vector<VariableDe
       VariableInitialization *def = (VariableInitialization *)param->def;
       if (declared_names.find(def->name->name) != declared_names.end())
       {
-        SymbolTable::semantic_error("Error: Variable '" + def->name->name + "' is already defined.");
+        // SymbolTable::semantic_error("Error: Variable '" + def->name->name + "' is already defined.");
+        return {{SymbolType::Undefined, 0}};
       }
       else
       {
@@ -34,7 +35,8 @@ vector<pair<SymbolType, int>> SymbolTable::get_parameters_type(vector<VariableDe
       {
         if (declared_names.find(id->name) != declared_names.end())
         {
-          SymbolTable::semantic_error("Error: Variable '" + id->name + "' is already defined.");
+          // SymbolTable::semantic_error("Error: Variable '" + id->name + "' is already defined.");
+          return {{SymbolType::Undefined, 0}};
         }
         else
         {
@@ -45,13 +47,6 @@ vector<pair<SymbolType, int>> SymbolTable::get_parameters_type(vector<VariableDe
     }
   }
   return params_type;
-}
-
-void SymbolTable::semantic_error(string err)
-{
-  cerr << err << endl;
-  system("pause");
-  throw runtime_error(err);
 }
 
 int SymbolTable::hash(string word)
@@ -72,7 +67,7 @@ void SymbolTable::insert(Symbol *s)
   {
     if (symbol->name == s->name)
     {
-      semantic_error("Semantic error: Symbol '" + s->name + "' already exists.");
+      // semantic_error("Semantic error: Symbol '" + s->name + "' already exists.");
       return;
     }
   }
@@ -170,7 +165,6 @@ vector<pair<SymbolType, int>> SymbolTable::get_arguments(string func_name)
       }
     }
   }
-  semantic_error("Function with name " + func_name + " not found!");
-
-  return {};
+  // semantic_error("Function with name " + func_name + " not found!");
+  return {{SymbolType::Undefined, 0}};
 }

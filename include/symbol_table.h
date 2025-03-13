@@ -16,7 +16,6 @@ private:
 public:
   SymbolTable(int initialSize = 10);
   static vector<pair<SymbolType, int>> get_parameters_type(vector<VariableDefinition *> params);
-  static void semantic_error(string err);
 
   void insert(Symbol *s);
   void insert_vars_list(vector<VariableSymbol *> vars);

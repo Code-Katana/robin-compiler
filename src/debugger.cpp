@@ -42,7 +42,6 @@ int Debugger::run()
         tokens_stream1[i].end != tokens_stream2[i].end)
     {
       cout << "mismatch" << endl;
-
       system("pause");
     }
   }

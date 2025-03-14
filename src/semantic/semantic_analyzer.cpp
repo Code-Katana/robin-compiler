@@ -1,0 +1,994 @@
+#include "semantic_analyzer.h"
+
+#include <typeinfo>
+
+SemanticAnalyzer::SemanticAnalyzer(ParserBase *pr) : parser(pr) {};
+
+void SemanticAnalyzer::analyze()
+{
+  Source *source = (Source *)parser->parse_ast();
+  semantic_source(source);
+}
+
+void SemanticAnalyzer::semantic_source(Source *source)
+{
+  SymbolTable *st = new SymbolTable();
+  string program_name = source->program->program_name->name;
+  bool check = st->insert(new Symbol(
+      program_name,
+      SymbolType::Program,
+      SymbolKind::Function));
+  if (!check)
+  {
+    semantic_error("Semantic error: Symbol '" + program_name + "' already exists.");
+  }
+
+  for (auto var : source->program->globals)
+  {
+    call_stack.push(st);
+    semantic_var_def(var, st);
+    call_stack.pop();
+  }
+
+  for (auto func : source->functions)
+  {
+    string name = func->funcname->name;
+    DataType *dt = func->return_type->return_type;
+    vector<pair<SymbolType, int>> parameters = SymbolTable::get_parameters_type(func->parameters);
+    if (parameters[0].first == SymbolType::Undefined)
+    {
+      semantic_error("Error: Variable name is already defined.");
+    }
+
+    bool check = st->insert(new FunctionSymbol(
+        name,
+        Symbol::get_datatype(dt),
+        parameters,
+        Symbol::get_dimension(dt)));
+    if (!check)
+    {
+      semantic_error("Semantic error: Symbol '" + name + "' already exists.");
+    }
+  }
+
+  call_stack.push(st);
+
+  semantic_program(source->program);
+  for (auto func : source->functions)
+  {
+    sematic_function(func);
+  }
+}
+
+void SemanticAnalyzer::semantic_program(Program *program)
+{
+  SymbolTable *st = new SymbolTable();
+  call_stack.push(st);
+  for (auto stmt : program->body)
+  {
+    semantic_command(stmt, program->program_name->name);
+  }
+  call_stack.pop();
+}
+
+void SemanticAnalyzer::sematic_function(Function *func)
+{
+  SymbolTable *st = new SymbolTable();
+  SymbolTable *globals = call_stack.top();
+  bool is_return = false;
+  call_stack.push(st);
+  vector<VariableDefinition *> vars = func->parameters;
+  for (auto var : vars)
+  {
+    if (dynamic_cast<VariableInitialization *>(var->def))
+    {
+      semantic_var_def(var, st);
+    }
+    else if (dynamic_cast<VariableDeclaration *>(var->def))
+    {
+      VariableDeclaration *def = (VariableDeclaration *)var->def;
+
+      for (auto id : def->variables)
+      {
+        bool check = st->insert(new VariableSymbol(
+            id->name,
+            Symbol::get_datatype(def->datatype),
+            true,
+            Symbol::get_dimension(def->datatype)));
+        if (!check)
+        {
+          semantic_error("Semantic error: Symbol '" + id->name + "' already exists.");
+        }
+      }
+    }
+  }
+  for (auto stmt : func->body)
+  {
+    semantic_command(stmt, func->funcname->name);
+    if (dynamic_cast<ReturnStatement *>(stmt) && globals->get_type(func->funcname->name) != SymbolType::Void && !is_return)
+    {
+      is_return = true;
+    }
+  }
+
+  if (globals->get_type(func->funcname->name) != SymbolType::Void && !is_return)
+  {
+    semantic_error("Semantic error : missing a return statement in the function body in '" + func->funcname->name + "'.");
+  }
+
+  call_stack.pop();
+}
+
+void SemanticAnalyzer::semantic_command(Statement *stmt, string name_parent)
+{
+  if (dynamic_cast<IfStatement *>(stmt))
+  {
+    IfStatement *ifStmt = static_cast<IfStatement *>(stmt);
+    semantic_if(ifStmt, name_parent);
+  }
+  else if (dynamic_cast<ReturnStatement *>(stmt))
+  {
+    ReturnStatement *rtnStmt = static_cast<ReturnStatement *>(stmt);
+    semantic_return(rtnStmt, name_parent);
+  }
+  else if (dynamic_cast<ReadStatement *>(stmt))
+  {
+    ReadStatement *readStmt = static_cast<ReadStatement *>(stmt);
+    semantic_read(readStmt);
+  }
+  else if (dynamic_cast<WriteStatement *>(stmt))
+  {
+    WriteStatement *writeStmt = static_cast<WriteStatement *>(stmt);
+    semantic_write(writeStmt);
+  }
+  else if (dynamic_cast<WhileLoop *>(stmt))
+  {
+    WhileLoop *loop = static_cast<WhileLoop *>(stmt);
+    semantic_while(loop, name_parent);
+  }
+  else if (dynamic_cast<ForLoop *>(stmt))
+  {
+    ForLoop *loop = static_cast<ForLoop *>(stmt);
+    semantic_for(loop, name_parent);
+  }
+  else if (dynamic_cast<Expression *>(stmt))
+  {
+    Expression *expr = static_cast<Expression *>(stmt);
+    semantic_expr(expr);
+  }
+  else if (dynamic_cast<VariableDefinition *>(stmt))
+  {
+    VariableDefinition *def = static_cast<VariableDefinition *>(stmt);
+    semantic_var_def(def, call_stack.top());
+  }
+}
+
+void SemanticAnalyzer::semantic_if(IfStatement *ifStmt, string name_parent)
+{
+  SymbolTable *st = new SymbolTable();
+  call_stack.push(st);
+
+  if (semantic_expr(ifStmt->condition) != SymbolType::Boolean)
+  {
+    semantic_error("Semantic error: condition must be boolean");
+  }
+  for (auto stmt : ifStmt->consequent)
+  {
+    semantic_command(stmt, name_parent);
+  }
+  call_stack.pop();
+  SymbolTable *st2 = new SymbolTable();
+  call_stack.push(st2);
+  for (auto stmt : ifStmt->alternate)
+  {
+    semantic_command(stmt, name_parent);
+  }
+  call_stack.pop();
+}
+
+//!!
+void SemanticAnalyzer::semantic_return(ReturnStatement *rtnStmt, string name_parent)
+{
+  stack<SymbolTable *> temp = call_stack;
+  SymbolTable *global = new SymbolTable();
+  SymbolType returnType = SymbolType::Undefined;
+  while (!temp.empty())
+  {
+    global = temp.top();
+    temp.pop();
+  }
+
+  if (global->get_type(name_parent) == SymbolType::Void)
+  {
+    if (semantic_expr(rtnStmt->returnValue) != SymbolType::Undefined)
+    {
+      semantic_error("Semantic error: 'return' in function block '" + name_parent + "' doesn't match the function type void.");
+    }
+  }
+  else if (global->get_type(name_parent) == SymbolType::Program)
+  {
+    if (semantic_expr(rtnStmt->returnValue) != SymbolType::Undefined)
+    {
+      semantic_error("Semantic error: 'return' in the program block '" + name_parent + "' must not have an expression.");
+    }
+  }
+  else if (global->get_type(name_parent) != semantic_expr(rtnStmt->returnValue))
+  {
+    semantic_error("Semantic error: 'return' in function block '" + name_parent + "' doesn't match the function type.");
+  }
+  // Dimension of return
+  //  FunctionSymbol *fs = global->retrieve_function(name_parent);
+  //  if(fs->dim != )
+}
+
+void SemanticAnalyzer::semantic_read(ReadStatement *readStmt)
+{
+  stack<SymbolTable *> temp = call_stack;
+  vector<AssignableExpression *> vars = readStmt->variables;
+  for (auto var : vars)
+  {
+    semantic_assignable_expr(var);
+  }
+}
+
+SymbolType SemanticAnalyzer::semantic_assignable_expr(AssignableExpression *assignable)
+{
+  if (dynamic_cast<Identifier *>(assignable))
+  {
+    Identifier *id = static_cast<Identifier *>(assignable);
+    return semantic_id(id, true);
+  }
+  return semantic_index_expr(assignable, true);
+}
+
+void SemanticAnalyzer::semantic_write(WriteStatement *writeStmt)
+{
+  for (auto expr : writeStmt->args)
+  {
+    semantic_expr(expr);
+
+    is_array(expr);
+  }
+}
+
+void SemanticAnalyzer::semantic_while(WhileLoop *loop, string name_parent)
+{
+  SymbolTable *st = new SymbolTable();
+  call_stack.push(st);
+
+  if (semantic_expr(loop->condition) != SymbolType::Boolean)
+  {
+    semantic_error("Semantic error: condition must be boolean");
+  }
+  for (auto stmt : loop->body)
+  {
+    semantic_command(stmt, name_parent);
+  }
+
+  call_stack.pop();
+}
+
+void SemanticAnalyzer::semantic_for(ForLoop *loop, string name_parent)
+{
+  SymbolTable *st = new SymbolTable();
+  call_stack.push(st);
+
+  semantic_int_assign(loop->init);
+  if (semantic_expr(loop->condition) != SymbolType::Boolean)
+  {
+    semantic_error("Semantic error: condition must be boolean");
+  }
+  if (semantic_expr(loop->update) != SymbolType::Integer)
+  {
+    semantic_error("Semantic error: Update for loop must be integer");
+  }
+  for (auto stmt : loop->body)
+  {
+    semantic_command(stmt, name_parent);
+  }
+  call_stack.pop();
+}
+
+void SemanticAnalyzer::semantic_int_assign(AssignmentExpression *init)
+{
+  stack<SymbolTable *> temp = call_stack;
+  if (dynamic_cast<Identifier *>(init->assignee))
+  {
+    Identifier *var = static_cast<Identifier *>(init->assignee);
+    while (!temp.empty())
+    {
+      SymbolTable *t = temp.top();
+      if (t->is_exist(var->name))
+      {
+        semantic_error("Semantic error: Symbol '" + var->name + "' Declared.");
+      }
+      temp.pop();
+    }
+    bool check = call_stack.top()->insert(new VariableSymbol(
+        var->name,
+        SymbolType::Integer,
+        true,
+        0));
+    if (!check)
+    {
+      semantic_error("Semantic error: Symbol '" + var->name + "' already exists.");
+    }
+
+    SymbolType type = semantic_expr(init->value);
+    if (type != SymbolType::Integer)
+    {
+      semantic_error("Semantic error: Value of '" + var->name + "' Must be integer.");
+    }
+  }
+  else
+  {
+    semantic_error("Semantic error: in initialization part of forLoop must be identifier .");
+  }
+}
+
+void SemanticAnalyzer::semantic_var_def(VariableDefinition *var, SymbolTable *st)
+{
+  if (dynamic_cast<VariableDeclaration *>(var->def))
+  {
+    VariableDeclaration *def = (VariableDeclaration *)var->def;
+
+    for (auto id : def->variables)
+    {
+      bool check = st->insert(new VariableSymbol(
+          id->name,
+          Symbol::get_datatype(def->datatype),
+          false,
+          Symbol::get_dimension(def->datatype)));
+      if (!check)
+      {
+        semantic_error("Semantic error: Symbol '" + id->name + "' already exists.");
+      }
+    }
+  }
+  else if (dynamic_cast<VariableInitialization *>(var->def))
+  {
+    VariableInitialization *def = (VariableInitialization *)var->def;
+    SymbolType dt = Symbol::get_datatype(def->datatype);
+    SymbolType dt_init;
+    int dim_left = Symbol::get_dimension(def->datatype);
+    int dim_init = 0;
+
+    if (dynamic_cast<ArrayLiteral *>(def->initializer))
+    {
+      pair<SymbolType, int> array_value = semantic_array((ArrayLiteral *)def->initializer);
+
+      dt_init = array_value.first;
+      dim_init = array_value.second;
+    }
+
+    else if (dynamic_cast<Identifier *>(def->initializer))
+    {
+      Identifier *var = static_cast<Identifier *>(def->initializer);
+      VariableSymbol *sv = is_initialized_var(var);
+      dt_init = sv->type;
+      dim_init = sv->dim;
+    }
+    else
+    {
+      dt_init = semantic_expr(def->initializer);
+      dim_init = 0;
+    }
+    SymbolType result = TypeChecker::is_valid_assign(dt, dt_init, dim_left, dim_init);
+
+    if (result == SymbolType::Undefined)
+    {
+      semantic_error("Semantic error: invalid initialization.");
+    }
+
+    bool check = st->insert(new VariableSymbol(
+        def->name->name,
+        Symbol::get_datatype(def->datatype),
+        true,
+        Symbol::get_dimension(def->datatype)));
+    if (!check)
+    {
+      semantic_error("Semantic error: Symbol '" + def->name->name + "' already exists.");
+    }
+  }
+}
+
+SymbolType SemanticAnalyzer::semantic_expr(Expression *expr)
+{
+  return semantic_assign_expr(expr);
+}
+
+SymbolType SemanticAnalyzer::semantic_assign_expr(Expression *assignExpr)
+{
+  if (!dynamic_cast<AssignmentExpression *>(assignExpr))
+  {
+    return semantic_or_expr(assignExpr);
+  }
+
+  AssignmentExpression *assign_Expr = static_cast<AssignmentExpression *>(assignExpr);
+
+  string assignee_name;
+  int dim_assignee = 0;
+  int dim_value = 0;
+
+  if (dynamic_cast<Identifier *>(assign_Expr->assignee))
+  {
+    Identifier *id = static_cast<Identifier *>(assign_Expr->assignee);
+    assignee_name = id->name;
+    VariableSymbol *vr = retrieve_scope(assignee_name)->retrieve_variable(assignee_name);
+    if (vr == nullptr)
+    {
+      semantic_error("Semantic error: Variable '" + assignee_name + "' must be Declared.");
+    }
+    dim_assignee = vr->dim;
+  }
+  else if (dynamic_cast<IndexExpression *>(assign_Expr->assignee))
+  {
+    Expression *base_expr = static_cast<IndexExpression *>(assign_Expr->assignee)->base;
+    int accessed_dim = 1;
+
+    while (dynamic_cast<IndexExpression *>(base_expr))
+    {
+      base_expr = static_cast<IndexExpression *>(base_expr)->base;
+      accessed_dim++;
+    }
+    assignee_name = static_cast<Identifier *>(base_expr)->name;
+
+    VariableSymbol *vr = retrieve_scope(assignee_name)->retrieve_variable(assignee_name);
+    if (vr == nullptr)
+    {
+      semantic_error("Semantic error: Variable '" + assignee_name + "' must be Declared.");
+    }
+
+    int total_dim = vr->dim;
+    dim_assignee = total_dim - accessed_dim;
+
+    if (dim_assignee < 0)
+    {
+      semantic_error("Semantic error: Invalid array access for variable '" + assignee_name + "'.");
+    }
+  }
+
+  SymbolType type_assignee = semantic_assignable_expr(assign_Expr->assignee);
+  SymbolType type_value = semantic_expr(assign_Expr->value);
+
+  if (dynamic_cast<ArrayLiteral *>(assign_Expr->value))
+  {
+    dim_value = semantic_array(static_cast<ArrayLiteral *>(assign_Expr->value)).second;
+  }
+  else if (dynamic_cast<Identifier *>(assign_Expr->value))
+  {
+    Identifier *id = static_cast<Identifier *>(assign_Expr->value);
+    VariableSymbol *vr = retrieve_scope(id->name)->retrieve_variable(id->name);
+    if (vr == nullptr)
+    {
+      semantic_error("Semantic error: Variable '" + id->name + "' must be Declared.");
+    }
+    dim_value = vr->dim;
+  }
+  else
+  {
+    dim_value = 0;
+  }
+  SymbolType result = TypeChecker::is_valid_assign(type_assignee, type_value, dim_assignee, dim_value);
+
+  if (result == SymbolType::Undefined)
+  {
+    semantic_error("Semantic error: Assignment Expression must be same datatype and same dimension. ");
+  }
+
+  return result;
+}
+
+SymbolType SemanticAnalyzer::semantic_or_expr(Expression *orExpr)
+{
+  if (!dynamic_cast<OrExpression *>(orExpr))
+  {
+    return semantic_and_expr(orExpr);
+  }
+
+  OrExpression *or_Expr = static_cast<OrExpression *>(orExpr);
+  SymbolType left = semantic_expr(or_Expr->left);
+  is_array(or_Expr->left);
+  SymbolType right = semantic_expr(or_Expr->right);
+  is_array(or_Expr->right);
+
+  SymbolType result = TypeChecker::is_valid_or_and(left, right);
+
+  if (result == SymbolType::Undefined)
+  {
+    semantic_error("Semantic error: Both sides must be Boolean in or expression.");
+  }
+
+  return result;
+}
+
+SymbolType SemanticAnalyzer::semantic_and_expr(Expression *andExpr)
+{
+  if (!dynamic_cast<AndExpression *>(andExpr))
+  {
+    return semantic_equality_expr(andExpr);
+  }
+
+  AndExpression *and_Expr = static_cast<AndExpression *>(andExpr);
+  SymbolType left = semantic_expr(and_Expr->left);
+  is_array(and_Expr->left);
+  SymbolType right = semantic_expr(and_Expr->right);
+  is_array(and_Expr->right);
+
+  SymbolType result = TypeChecker::is_valid_or_and(left, right);
+
+  if (result == SymbolType::Undefined)
+  {
+    semantic_error("Semantic error: Both sides must be Boolean in and expression.");
+  }
+
+  return result;
+}
+
+SymbolType SemanticAnalyzer::semantic_equality_expr(Expression *eqExpr)
+{
+  if (!dynamic_cast<EqualityExpression *>(eqExpr))
+  {
+    return semantic_relational_expr(eqExpr);
+  }
+
+  EqualityExpression *eq_Expr = static_cast<EqualityExpression *>(eqExpr);
+
+  SymbolType left = semantic_expr(eq_Expr->left);
+  is_array(eq_Expr->left);
+  SymbolType right = semantic_expr(eq_Expr->right);
+  is_array(eq_Expr->right);
+
+  SymbolType result = TypeChecker::is_valid_equality(left, right);
+
+  if (result == SymbolType::Undefined)
+  {
+    semantic_error("Semantic error: Both sides must be the same type in equality.");
+  }
+
+  return result;
+}
+
+SymbolType SemanticAnalyzer::semantic_relational_expr(Expression *relExpr)
+{
+  if (!dynamic_cast<RelationalExpression *>(relExpr))
+  {
+    return semantic_additive_expr(relExpr);
+  }
+
+  RelationalExpression *rel_Expr = static_cast<RelationalExpression *>(relExpr);
+
+  SymbolType left = semantic_expr(rel_Expr->left);
+  SymbolType right = semantic_expr(rel_Expr->right);
+
+  SymbolType result = TypeChecker::is_valid_relational(left, right);
+
+  if (result == SymbolType::Undefined)
+  {
+    semantic_error("Semantic error: Both sides must be numbers in relational.");
+  }
+
+  return result;
+}
+
+SymbolType SemanticAnalyzer::semantic_additive_expr(Expression *addExpr)
+{
+  if (!dynamic_cast<AdditiveExpression *>(addExpr))
+  {
+    return semantic_multiplicative_expr(addExpr);
+  }
+
+  AdditiveExpression *add_Expr = static_cast<AdditiveExpression *>(addExpr);
+
+  SymbolType left = semantic_expr(add_Expr->left);
+  is_array(add_Expr->left);
+  SymbolType right = semantic_expr(add_Expr->right);
+  is_array(add_Expr->right);
+  string op = add_Expr->optr;
+
+  SymbolType result = TypeChecker::is_valid_addition(left, right, op);
+
+  if (result == SymbolType::Undefined)
+  {
+    semantic_error("Semantic error: Both sides must be numbers or strings in additive.");
+  }
+
+  return result;
+}
+
+SymbolType SemanticAnalyzer::semantic_multiplicative_expr(Expression *mulExpr)
+{
+  if (!dynamic_cast<MultiplicativeExpression *>(mulExpr))
+  {
+    return semantic_unary_expr(mulExpr);
+  }
+
+  MultiplicativeExpression *mul_Expr = static_cast<MultiplicativeExpression *>(mulExpr);
+
+  SymbolType left = semantic_expr(mul_Expr->left);
+  is_array(mul_Expr->left);
+  SymbolType right = semantic_expr(mul_Expr->right);
+  is_array(mul_Expr->right);
+  string op = mul_Expr->optr;
+
+  SymbolType result = TypeChecker::is_valid_multiplicative(left, right, op);
+
+  if (result == SymbolType::Undefined)
+  {
+    if (op == "%")
+    {
+      semantic_error("Semantic error: Both sides must be Integers in (%).");
+    }
+    semantic_error("Semantic error: Both sides must be numbers in multiplicative.");
+  }
+
+  return result;
+}
+
+SymbolType SemanticAnalyzer::semantic_unary_expr(Expression *unaryExpr)
+{
+  if (!dynamic_cast<UnaryExpression *>(unaryExpr))
+  {
+    return semantic_index_expr(unaryExpr);
+  }
+
+  UnaryExpression *unary_Expr = static_cast<UnaryExpression *>(unaryExpr);
+  int dim = 0;
+
+  SymbolType type = semantic_expr(unary_Expr->operand);
+  if (dynamic_cast<Identifier *>(unary_Expr->operand))
+  {
+    Identifier *id = static_cast<Identifier *>(unary_Expr->operand);
+    VariableSymbol *vs = retrieve_scope(id->name)->retrieve_variable(id->name);
+    if (vs == nullptr)
+    {
+      semantic_error("Semantic error: Variable '" + id->name + "' must be Declared.");
+    }
+    dim = vs->dim;
+  }
+
+  string op = unary_Expr->optr;
+  if (op != "#")
+  {
+    is_array(unary_Expr->operand);
+  }
+
+  SymbolType result = TypeChecker::is_valid_Unary(type, op, dim);
+
+  if (result == SymbolType::Undefined)
+  {
+    if (op == "-")
+    {
+      semantic_error("Semantic error: Variable must be Integer or Float in Unary (-).");
+    }
+    else if (op == "not")
+    {
+      semantic_error("Semantic error: Variable must be Boolean in Unary (not).");
+    }
+    else if (op == "++" || op == "--")
+    {
+      semantic_error("Semantic error: Variable must be Integer or Float in Unary (++ , --).");
+    }
+    else if (op == "@")
+    {
+      semantic_error("Semantic error: Variable must be Integer or Float or boolean in Unary (@).");
+    }
+    else if (op == "#")
+    {
+      semantic_error("Semantic error: Variable must be String or array in Unary (#).");
+    }
+  }
+
+  return result;
+}
+
+SymbolType SemanticAnalyzer::semantic_index_expr(Expression *expr, bool set_init)
+{
+  if (!dynamic_cast<IndexExpression *>(expr))
+  {
+    return semantic_primary_expr(expr);
+  }
+
+  IndexExpression *idxExpr = static_cast<IndexExpression *>(expr);
+
+  int dim = 1;
+  SymbolType type;
+  Symbol *symbol;
+
+  while (dynamic_cast<IndexExpression *>(idxExpr->base))
+  {
+    dim += 1;
+    if (semantic_expr(idxExpr->index) != SymbolType::Integer)
+    {
+      semantic_error("semantic error: invalid index.");
+    }
+    idxExpr = static_cast<IndexExpression *>(idxExpr->base);
+  }
+  if (semantic_expr(idxExpr->index) != SymbolType::Integer)
+  {
+    semantic_error("semantic error: invalid index.");
+  }
+
+  if (dynamic_cast<Identifier *>(idxExpr->base))
+  {
+    Identifier *var = static_cast<Identifier *>(idxExpr->base);
+    SymbolTable *st = retrieve_scope(var->name);
+    if (set_init)
+    {
+      st->set_initialized(var->name);
+    }
+    symbol = retrieve_scope(var->name)->retrieve_symbol(var->name);
+    if (symbol == nullptr)
+    {
+      semantic_error("Semantic error: Symbol '" + var->name + "' must be Declared.");
+    }
+  }
+  else
+  {
+    CallFunctionExpression *cfExpr = static_cast<CallFunctionExpression *>(idxExpr->base);
+    SymbolTable *st = retrieve_scope(cfExpr->function->name);
+    symbol = retrieve_scope(cfExpr->function->name)->retrieve_symbol(cfExpr->function->name);
+    if (symbol == nullptr)
+    {
+      semantic_error("Semantic error: Symbol '" + cfExpr->function->name + "' must be Declared.");
+    }
+  }
+
+  type = semantic_expr(idxExpr->base);
+
+  if (dim != symbol->dim)
+  {
+    semantic_error("Dimension mismatch for variable " + symbol->name +
+                   ": expected " + to_string(symbol->dim) +
+                   ", but got " + to_string(dim));
+  }
+  if (type != symbol->type)
+  {
+    semantic_error("Datatype mismatch for variable " + symbol->name +
+                   ": expected " + Symbol::get_name_symboltype(type) +
+                   ", but got " + Symbol::get_name_symboltype(symbol->type));
+  }
+
+  return type;
+}
+
+SymbolType SemanticAnalyzer::semantic_primary_expr(Expression *primaryExpr)
+{
+  if (dynamic_cast<Identifier *>(primaryExpr))
+  {
+    Identifier *id = static_cast<Identifier *>(primaryExpr);
+    return semantic_id(id);
+  }
+  return semantic_literal(primaryExpr);
+}
+
+SymbolType SemanticAnalyzer::semantic_literal(Expression *lit)
+{
+  if (!dynamic_cast<Literal *>(lit))
+  {
+    return semantic_call_function_expr(lit);
+  }
+
+  if (dynamic_cast<IntegerLiteral *>(lit))
+  {
+    return SymbolType::Integer;
+  }
+  else if (dynamic_cast<FloatLiteral *>(lit))
+  {
+    return SymbolType::Float;
+  }
+  else if (dynamic_cast<StringLiteral *>(lit))
+  {
+    return SymbolType::String;
+  }
+  else if (dynamic_cast<BooleanLiteral *>(lit))
+  {
+    return SymbolType::Boolean;
+  }
+  else if (dynamic_cast<ArrayLiteral *>(lit))
+  {
+    return semantic_array(static_cast<ArrayLiteral *>(lit)).first;
+  }
+  return SymbolType::Undefined;
+}
+
+SymbolType SemanticAnalyzer::semantic_call_function_expr(Expression *cfExpr)
+{
+  if (!dynamic_cast<CallFunctionExpression *>(cfExpr))
+  {
+    return SymbolType::Undefined;
+  }
+
+  CallFunctionExpression *cf_Expr = static_cast<CallFunctionExpression *>(cfExpr);
+
+  stack<SymbolTable *> temp = call_stack;
+  Identifier *func_name = cf_Expr->function;
+  vector<Expression *> arguments = cf_Expr->arguments;
+  for (auto ar : arguments)
+  {
+    if (dynamic_cast<Identifier *>(ar))
+    {
+      Identifier *id = static_cast<Identifier *>(ar);
+      is_initialized_var(id);
+    }
+  }
+  SymbolTable *global = new SymbolTable();
+  while (!temp.empty())
+  {
+    global = temp.top();
+    temp.pop();
+  }
+  if (!(global->is_exist(func_name->name)))
+  {
+    semantic_error("Semantic error: Function '" + func_name->name + "' Not Declared.");
+  }
+  vector<pair<SymbolType, int>> args = global->get_arguments(func_name->name);
+  if (args[0].first == SymbolType::Undefined)
+  {
+    semantic_error("Function with name " + func_name->name + " not found!");
+  }
+  if (arguments.size() != args.size())
+  {
+    semantic_error("Semantic error: Function '" + func_name->name + "' Arguments doesn't match in size.");
+  }
+  for (int i = 0; i < args.size(); ++i)
+  {
+    SymbolType type = semantic_expr(arguments[i]);
+    if (type != args[i].first)
+    {
+      semantic_error("Semantic error: Function '" + func_name->name + "' Arguments doesn't match in datatype.");
+    }
+  }
+  return global->get_type(func_name->name);
+}
+
+SymbolType SemanticAnalyzer::semantic_id(Identifier *id, bool set_init)
+{
+  stack<SymbolTable *> temp = call_stack;
+  string var = id->name;
+  SymbolTable *st = new SymbolTable();
+  while (!temp.empty())
+  {
+    st = temp.top();
+    if (st->is_exist(var))
+    {
+      if (set_init)
+      {
+        st->set_initialized(var);
+      }
+      is_initialized_var(id);
+      return st->get_type(var);
+    }
+    temp.pop();
+  }
+  semantic_error("Semantic error: Variable '" + var + "' Not Declared.");
+
+  return SymbolType::Undefined;
+}
+
+pair<SymbolType, int> SemanticAnalyzer::semantic_array(ArrayLiteral *arrNode)
+{
+  vector<Expression *> elements = arrNode->elements;
+  pair<SymbolType, int> value_list = pair<SymbolType, int>(SymbolType::Undefined, 1);
+
+  if (elements.size() == 0)
+  {
+    return value_list;
+  }
+
+  if (elements.size() > 0 && !dynamic_cast<ArrayLiteral *>(elements[0]))
+  {
+    value_list = semantic_array_value(elements);
+    return value_list;
+  }
+
+  for (auto el : elements)
+  {
+    ArrayLiteral *nested = static_cast<ArrayLiteral *>(el);
+    int dim = value_list.second;
+    value_list = semantic_array(nested);
+
+    if (value_list.second != dim && el != elements.front())
+    {
+      semantic_error("semantic error: Inconsistent array dimension.");
+    }
+  }
+
+  value_list.second++;
+
+  return value_list;
+}
+
+pair<SymbolType, int> SemanticAnalyzer::semantic_array_value(vector<Expression *> elements)
+{
+  SymbolType dt = SymbolType::Undefined;
+
+  for (auto el : elements)
+  {
+    if (dt == SymbolType::Undefined)
+    {
+      dt = semantic_expr(el);
+    }
+    else if (semantic_expr(el) != dt)
+    {
+      semantic_error("semantic error: array contain value of multiple datatypes");
+    }
+  }
+
+  return pair<SymbolType, int>(dt, 1);
+}
+
+VariableSymbol *SemanticAnalyzer::is_initialized_var(Identifier *id)
+{
+  SymbolTable *st = retrieve_scope(id->name);
+  VariableSymbol *var = st->retrieve_variable(id->name);
+  if (var == nullptr)
+  {
+    semantic_error("Semantic error: Variable '" + id->name + "' must be Declared.");
+  }
+
+  if (!var->is_initialized)
+  {
+    semantic_error("Semantic error: Variable '" + id->name + "' must be Initialized.");
+  }
+
+  return var;
+}
+
+SymbolTable *SemanticAnalyzer::retrieve_scope(string sn)
+{
+  stack<SymbolTable *> temp = call_stack;
+
+  while (!temp.empty())
+  {
+    SymbolTable *st = temp.top();
+    if (st->is_exist(sn))
+    {
+      return st;
+    }
+    temp.pop();
+  }
+
+  semantic_error("Semantic error: Variable '" + sn + "' must be Declared.");
+  return nullptr;
+}
+
+void SemanticAnalyzer::is_array(Expression *Expr)
+{
+  if (dynamic_cast<Identifier *>(Expr))
+  {
+    Identifier *id = static_cast<Identifier *>(Expr);
+
+    VariableSymbol *vr = retrieve_scope(id->name)->retrieve_variable(id->name);
+    if (vr == nullptr)
+    {
+      semantic_error("Semantic error: Variable '" + id->name + "' must be Declared.");
+    }
+    int dim = vr->dim;
+    if (dim > 0)
+    {
+      semantic_error("Semantic error: Invalid Expression can't use array.");
+    }
+  }
+  else if (dynamic_cast<CallFunctionExpression *>(Expr))
+  {
+    CallFunctionExpression *cf = static_cast<CallFunctionExpression *>(Expr);
+    FunctionSymbol *fn = retrieve_scope(cf->function->name)->retrieve_function(cf->function->name);
+    if (fn == nullptr)
+    {
+      semantic_error("Semantic error: Function '" + cf->function->name + "' must be Declared.");
+    }
+    int dim = fn->dim;
+    if (dim > 0)
+    {
+      semantic_error("Semantic error: Invalid Expression can't use array.");
+    }
+  }
+}
+
+void SemanticAnalyzer::semantic_error(string err)
+{
+  cerr << err << endl;
+  system("pause");
+  throw runtime_error(err);
+}

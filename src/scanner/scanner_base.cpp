@@ -21,7 +21,7 @@ char ScannerBase::peek()
 {
   if (is_eof())
   {
-    return '$';
+    return 'Φ';
   }
 
   return source.at(curr);
@@ -31,7 +31,7 @@ char ScannerBase::eat()
 {
   if (is_eof())
   {
-    return '$';
+    return 'Φ';
   }
 
   return source.at(curr++);
@@ -55,6 +55,17 @@ Token ScannerBase::check_reserved(string val)
   }
 
   return create_token(val, TokenType::ID_SY);
+}
+
+void ScannerBase::reset_scanner()
+{
+  ch = 0;
+  str = "";
+  curr = 0;
+  line_count = 1;
+  token_start = 0;
+  token_end = 0;
+  error_token = Token();
 }
 
 Token ScannerBase::create_token(string val, TokenType type)

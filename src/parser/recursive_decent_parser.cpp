@@ -351,14 +351,16 @@ ReadStatement *RecursiveDecentParser::parse_read()
   int node_start = current_token.start;
   int start_line = current_token.line;
 
-  vector<Identifier *> variables;
+  vector<AssignableExpression *> variables;
 
   match(TokenType::READ_KW);
-  variables.push_back(parse_identifier());
+  Expression *expr = parse_expr();
+  variables.push_back(parse_assignable_expr(expr));
   while (!lookahead(TokenType::SEMI_COLON_SY))
   {
     match(TokenType::COMMA_SY);
-    variables.push_back(parse_identifier());
+    expr = parse_expr();
+    variables.push_back(parse_assignable_expr(expr));
   }
   match(TokenType::SEMI_COLON_SY);
 
@@ -498,7 +500,7 @@ AssignmentExpression *RecursiveDecentParser::parse_int_assign()
 
   match(TokenType::EQUAL_OP);
 
-  Expression *val = parse_expr();
+  Expression *val = parse_or_expr();
 
   int node_end = previous_token.end;
   int end_line = previous_token.line;
@@ -570,7 +572,7 @@ Expression *RecursiveDecentParser::parse_assign_expr()
   }
   else
   {
-    value = parse_or_expr();
+    value = parse_expr();
   }
 
   int node_end = previous_token.end;
@@ -583,7 +585,7 @@ AssignableExpression *RecursiveDecentParser::parse_assignable_expr(Expression *e
 {
   if (!dynamic_cast<AssignableExpression *>(expr))
   {
-    syntax_error("Invalid left hand side in assignment expression ");
+    syntax_error("Invalid left hand side in assignment expression");
   }
 
   return static_cast<AssignableExpression *>(expr);
@@ -827,7 +829,7 @@ Expression *RecursiveDecentParser::parse_unary_expr()
   {
     string op = current_token.value;
     match(op == "++" ? TokenType::INCREMENT_OP : TokenType::DECREMENT_OP);
-    Expression *operand = parse_expr();
+    Expression *operand = parse_assignable_expr(parse_index_expr());
 
     int node_end = previous_token.end;
     int end_line = previous_token.line;
@@ -851,13 +853,14 @@ Expression *RecursiveDecentParser::parse_unary_expr()
 
   if (lookahead(TokenType::INCREMENT_OP) || lookahead(TokenType::DECREMENT_OP))
   {
+    parse_assignable_expr(primary);
     string op = current_token.value;
     match(op == "++" ? TokenType::INCREMENT_OP : TokenType::DECREMENT_OP);
 
     int node_end = previous_token.end;
     int end_line = previous_token.line;
 
-    return new UnaryExpression(primary, op, false, start_line, end_line, node_start, node_end);
+    return new UnaryExpression(primary, op, true, start_line, end_line, node_start, node_end);
   }
 
   return primary;
@@ -870,19 +873,19 @@ Expression *RecursiveDecentParser::parse_index_expr()
 
   Expression *base = parse_primary_expr();
 
-  if (!lookahead(TokenType::LEFT_SQUARE_PR))
+  while (lookahead(TokenType::LEFT_SQUARE_PR))
   {
-    return base;
+    match(TokenType::LEFT_SQUARE_PR);
+    Expression *index = parse_expr();
+    match(TokenType::RIGHT_SQUARE_PR);
+
+    int node_end = previous_token.end;
+    int end_line = previous_token.line;
+
+    base = new IndexExpression(base, index, start_line, end_line, node_start, node_end);
   }
 
-  match(TokenType::LEFT_SQUARE_PR);
-  Expression *index = parse_expr();
-  match(TokenType::RIGHT_SQUARE_PR);
-
-  int node_end = previous_token.end;
-  int end_line = previous_token.line;
-
-  return new IndexExpression(base, index, start_line, end_line, node_start, node_end);
+  return base;
 }
 
 Expression *RecursiveDecentParser::parse_primary_expr()
@@ -909,12 +912,12 @@ Expression *RecursiveDecentParser::parse_call_expr(Identifier *id)
 
   if (!lookahead(TokenType::RIGHT_PR))
   {
-    args.push_back(parse_expr());
+    args.push_back(parse_or_expr());
 
     while (lookahead(TokenType::COMMA_SY))
     {
       match(TokenType::COMMA_SY);
-      args.push_back(parse_expr());
+      args.push_back(parse_or_expr());
     }
   }
 

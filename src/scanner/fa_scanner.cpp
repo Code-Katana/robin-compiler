@@ -131,6 +131,11 @@ Token FAScanner::get_token()
         eat();
         state = 49;
       }
+      else if (expect('<'))
+      {
+        eat();
+        state = 23;
+      }
       else if (expect('>'))
       {
         eat();

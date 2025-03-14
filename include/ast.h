@@ -270,7 +270,7 @@ class UnaryExpression : public Expression
 {
 public:
   Expression *operand;
-  string optr; // "-" | "++" | "--" | "NOT()"
+  string optr; // "-" | "++" | "--" | "NOT()" | "$" | "#" | "@" | "?"
   bool postfix;
 
   UnaryExpression(Expression *operand, const string &op, const bool &post, int sl, int el, int s, int e);
@@ -397,9 +397,9 @@ public:
 class ReadStatement : public Statement
 {
 public:
-  vector<Identifier *> variables;
+  vector<AssignableExpression *> variables;
 
-  ReadStatement(const vector<Identifier *> &vars, int sl, int el, int s, int e);
+  ReadStatement(const vector<AssignableExpression *> &vars, int sl, int el, int s, int e);
   ~ReadStatement();
 };
 

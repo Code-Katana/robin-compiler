@@ -427,14 +427,14 @@ SkipStatement::SkipStatement(int sl, int el, int s, int e) : Statement(sl, el, s
 }
 
 // ReadStatement Node Implementation
-ReadStatement::ReadStatement(const vector<Identifier *> &vars, int sl, int el, int s, int e) : Statement(sl, el, s, e), variables(vars)
+ReadStatement::ReadStatement(const vector<AssignableExpression *> &vars, int sl, int el, int s, int e) : Statement(sl, el, s, e), variables(vars)
 {
   type = AstNodeType::ReadStatement;
 }
 
 ReadStatement::~ReadStatement()
 {
-  for (Identifier *var : variables)
+  for (AssignableExpression *var : variables)
   {
     delete var;
   }

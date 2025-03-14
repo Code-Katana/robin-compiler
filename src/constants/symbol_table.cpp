@@ -59,7 +59,7 @@ int SymbolTable::hash(string word)
   return sum % hashtable.size();
 }
 
-void SymbolTable::insert(Symbol *s)
+bool SymbolTable::insert(Symbol *s)
 {
   int index = hash(s->name);
 
@@ -68,11 +68,12 @@ void SymbolTable::insert(Symbol *s)
     if (symbol->name == s->name)
     {
       // semantic_error("Semantic error: Symbol '" + s->name + "' already exists.");
-      return;
+      return false;
     }
   }
 
   hashtable[index].push_back(s);
+  return true;
 }
 
 void SymbolTable::insert_vars_list(vector<VariableSymbol *> vars)

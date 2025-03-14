@@ -17,7 +17,7 @@ public:
   SymbolTable(int initialSize = 10);
   static vector<pair<SymbolType, int>> get_parameters_type(vector<VariableDefinition *> params);
 
-  void insert(Symbol *s);
+  bool insert(Symbol *s);
   void insert_vars_list(vector<VariableSymbol *> vars);
   bool is_exist(string s);
   bool is_initialized(string s);

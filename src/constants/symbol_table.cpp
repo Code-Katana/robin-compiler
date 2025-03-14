@@ -19,7 +19,8 @@ vector<pair<SymbolType, int>> SymbolTable::get_parameters_type(vector<VariableDe
       VariableInitialization *def = (VariableInitialization *)param->def;
       if (declared_names.find(def->name->name) != declared_names.end())
       {
-        SymbolTable::semantic_error("Error: Variable '" + def->name->name + "' is already defined.");
+        // SymbolTable::semantic_error("Error: Variable '" + def->name->name + "' is already defined.");
+        return {{SymbolType::Undefined, 0}};
       }
       else
       {
@@ -34,7 +35,8 @@ vector<pair<SymbolType, int>> SymbolTable::get_parameters_type(vector<VariableDe
       {
         if (declared_names.find(id->name) != declared_names.end())
         {
-          SymbolTable::semantic_error("Error: Variable '" + id->name + "' is already defined.");
+          // SymbolTable::semantic_error("Error: Variable '" + id->name + "' is already defined.");
+          return {{SymbolType::Undefined, 0}};
         }
         else
         {
@@ -47,13 +49,6 @@ vector<pair<SymbolType, int>> SymbolTable::get_parameters_type(vector<VariableDe
   return params_type;
 }
 
-void SymbolTable::semantic_error(string err)
-{
-  cerr << err << endl;
-  system("pause");
-  throw runtime_error(err);
-}
-
 int SymbolTable::hash(string word)
 {
   int sum = 0;
@@ -64,7 +59,7 @@ int SymbolTable::hash(string word)
   return sum % hashtable.size();
 }
 
-void SymbolTable::insert(Symbol *s)
+bool SymbolTable::insert(Symbol *s)
 {
   int index = hash(s->name);
 
@@ -72,12 +67,13 @@ void SymbolTable::insert(Symbol *s)
   {
     if (symbol->name == s->name)
     {
-      semantic_error("Semantic error: Symbol '" + s->name + "' already exists.");
-      return;
+      // semantic_error("Semantic error: Symbol '" + s->name + "' already exists.");
+      return false;
     }
   }
 
   hashtable[index].push_back(s);
+  return true;
 }
 
 void SymbolTable::insert_vars_list(vector<VariableSymbol *> vars)
@@ -170,7 +166,48 @@ vector<pair<SymbolType, int>> SymbolTable::get_arguments(string func_name)
       }
     }
   }
-  semantic_error("Function with name " + func_name + " not found!");
+  // semantic_error("Function with name " + func_name + " not found!");
+  return {{SymbolType::Undefined, 0}};
+}
 
-  return {};
+Symbol *SymbolTable::retrieve_symbol(string s)
+{
+  int index = hash(s);
+
+  for (Symbol *symbol : hashtable[index])
+  {
+    if (symbol->name == s)
+    {
+      return symbol;
+    }
+  }
+
+  // semantic_error("Semantic error: Symbol '" + s + "' must be Declared.");
+  return nullptr;
+}
+
+VariableSymbol *SymbolTable::retrieve_variable(string s)
+{
+  Symbol *symbol = retrieve_symbol(s);
+
+  if (symbol->kind == SymbolKind::Variable)
+  {
+    return static_cast<VariableSymbol *>(symbol);
+  }
+
+  // semantic_error("Semantic error: Variable '" + s + "' must be Declared.");
+  return nullptr;
+}
+
+FunctionSymbol *SymbolTable::retrieve_function(string s)
+{
+  Symbol *symbol = retrieve_symbol(s);
+
+  if (symbol->kind == SymbolKind::Function)
+  {
+    return static_cast<FunctionSymbol *>(symbol);
+  }
+
+  // semantic_error("Semantic error: Function '" + s + "' must be Declared.");
+  return nullptr;
 }

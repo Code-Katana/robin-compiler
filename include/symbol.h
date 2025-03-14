@@ -29,6 +29,7 @@ enum class SymbolKind
 class Symbol
 {
 public:
+  Symbol();
   Symbol(string n, SymbolType t, SymbolKind k, int d = 0);
   static SymbolType get_type_name(string type);
   static SymbolType get_datatype(DataType *dt);

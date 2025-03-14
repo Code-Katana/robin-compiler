@@ -169,3 +169,45 @@ vector<pair<SymbolType, int>> SymbolTable::get_arguments(string func_name)
   // semantic_error("Function with name " + func_name + " not found!");
   return {{SymbolType::Undefined, 0}};
 }
+
+Symbol *SymbolTable::retrieve_symbol(string s)
+{
+  int index = hash(s);
+
+  for (Symbol *symbol : hashtable[index])
+  {
+    if (symbol->name == s)
+    {
+      return symbol;
+    }
+  }
+
+  // semantic_error("Semantic error: Symbol '" + s + "' must be Declared.");
+  return nullptr;
+}
+
+VariableSymbol *SymbolTable::retrieve_variable(string s)
+{
+  Symbol *symbol = retrieve_symbol(s);
+
+  if (symbol->kind == SymbolKind::Variable)
+  {
+    return static_cast<VariableSymbol *>(symbol);
+  }
+
+  // semantic_error("Semantic error: Variable '" + s + "' must be Declared.");
+  return nullptr;
+}
+
+FunctionSymbol *SymbolTable::retrieve_function(string s)
+{
+  Symbol *symbol = retrieve_symbol(s);
+
+  if (symbol->kind == SymbolKind::Function)
+  {
+    return static_cast<FunctionSymbol *>(symbol);
+  }
+
+  // semantic_error("Semantic error: Function '" + s + "' must be Declared.");
+  return nullptr;
+}

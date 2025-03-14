@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iostream>
+#include <typeinfo>
 
 #include "symbol.h"
 
@@ -24,4 +25,7 @@ public:
   void set_initialized(string s);
   SymbolType get_type(string s);
   vector<pair<SymbolType, int>> get_arguments(string func_name);
+  Symbol *retrieve_symbol(string name);
+  VariableSymbol *retrieve_variable(string name);
+  FunctionSymbol *retrieve_function(string name);
 };

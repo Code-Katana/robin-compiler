@@ -5,7 +5,7 @@
       "name": "Build Native",
       "type": "cppdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/build/wren-lang.exe",
+      "program": "${workspaceFolder}/build/rbn.exe",
       "args": [],
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}",

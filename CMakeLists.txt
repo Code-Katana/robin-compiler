@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.12)
-project(wren-lang)
+project(rbn)
 
 # Set the C++ standard
 set(CMAKE_CXX_STANDARD 14)
@@ -30,7 +30,7 @@ llvm_map_components_to_libnames(LLVM_LIBS core support)
 message(STATUS "LLVM Libraries: ${LLVM_LIBS}")
 
 # Create the executable
-add_executable(wren-lang ${SOURCES})
+add_executable(rbn ${SOURCES})
 
 # Link against LLVM
-target_link_libraries(wren-lang ${LLVM_LIBS})
+target_link_libraries(rbn ${LLVM_LIBS})

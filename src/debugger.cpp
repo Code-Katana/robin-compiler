@@ -1,7 +1,7 @@
 #include "debugger.h"
 
 string Debugger::DEBUGGING_FOLDER = "./debug";
-string Debugger::PROGRAM_FILE = "main.wren";
+string Debugger::PROGRAM_FILE = "main.rbn";
 
 string read_program(string path)
 {
@@ -27,36 +27,14 @@ string read_program(string path)
 int Debugger::run()
 {
   string program = read_program(DEBUGGING_FOLDER + "/" + PROGRAM_FILE);
+  CompilerOptions *options = new CompilerOptions(program);
 
-  HandCodedScanner *scanner1 = new HandCodedScanner(program);
-  FAScanner *scanner2 = new FAScanner(program);
+  RobinCompiler *rc = new RobinCompiler(options);
+  vector<Token> tokens = rc->tokenize();
+  AstNode *tree = rc->parse_ast();
 
-  vector<Token> tokens_stream1 = scanner1->get_tokens_stream();
-  vector<Token> tokens_stream2 = scanner2->get_tokens_stream();
+  JSON::debug_file(Debugger::DEBUGGING_FOLDER + "/tokens.json", JSON::stringify_tokens_stream(tokens));
+  JSON::debug_file(Debugger::DEBUGGING_FOLDER + "/tree.json", JSON::stringify_node(tree));
 
-  for (int i = 0; i < tokens_stream1.size(); ++i)
-  {
-    if (
-        tokens_stream1[i].line != tokens_stream2[i].line ||
-        tokens_stream1[i].start != tokens_stream2[i].start ||
-        tokens_stream1[i].end != tokens_stream2[i].end)
-    {
-      cout << "mismatch" << endl;
-      system("pause");
-    }
-  }
-
-  JSON::debug_file(DEBUGGING_FOLDER + "/hand_coded_scanner.json", JSON::stringify_tokens_stream(tokens_stream1));
-  JSON::debug_file(DEBUGGING_FOLDER + "/fa_scanner.json", JSON::stringify_tokens_stream(tokens_stream2));
-
-  WrenCompiler *wc = new WrenCompiler(program, ScannerOptions::FA, ParserOptions::RecursiveDecent);
-
-  AstNode *tree = wc->parser->parse_ast();
-
-  JSON::debug_file(DEBUGGING_FOLDER + "/parse_tree.json", JSON::stringify_node(tree));
-
-  wc->semantic->analyze();
-
-  system("pause");
   return 0;
 }

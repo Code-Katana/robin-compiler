@@ -1,8 +1,9 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
-#include "compiler_components.h"
+#include "compiler_options.h"
 
 #include "scanner_base.h"
 #include "handcoded_scanner.h"
@@ -13,12 +14,17 @@
 
 #include "semantic_analyzer.h"
 
-class WrenCompiler
+class RobinCompiler
 {
 public:
-  WrenCompiler(string src, ScannerOptions scOpt, ParserOptions prOpt);
-  virtual ~WrenCompiler() = default;
+  RobinCompiler(CompilerOptions *options);
+  virtual ~RobinCompiler() = default;
 
+  vector<Token> tokenize();
+  AstNode *parse_ast();
+  void typecheck();
+
+private:
   ScannerBase *scanner;
   ParserBase *parser;
   SemanticAnalyzer *semantic;

@@ -1,7 +1,7 @@
 #include "debugger.h"
 
 string Debugger::DEBUGGING_FOLDER = "./debug";
-string Debugger::PROGRAM_FILE = "main.wren";
+string Debugger::PROGRAM_FILE = "main.rbn";
 
 string read_program(string path)
 {

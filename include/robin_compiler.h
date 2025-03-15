@@ -21,6 +21,8 @@ public:
   virtual ~RobinCompiler() = default;
 
   vector<Token> tokenize();
+  AstNode *parse_ast();
+  void typecheck();
 
 private:
   ScannerBase *scanner;

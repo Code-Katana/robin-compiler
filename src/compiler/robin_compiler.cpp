@@ -26,3 +26,13 @@ vector<Token> RobinCompiler::tokenize()
 {
   return scanner->get_tokens_stream();
 }
+
+AstNode *RobinCompiler::parse_ast()
+{
+  return parser->parse_ast();
+}
+
+void RobinCompiler::typecheck()
+{
+  semantic->analyze();
+}

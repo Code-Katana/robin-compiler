@@ -13,15 +13,15 @@ enum class AstNodeType
   // Root Node
   Source,
   // Declarations
-  Program,
-  Function,
+  ProgramDefinition,
+  FunctionDefinition,
   VariableDefinition,
   VariableDeclaration,
   VariableInitialization,
   // Types
   ReturnType,
-  PrimitiveType,
-  ArrayType,
+  PrimitiveDataType,
+  ArrayDataType,
   // Statements
   IfStatement,
   ReturnStatement,
@@ -174,21 +174,21 @@ public:
   ~ReturnType();
 };
 
-class PrimitiveType : public DataType
+class PrimitiveDataType : public DataType
 {
 public:
   string datatype;
 
-  PrimitiveType(const string &ty, int sl, int el, int s, int e);
+  PrimitiveDataType(const string &ty, int sl, int el, int s, int e);
 };
 
-class ArrayType : public DataType
+class ArrayDataType : public DataType
 {
 public:
   string datatype;
   int dimension;
 
-  ArrayType(const string &ty, int dim, int sl, int el, int s, int e);
+  ArrayDataType(const string &ty, int dim, int sl, int el, int s, int e);
 };
 
 // Expression Nodes Implementation
@@ -338,7 +338,7 @@ public:
   ~VariableDefinition();
 };
 
-class Function : public AstNode
+class FunctionDefinition : public AstNode
 {
 public:
   Identifier *funcname;
@@ -346,19 +346,19 @@ public:
   vector<VariableDefinition *> parameters;
   vector<Statement *> body;
 
-  Function(Identifier *name, ReturnType *ret, const vector<VariableDefinition *> &params, const vector<Statement *> &body, int sl, int el, int s, int e);
-  ~Function();
+  FunctionDefinition(Identifier *name, ReturnType *ret, const vector<VariableDefinition *> &params, const vector<Statement *> &body, int sl, int el, int s, int e);
+  ~FunctionDefinition();
 };
 
-class Program : public AstNode
+class ProgramDefinition : public AstNode
 {
 public:
   Identifier *program_name;
   vector<VariableDefinition *> globals;
   vector<Statement *> body;
 
-  Program(Identifier *prog, const vector<VariableDefinition *> &glob, const vector<Statement *> &body, int sl, int el, int s, int e);
-  ~Program();
+  ProgramDefinition(Identifier *prog, const vector<VariableDefinition *> &glob, const vector<Statement *> &body, int sl, int el, int s, int e);
+  ~ProgramDefinition();
 };
 
 // Statement Nodes Implementation
@@ -439,9 +439,9 @@ public:
 class Source : public AstNode
 {
 public:
-  Program *program;
-  vector<Function *> functions;
+  ProgramDefinition *program;
+  vector<FunctionDefinition *> functions;
 
-  Source(Program *prog, const vector<Function *> &funcs, int sl, int el, int s, int e);
+  Source(ProgramDefinition *prog, const vector<FunctionDefinition *> &funcs, int sl, int el, int s, int e);
   ~Source();
 };

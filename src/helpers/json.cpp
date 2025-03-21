@@ -156,14 +156,14 @@ string JSON::stringify_node(const AstNode *node)
     const Source *src = static_cast<const Source *>(node);
     return stringify_source(src);
   }
-  else if (dynamic_cast<const Program *>(node))
+  else if (dynamic_cast<const ProgramDefinition *>(node))
   {
-    const Program *program = static_cast<const Program *>(node);
+    const ProgramDefinition *program = static_cast<const ProgramDefinition *>(node);
     return stringify_program(program);
   }
-  else if (dynamic_cast<const Function *>(node))
+  else if (dynamic_cast<const FunctionDefinition *>(node))
   {
-    const Function *func = static_cast<const Function *>(node);
+    const FunctionDefinition *func = static_cast<const FunctionDefinition *>(node);
     return stringify_function(func);
   }
   else if (dynamic_cast<const Statement *>(node))
@@ -204,7 +204,7 @@ string JSON::stringify_source(const Source *src)
 }
 
 // Definitions to json
-string JSON::stringify_program(const Program *node)
+string JSON::stringify_program(const ProgramDefinition *node)
 {
   string type = node_type(node);
   string loc = node_loc(node);
@@ -238,7 +238,7 @@ string JSON::stringify_program(const Program *node)
   return "{" + type + "," + loc + "," + program_name + "," + globals + "," + body + "}";
 }
 
-string JSON::stringify_function(const Function *node)
+string JSON::stringify_function(const FunctionDefinition *node)
 {
   string type = node_type(node);
   string loc = node_loc(node);
@@ -732,21 +732,21 @@ string JSON::stringify_primary_expr(const PrimaryExpression *primaryExpr)
 // Types
 string JSON::stringify_type(const DataType *type)
 {
-  if (dynamic_cast<const PrimitiveType *>(type))
+  if (dynamic_cast<const PrimitiveDataType *>(type))
   {
-    const PrimitiveType *prime = static_cast<const PrimitiveType *>(type);
+    const PrimitiveDataType *prime = static_cast<const PrimitiveDataType *>(type);
     return stringify_primitive_type(prime);
   }
-  else if (dynamic_cast<const ArrayType *>(type))
+  else if (dynamic_cast<const ArrayDataType *>(type))
   {
-    const ArrayType *array = static_cast<const ArrayType *>(type);
+    const ArrayDataType *array = static_cast<const ArrayDataType *>(type);
     return stringify_array_type(array);
   }
 
   return stringify_ast_node(type);
 }
 
-string JSON::stringify_primitive_type(const PrimitiveType *prime)
+string JSON::stringify_primitive_type(const PrimitiveDataType *prime)
 {
   string type = node_type(prime);
   string loc = node_loc(prime);
@@ -755,7 +755,7 @@ string JSON::stringify_primitive_type(const PrimitiveType *prime)
   return "{" + type + "," + loc + "," + datatype + "}";
 }
 
-string JSON::stringify_array_type(const ArrayType *array)
+string JSON::stringify_array_type(const ArrayDataType *array)
 {
   string type = node_type(array);
   string loc = node_loc(array);

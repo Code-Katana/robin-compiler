@@ -20,8 +20,8 @@ void IRGenerator::temp_test_method(const string &filename)
   BasicBlock *entry = BasicBlock::Create(context, "entry", mainFunc);
   builder.SetInsertPoint(entry);
 
-  // Return 69
-  Value *returnValue = builder.getInt32(69);
+  // Return 5
+  Value *returnValue = builder.getInt32(5);
   builder.CreateRet(returnValue);
 
   // Verify the function

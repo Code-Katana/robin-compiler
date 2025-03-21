@@ -15,14 +15,14 @@ Source *RecursiveDecentParser::parse_source()
   int node_start = current_token.start;
   int start_line = current_token.line;
 
-  vector<Function *> funcs = {};
+  vector<FunctionDefinition *> funcs = {};
 
   while (lookahead(TokenType::FUNC_KW))
   {
     funcs.push_back(parse_function());
   }
 
-  Program *program = parse_program();
+  ProgramDefinition *program = parse_program();
 
   match(TokenType::END_OF_FILE);
 
@@ -31,7 +31,7 @@ Source *RecursiveDecentParser::parse_source()
   return new Source(program, funcs, start_line, end_line, node_start, node_end);
 }
 
-Function *RecursiveDecentParser::parse_function()
+FunctionDefinition *RecursiveDecentParser::parse_function()
 {
   int node_start = current_token.start;
   int start_line = current_token.line;
@@ -65,10 +65,10 @@ Function *RecursiveDecentParser::parse_function()
 
   int node_end = previous_token.end;
   int end_line = previous_token.line;
-  return new Function(id, return_type, params, body, start_line, end_line, node_start, node_end);
+  return new FunctionDefinition(id, return_type, params, body, start_line, end_line, node_start, node_end);
 }
 
-Program *RecursiveDecentParser::parse_program()
+ProgramDefinition *RecursiveDecentParser::parse_program()
 {
   int node_start = current_token.start;
   int start_line = current_token.line;
@@ -96,7 +96,7 @@ Program *RecursiveDecentParser::parse_program()
   int node_end = previous_token.end;
   int end_line = previous_token.line;
 
-  return new Program(id, globals, body, start_line, end_line, node_start, node_end);
+  return new ProgramDefinition(id, globals, body, start_line, end_line, node_start, node_end);
 }
 
 DataType *RecursiveDecentParser::parse_data_type()
@@ -115,7 +115,7 @@ DataType *RecursiveDecentParser::parse_data_type()
     int node_end = previous_token.end;
     int end_line = previous_token.line;
 
-    return new PrimitiveType(datatype, start_line, end_line, node_start, node_end);
+    return new PrimitiveDataType(datatype, start_line, end_line, node_start, node_end);
   }
 
   match(TokenType::LEFT_SQUARE_PR);
@@ -141,7 +141,7 @@ DataType *RecursiveDecentParser::parse_data_type()
   int node_end = previous_token.end;
   int end_line = previous_token.line;
 
-  return new ArrayType(datatype, dim, start_line, end_line, node_start, node_end);
+  return new ArrayDataType(datatype, dim, start_line, end_line, node_start, node_end);
 }
 
 ReturnType *RecursiveDecentParser::parse_return_type()
@@ -162,7 +162,7 @@ ReturnType *RecursiveDecentParser::parse_return_type()
     int node_end = previous_token.end;
     int end_line = previous_token.line;
 
-    return_type = new PrimitiveType(datatype, start_line, end_line, node_start, node_end);
+    return_type = new PrimitiveDataType(datatype, start_line, end_line, node_start, node_end);
     return new ReturnType(return_type, start_line, end_line, node_start, node_end);
   }
 
@@ -189,7 +189,7 @@ ReturnType *RecursiveDecentParser::parse_return_type()
   int node_end = previous_token.end;
   int end_line = previous_token.line;
 
-  return_type = new ArrayType(datatype, dim, start_line, end_line, node_start, node_end);
+  return_type = new ArrayDataType(datatype, dim, start_line, end_line, node_start, node_end);
   return new ReturnType(return_type, start_line, end_line, node_start, node_end);
 }
 

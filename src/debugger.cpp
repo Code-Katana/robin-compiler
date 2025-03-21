@@ -26,15 +26,12 @@ string read_program(string path)
 
 int Debugger::run()
 {
-  string program = read_program(DEBUGGING_FOLDER + "/" + PROGRAM_FILE);
+  string input_file = DEBUGGING_FOLDER + "/" + PROGRAM_FILE;
+  string program = read_program(input_file);
   CompilerOptions *options = new CompilerOptions(program);
 
   RobinCompiler *rc = new RobinCompiler(options);
-  vector<Token> tokens = rc->tokenize();
-  AstNode *tree = rc->parse_ast();
-
-  JSON::debug_file(Debugger::DEBUGGING_FOLDER + "/tokens.json", JSON::stringify_tokens_stream(tokens));
-  JSON::debug_file(Debugger::DEBUGGING_FOLDER + "/tree.json", JSON::stringify_node(tree));
+  rc->generate_ir(input_file + ".ll");
 
   return 0;
 }

@@ -9,15 +9,15 @@ map<AstNodeType, string> AstNode::NodeNames = {
     // Root Node
     {AstNodeType::Source, "Source"},
     // Declarations
-    {AstNodeType::Program, "ProgramDeclaration"},
-    {AstNodeType::Function, "FunctionDeclaration"},
+    {AstNodeType::ProgramDefinition, "ProgramDefinition"},
+    {AstNodeType::FunctionDefinition, "FunctionDefinition"},
     {AstNodeType::VariableDefinition, "VariableDefinition"},
     {AstNodeType::VariableDeclaration, "VariableDeclaration"},
     {AstNodeType::VariableInitialization, "VariableInitialization"},
     // Types
     {AstNodeType::ReturnType, "ReturnType"},
-    {AstNodeType::PrimitiveType, "PrimitiveType"},
-    {AstNodeType::ArrayType, "ArrayType"},
+    {AstNodeType::PrimitiveDataType, "PrimitiveDataType"},
+    {AstNodeType::ArrayDataType, "ArrayDataType"},
     // Statements
     {AstNodeType::IfStatement, "IfStatement"},
     {AstNodeType::ReturnStatement, "ReturnStatement"},
@@ -149,15 +149,15 @@ ReturnType::~ReturnType()
   delete return_type;
 }
 
-PrimitiveType::PrimitiveType(const string &ty, int sl, int el, int s, int e) : DataType(sl, el, s, e), datatype(ty)
+PrimitiveDataType::PrimitiveDataType(const string &ty, int sl, int el, int s, int e) : DataType(sl, el, s, e), datatype(ty)
 {
-  type = AstNodeType::PrimitiveType;
+  type = AstNodeType::PrimitiveDataType;
 }
 
 // Array Data Type Implementation
-ArrayType::ArrayType(const string &ty, int dim, int sl, int el, int s, int e) : DataType(sl, el, s, e), datatype(ty), dimension(dim)
+ArrayDataType::ArrayDataType(const string &ty, int dim, int sl, int el, int s, int e) : DataType(sl, el, s, e), datatype(ty), dimension(dim)
 {
-  type = AstNodeType::ArrayType;
+  type = AstNodeType::ArrayDataType;
 }
 
 // AssignmentExpression Node Implementation
@@ -347,13 +347,13 @@ VariableDefinition::~VariableDefinition()
 }
 
 // FunctionDeclaration Node Implementation
-Function::Function(Identifier *name, ReturnType *ret, const vector<VariableDefinition *> &params, const vector<Statement *> &body, int sl, int el, int s, int e)
+FunctionDefinition::FunctionDefinition(Identifier *name, ReturnType *ret, const vector<VariableDefinition *> &params, const vector<Statement *> &body, int sl, int el, int s, int e)
     : AstNode(sl, el, s, e), funcname(name), return_type(ret), parameters(params), body(body)
 {
-  type = AstNodeType::Function;
+  type = AstNodeType::FunctionDefinition;
 }
 
-Function::~Function()
+FunctionDefinition::~FunctionDefinition()
 {
   delete funcname;
   delete return_type;
@@ -364,13 +364,13 @@ Function::~Function()
 }
 
 // ProgramDeclaration Node Implementation
-Program::Program(Identifier *prog, const vector<VariableDefinition *> &glob, const vector<Statement *> &body, int sl, int el, int s, int e)
+ProgramDefinition::ProgramDefinition(Identifier *prog, const vector<VariableDefinition *> &glob, const vector<Statement *> &body, int sl, int el, int s, int e)
     : AstNode(sl, el, s, e), program_name(prog), globals(glob), body(body)
 {
-  type = AstNodeType::Program;
+  type = AstNodeType::ProgramDefinition;
 }
 
-Program::~Program()
+ProgramDefinition::~ProgramDefinition()
 {
   delete program_name;
   for (VariableDefinition *global : globals)
@@ -489,7 +489,7 @@ ForLoop::~ForLoop()
 }
 
 // Root Node Implementation
-Source::Source(Program *prog, const vector<Function *> &funcs, int sl, int el, int s, int e)
+Source::Source(ProgramDefinition *prog, const vector<FunctionDefinition *> &funcs, int sl, int el, int s, int e)
     : AstNode(sl, el, s, e), program(prog), functions(funcs)
 {
   type = AstNodeType::Source;
@@ -498,7 +498,7 @@ Source::Source(Program *prog, const vector<Function *> &funcs, int sl, int el, i
 Source::~Source()
 {
   delete program;
-  for (Function *func : functions)
+  for (FunctionDefinition *func : functions)
   {
     delete func;
   }

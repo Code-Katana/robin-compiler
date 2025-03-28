@@ -65,6 +65,7 @@ Value *IRGenerator::codegen(AstNode *node)
     return codegenStatement(stmt);
   return nullptr;
 }
+
 Value *IRGenerator::codegenProgram(ProgramDefinition *program)
 {
   // Create main function
@@ -298,6 +299,134 @@ Value *IRGenerator::codegenReadStatement(ReadStatement *read)
 
   args.insert(args.begin(), fmtPtr);
   return builder.CreateCall(scanfFunc, args);
+}
+Value *IRGenerator::codegenAssignableExpr(AssignableExpression *expr)
+{
+  // Implement address calculation for variables/array elements
+  return nullptr; // Simplified exampleA
+}
+
+Value *IRGenerator::codegenExpression(Expression *expr)
+{
+  if (auto lit = dynamic_cast<Literal *>(expr))
+    return codegenLiteral(lit);
+  if (auto id = dynamic_cast<Identifier *>(expr))
+    return codegenIdentifier(id);
+  if (auto call = dynamic_cast<CallFunctionExpression *>(expr))
+    return codegenCall(call);
+
+  // Handle binary operations
+  if (auto binOp = dynamic_cast<AdditiveExpression *>(expr))
+  {
+    Value *lhs = codegen(binOp->left);
+    Value *rhs = codegen(binOp->right);
+    return codegenBinaryOp(binOp->left, binOp->right, binOp->optr);
+  }
+
+  return nullptr;
+}
+
+Value *IRGenerator::codegenVariableDeclaration(VariableDeclaration *decl)
+{
+  Type *ty = getLLVMType(Symbol::get_datatype(decl->datatype),
+                         Symbol::get_dimension(decl->datatype));
+
+  for (auto var : decl->variables)
+  {
+    AllocaInst *alloca = builder.CreateAlloca(ty, nullptr, var->name);
+    symbolTable.top()[var->name] = alloca;
+  }
+  return nullptr;
+}
+
+Value *IRGenerator::codegenAssignment(AssignmentExpression *assign)
+{
+  Value *target = codegen(assign->assignee);
+  Value *value = codegen(assign->value);
+
+  if (!target || !value)
+    return nullptr;
+
+  return builder.CreateStore(value, target);
+}
+
+Value *IRGenerator::codegenIdentifier(Identifier *id)
+{
+  Value *val = findValue(id->name);
+  if (!val)
+    return nullptr;
+  return builder.CreateLoad(val->getType(), val);
+}
+
+Value *IRGenerator::codegenLiteral(Literal *lit)
+{
+  if (auto intLit = dynamic_cast<IntegerLiteral *>(lit))
+  {
+    return ConstantInt::get(context, APInt(32, intLit->value));
+  }
+  if (auto floatLit = dynamic_cast<FloatLiteral *>(lit))
+  {
+    return ConstantFP::get(context, APFloat(floatLit->value));
+  }
+  if (auto boolLit = dynamic_cast<BooleanLiteral *>(lit))
+  {
+    return ConstantInt::get(context, APInt(1, boolLit->value));
+  }
+  return nullptr;
+}
+
+Value *IRGenerator::codegenBinaryOp(Expression *lhs, Expression *rhs, string op)
+{
+  Value *L = codegen(lhs);
+  Value *R = codegen(rhs);
+
+  if (!L || !R)
+    return nullptr;
+
+  Type *type = L->getType();
+
+  if (op == "+")
+  {
+    if (type->isIntegerTy())
+      return builder.CreateAdd(L, R);
+    if (type->isFloatingPointTy())
+      return builder.CreateFAdd(L, R);
+  }
+  if (op == "-")
+  {
+    if (type->isIntegerTy())
+      return builder.CreateSub(L, R);
+    if (type->isFloatingPointTy())
+      return builder.CreateFSub(L, R);
+  }
+  // Add more operators as needed
+
+  return nullptr;
+}
+// Add these to ir_generator.cpp
+
+Value *IRGenerator::codegenConditional(IfStatement *ifStmt)
+{
+  // Implement if-else logic, e.g., create basic blocks, condition evaluation, etc.
+  return nullptr;
+}
+
+Value *IRGenerator::codegenLoop(WhileLoop *loop)
+{
+  // Implement while loop logic (condition, loop body, branches)
+  return nullptr;
+}
+
+Value *IRGenerator::codegenForLoop(ForLoop *forLoop)
+{
+  // Implement for loop logic (initialization, condition, increment, body)
+  return nullptr;
+}
+
+Value *IRGenerator::codegenCall(CallFunctionExpression *call)
+{
+  // Implement function call logic (lookup function, prepare args, create call instruction)
+  return nullptr;
 }
 Value *IRGenerator::findValue(const string &name)
 {

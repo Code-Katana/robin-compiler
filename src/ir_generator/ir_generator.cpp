@@ -1,40 +1,79 @@
 #include "ir_generator.h"
 
-IRGenerator::IRGenerator()
-    : module(new Module("rbn_module", context)), builder(context) {}
+LLVMContext IRGenerator::context;
 
-void IRGenerator::generate(const string &filename)
+IRGenerator::IRGenerator() : builder(context)
 {
-  temp_test_method(filename);
+  // InitializeNativeTarget();
+  // InitializeNativeTargetAsmPrinter();
+  module = make_unique<Module>("main_module", context);
+  pushScope();
 }
 
-void IRGenerator::temp_test_method(const string &filename)
+Type *IRGenerator::getLLVMType(SymbolType type, int dim)
 {
-  // Create a function type returning int32 and taking no parameters
-  FunctionType *funcType = FunctionType::get(builder.getInt32Ty(), false);
+  if (dim > 0)
+    return PointerType::getUnqual(getLLVMType(type, dim - 1));
 
-  // Create a function with the given type inside the module
-  Function *mainFunc = Function::Create(funcType, Function::ExternalLinkage, "main", module);
+  switch (type)
+  {
+  case SymbolType::Integer:
+    return Type::getInt32Ty(context);
+  case SymbolType::Float:
+    return Type::getFloatTy(context);
+  case SymbolType::Boolean:
+    return Type::getInt1Ty(context);
+  case SymbolType::String:
+    return PointerType::getInt8Ty(context);
+  case SymbolType::Void:
+    return Type::getVoidTy(context);
+  default:
+    return Type::getVoidTy(context);
+  }
+}
 
-  // Create a basic block and set the insertion point
-  BasicBlock *entry = BasicBlock::Create(context, "entry", mainFunc);
-  builder.SetInsertPoint(entry);
+void IRGenerator::generate(Source *source, const string &filename)
+{
+  // Generate code for program (main function)
+  codegenProgram(source->program);
 
-  // Return 5
-  Value *returnValue = builder.getInt32(5);
-  builder.CreateRet(returnValue);
-
-  // Verify the function
-  verifyFunction(*mainFunc);
-
-  // Open a file and write the LLVM IR
+  // Generate code for all functions
+  for (auto func : source->functions)
+  {
+    codegenFunction(func);
+  }
   std::error_code EC;
-  raw_fd_ostream outFile(filename, EC, sys::fs::OF_Text);
+  raw_fd_ostream outfile(filename, EC, llvm::sys::fs::OF_None);
+
   if (EC)
   {
-    errs() << "Error opening file: " << EC.message() << "\n";
+    errs() << "Could not open file: " << EC.message() << "\n";
     return;
   }
 
-  module->print(outFile, nullptr);
+  module->print(outfile, nullptr);
+  outfile.flush();
+
+  outs() << "LLVM IR written to " << filename << "\n";
+}
+
+Value *IRGenerator::codegen(AstNode *node)
+{
+  if (auto expr = dynamic_cast<Expression *>(node))
+    return codegenExpression(expr);
+  if (auto stmt = dynamic_cast<Statement *>(node))
+    return codegenStatement(stmt);
+  return nullptr;
+}
+
+Value *IRGenerator::findValue(const string &name)
+{
+  for (auto scope = symbolTable.top(); !symbolTable.empty(); symbolTable.pop())
+  {
+    if (scope.find(name) != scope.end())
+    {
+      return scope[name];
+    }
+  }
+  return nullptr;
 }

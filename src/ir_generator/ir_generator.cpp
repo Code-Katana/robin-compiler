@@ -180,6 +180,125 @@ Value *IRGenerator::codegenStatement(Statement *stmt)
   }
   return codegenExpression(dynamic_cast<Expression *>(stmt));
 }
+Value *IRGenerator::codegenWriteStatement(WriteStatement *write)
+{
+  FunctionType *printfType = FunctionType::get(
+      Type::getInt32Ty(context),
+      {PointerType::get(Type::getInt8Ty(context), 0)},
+      true);
+  Function *printfFunc = Function::Create(
+      printfType,
+      Function::ExternalLinkage,
+      "printf",
+      module.get());
+
+  std::vector<Value *> args;
+  std::string formatStr;
+
+  for (auto expr : write->args)
+  {
+    Value *val = codegenExpression(expr);
+    Type *ty = val->getType();
+
+    if (ty->isIntegerTy(32))
+    {
+      formatStr += "%d ";
+    }
+    else if (ty->isFloatTy())
+    {
+      formatStr += "%f ";
+    }
+    else if (ty == Type::getInt1Ty(context))
+    {
+      formatStr += "%d ";
+      val = builder.CreateZExt(val, Type::getInt32Ty(context));
+    }
+    else if (ty->isPointerTy())
+    {
+      formatStr += "%s ";
+    }
+    else
+    {
+      module->getContext().emitError("Unsupported write type");
+      return nullptr;
+    }
+    args.push_back(val);
+  }
+  formatStr += "\n";
+
+  Constant *formatConst = ConstantDataArray::getString(context, formatStr);
+  GlobalVariable *fmtVar = new GlobalVariable(
+      *module,
+      formatConst->getType(),
+      true,
+      GlobalValue::PrivateLinkage,
+      formatConst,
+      "fmt.str");
+
+  Value *fmtPtr = builder.CreateConstInBoundsGEP2_32(
+      formatConst->getType(),
+      fmtVar,
+      0, 0);
+
+  args.insert(args.begin(), fmtPtr);
+  return builder.CreateCall(printfFunc, args);
+}
+
+Value *IRGenerator::codegenReadStatement(ReadStatement *read)
+{
+  FunctionType *scanfType = FunctionType::get(
+      Type::getInt32Ty(context),
+      {PointerType::get(Type::getInt8Ty(context), 0)},
+      true);
+  Function *scanfFunc = Function::Create(
+      scanfType,
+      Function::ExternalLinkage,
+      "scanf",
+      module.get());
+
+  std::vector<Value *> args;
+  std::string formatStr;
+
+  for (auto var : read->variables)
+  {
+    auto id = dynamic_cast<Identifier *>(var);
+    Value *addr = codegenIdentifier(id);
+    Type *ty = cast<AllocaInst>(addr)->getAllocatedType();
+
+    if (ty->isIntegerTy(32))
+    {
+      formatStr += "%d";
+    }
+    else if (ty->isFloatTy())
+    {
+      formatStr += "%f";
+    }
+    else
+    {
+      module->getContext().emitError("Unsupported read type");
+      return nullptr;
+    }
+    formatStr += " ";
+    args.push_back(addr);
+  }
+
+  Constant *formatConst = ConstantDataArray::getString(context, formatStr);
+  GlobalVariable *fmtVar = new GlobalVariable(
+      *module,
+      formatConst->getType(),
+      true,
+      GlobalValue::PrivateLinkage,
+      formatConst,
+      "scan.fmt");
+
+  Value *fmtPtr = builder.CreateConstInBoundsGEP2_32(
+      formatConst->getType(),
+      fmtVar,
+      0, 0);
+
+  args.insert(args.begin(), fmtPtr);
+  return builder.CreateCall(scanfFunc, args);
+}
 Value *IRGenerator::findValue(const string &name)
 {
   for (auto scope = symbolTable.top(); !symbolTable.empty(); symbolTable.pop())

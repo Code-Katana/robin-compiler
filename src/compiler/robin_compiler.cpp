@@ -36,5 +36,5 @@ void RobinCompiler::typecheck()
 
 void RobinCompiler::generate_ir(const string &filename)
 {
-  generator->generate(filename);
+  generator->generate((Source*)parser->parse_ast(),filename);
 }

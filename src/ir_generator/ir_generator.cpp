@@ -70,7 +70,7 @@ Value *IRGenerator::codegenProgram(ProgramDefinition *program)
 {
   // Create main function
   FunctionType *funcType = FunctionType::get(Type::getInt32Ty(context), false);
-  llvm::Function *mainFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, program->program_name->name, module.get());
+  llvm::Function *mainFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, "main", module.get());
 
   BasicBlock *entry = BasicBlock::Create(context, "entry", mainFunc);
   builder.SetInsertPoint(entry);
@@ -154,10 +154,6 @@ Value *IRGenerator::codegenStatement(Statement *stmt)
   if (auto varDecl = dynamic_cast<VariableDeclaration *>(stmt))
   {
     return codegenVariableDeclaration(varDecl);
-  }
-  if (auto assign = dynamic_cast<AssignmentExpression *>(stmt))
-  {
-    return codegenAssignment(assign);
   }
   if (auto write = dynamic_cast<WriteStatement *>(stmt))
   {
@@ -317,20 +313,24 @@ Value *IRGenerator::codegenExpression(Expression *expr)
 
   // Handle binary operations
   if (auto add = dynamic_cast<AdditiveExpression *>(expr))
-      return codegenAdditiveExpr(add);
+    return codegenAdditiveExpr(add);
   if (auto mult = dynamic_cast<MultiplicativeExpression *>(expr))
-      return codegenMultiplicativeExpr(mult);
+    return codegenMultiplicativeExpr(mult);
 
-  //boolean operation
+  if (auto assign = dynamic_cast<AssignmentExpression *>(expr))
+  {
+    return codegenAssignment(assign);
+  }
+  // boolean operation
   if (auto OR = dynamic_cast<OrExpression *>(expr))
-      return codegenOrExpr(OR);
+    return codegenOrExpr(OR);
   if (auto AND = dynamic_cast<AndExpression *>(expr))
-      return codegenAndExpr(AND);
+    return codegenAndExpr(AND);
   if (auto eq = dynamic_cast<EqualityExpression *>(expr))
-      return codegenEqualityExpr(eq);
+    return codegenEqualityExpr(eq);
   if (auto re = dynamic_cast<RelationalExpression *>(expr))
-      return codegenRelationalExpr(re);
-    return nullptr;
+    return codegenRelationalExpr(re);
+  return nullptr;
 }
 
 Value *IRGenerator::codegenVariableDeclaration(VariableDeclaration *decl)

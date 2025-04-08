@@ -300,11 +300,11 @@ Value *IRGenerator::codegenReadStatement(ReadStatement *read)
   args.insert(args.begin(), fmtPtr);
   return builder.CreateCall(scanfFunc, args);
 }
-Value *IRGenerator::codegenAssignableExpr(AssignableExpression *expr)
-{
-  // Implement address calculation for variables/array elements
-  return nullptr; // Simplified exampleA
-}
+// Value *IRGenerator::codegenAssignableExpr(AssignableExpression *expr)
+// {
+//   // Implement address calculation for variables/array elements
+//   return nullptr; // Simplified exampleA
+// }
 
 Value *IRGenerator::codegenExpression(Expression *expr)
 {
@@ -316,14 +316,21 @@ Value *IRGenerator::codegenExpression(Expression *expr)
     return codegenCall(call);
 
   // Handle binary operations
-  if (auto binOp = dynamic_cast<AdditiveExpression *>(expr))
-  {
-    Value *lhs = codegen(binOp->left);
-    Value *rhs = codegen(binOp->right);
-    return codegenBinaryOp(binOp->left, binOp->right, binOp->optr);
-  }
+  if (auto add = dynamic_cast<AdditiveExpression *>(expr))
+      return codegenAdditiveExpr(add);
+  if (auto mult = dynamic_cast<MultiplicativeExpression *>(expr))
+      return codegenMultiplicativeExpr(mult);
 
-  return nullptr;
+  //boolean operation
+  if (auto OR = dynamic_cast<OrExpression *>(expr))
+      return codegenOrExpr(OR);
+  if (auto AND = dynamic_cast<AndExpression *>(expr))
+      return codegenAndExpr(AND);
+  if (auto eq = dynamic_cast<EqualityExpression *>(expr))
+      return codegenEqualityExpr(eq);
+  if (auto re = dynamic_cast<RelationalExpression *>(expr))
+      return codegenRelationalExpr(re);
+    return nullptr;
 }
 
 Value *IRGenerator::codegenVariableDeclaration(VariableDeclaration *decl)
@@ -375,36 +382,88 @@ Value *IRGenerator::codegenLiteral(Literal *lit)
   return nullptr;
 }
 
-Value *IRGenerator::codegenBinaryOp(Expression *lhs, Expression *rhs, string op)
+Value *IRGenerator::codegenOrExpr(OrExpression *expr)
 {
-  Value *L = codegen(lhs);
-  Value *R = codegen(rhs);
+  Value *L = codegen(expr->left);
+  Value *R = codegen(expr->right);
+  if (!L || !R)
+    return nullptr;
+  return builder.CreateOr(L, R, "ortmp");
+}
 
+Value *IRGenerator::codegenAndExpr(AndExpression *expr)
+{
+  Value *L = codegen(expr->left);
+  Value *R = codegen(expr->right);
+  if (!L || !R)
+    return nullptr;
+  return builder.CreateAnd(L, R, "andtmp");
+}
+
+Value *IRGenerator::codegenRelationalExpr(RelationalExpression *expr)
+{
+  Value *L = codegen(expr->left);
+  Value *R = codegen(expr->right);
   if (!L || !R)
     return nullptr;
 
-  Type *type = L->getType();
-
-  if (op == "+")
-  {
-    if (type->isIntegerTy())
-      return builder.CreateAdd(L, R);
-    if (type->isFloatingPointTy())
-      return builder.CreateFAdd(L, R);
-  }
-  if (op == "-")
-  {
-    if (type->isIntegerTy())
-      return builder.CreateSub(L, R);
-    if (type->isFloatingPointTy())
-      return builder.CreateFSub(L, R);
-  }
-  // Add more operators as needed
-
+  if (L->getType()->isIntegerTy())
+    return builder.CreateICmpSGT(L, R, "gttmp");
+  if (L->getType()->isFloatingPointTy())
+    return builder.CreateFCmpOGT(L, R, "gttmp");
   return nullptr;
 }
-// Add these to ir_generator.cpp
 
+Value *IRGenerator::codegenEqualityExpr(EqualityExpression *expr)
+{
+  Value *L = codegen(expr->left);
+  Value *R = codegen(expr->right);
+  if (!L || !R)
+    return nullptr;
+  return builder.CreateICmpEQ(L, R, "eqtmp");
+}
+
+Value *IRGenerator::codegenAdditiveExpr(AdditiveExpression *expr)
+{
+  Value *L = codegen(expr->left);
+  Value *R = codegen(expr->right);
+  if (!L || !R)
+    return nullptr;
+
+  if (expr->optr == "+")
+  {
+    if (L->getType()->isIntegerTy())
+      return builder.CreateAdd(L, R, "addtmp");
+    return builder.CreateFAdd(L, R, "addtmp");
+  }
+  else
+  {
+    if (L->getType()->isIntegerTy())
+      return builder.CreateSub(L, R, "subtmp");
+    return builder.CreateFSub(L, R, "subtmp");
+  }
+}
+
+Value *IRGenerator::codegenMultiplicativeExpr(MultiplicativeExpression *expr)
+{
+  Value *L = codegen(expr->left);
+  Value *R = codegen(expr->right);
+  if (!L || !R)
+    return nullptr;
+
+  if (expr->optr == "*")
+  {
+    if (L->getType()->isIntegerTy())
+      return builder.CreateMul(L, R, "multmp");
+    return builder.CreateFMul(L, R, "multmp");
+  }
+  else
+  {
+    if (L->getType()->isIntegerTy())
+      return builder.CreateSDiv(L, R, "divtmp");
+    return builder.CreateFDiv(L, R, "divtmp");
+  }
+}
 Value *IRGenerator::codegenConditional(IfStatement *ifStmt)
 {
   // Implement if-else logic, e.g., create basic blocks, condition evaluation, etc.

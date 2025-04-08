@@ -41,9 +41,12 @@ private:
   Value *codegenAssignment(AssignmentExpression *assign);
   Value *codegenIdentifier(Identifier *id);
   Value *codegenLiteral(Literal *lit);
-  // we can make it id
-  Value *codegenAssignableExpr(AssignableExpression *expr);
-  Value *codegenBinaryOp(Expression *lhs, Expression *rhs,string op);
+  Value *codegenOrExpr(OrExpression *expr);
+  Value *codegenAndExpr(AndExpression *expr);
+  Value *codegenRelationalExpr(RelationalExpression *expr);
+  Value *codegenEqualityExpr(EqualityExpression *expr);
+  Value *codegenAdditiveExpr(AdditiveExpression *expr);
+  Value *codegenMultiplicativeExpr(MultiplicativeExpression *expr);
   Value *codegenCall(CallFunctionExpression *call);
   Value *codegenConditional(IfStatement *ifStmt);
   Value *codegenLoop(WhileLoop *loop);

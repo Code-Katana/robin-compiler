@@ -598,6 +598,16 @@ AssignableExpression *RecursiveDecentParser::parse_assignable_expr(Expression *e
   return static_cast<AssignableExpression *>(expr);
 }
 
+Expression *RecursiveDecentParser::parse_iterable_expr(Expression *expr)
+{
+  if (!dynamic_cast<CallFunctionExpression *>(expr) && !dynamic_cast<Identifier *>(expr))
+  {
+    syntax_error("Invalid left hand side in assignment expression");
+  }
+
+  return static_cast<Expression *>(expr);
+}
+
 Expression *RecursiveDecentParser::parse_or_expr()
 {
   int node_start = current_token.start;
@@ -878,7 +888,7 @@ Expression *RecursiveDecentParser::parse_index_expr()
   int node_start = current_token.start;
   int start_line = current_token.line;
 
-  Expression *base = parse_primary_expr();
+  Expression *base = parse_iterable_expr(parse_expr());
 
   while (lookahead(TokenType::LEFT_SQUARE_PR))
   {

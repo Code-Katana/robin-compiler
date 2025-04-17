@@ -47,6 +47,7 @@ private:
   Expression *parse_expr();
   Expression *parse_assign_expr();
   AssignableExpression *parse_assignable_expr(Expression *expr);
+  Expression *parse_iterable_expr(Expression *expr);
   Expression *parse_or_expr();
   Expression *parse_and_expr();
   Expression *parse_equality_expr();

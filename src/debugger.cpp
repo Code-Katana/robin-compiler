@@ -33,5 +33,7 @@ int Debugger::run()
   RobinCompiler *rc = new RobinCompiler(options);
   rc->generate_ir(input_file + ".ll");
 
+  rc->typecheck();
+  system("pause");
   return 0;
 }

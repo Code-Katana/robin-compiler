@@ -6,6 +6,7 @@ SemanticAnalyzer::SemanticAnalyzer(ParserBase *pr) : parser(pr) {};
 
 void SemanticAnalyzer::analyze()
 {
+  parser->reset_parser();
   Source *source = (Source *)parser->parse_ast();
   semantic_source(source);
 }
@@ -186,39 +187,53 @@ void SemanticAnalyzer::semantic_if(IfStatement *ifStmt, string name_parent)
   call_stack.pop();
 }
 
-//!!
 void SemanticAnalyzer::semantic_return(ReturnStatement *rtnStmt, string name_parent)
 {
   stack<SymbolTable *> temp = call_stack;
   SymbolTable *global = new SymbolTable();
-  SymbolType returnType = SymbolType::Undefined;
   while (!temp.empty())
   {
     global = temp.top();
     temp.pop();
   }
 
-  if (global->get_type(name_parent) == SymbolType::Void)
+  SymbolType funcType = global->get_type(name_parent);
+  SymbolType returnType = semantic_expr(rtnStmt->returnValue);
+
+  if (funcType == SymbolType::Void || funcType == SymbolType::Program)
   {
-    if (semantic_expr(rtnStmt->returnValue) != SymbolType::Undefined)
+    if (returnType != SymbolType::Undefined)
     {
-      semantic_error("Semantic error: 'return' in function block '" + name_parent + "' doesn't match the function type void.");
+      semantic_error("Semantic error: 'return' in block '" + name_parent + "' must not have an expression.");
     }
   }
-  else if (global->get_type(name_parent) == SymbolType::Program)
+  else if (funcType != returnType)
   {
-    if (semantic_expr(rtnStmt->returnValue) != SymbolType::Undefined)
+    if (!((funcType == SymbolType::Integer || funcType == SymbolType::Float) &&
+          (returnType == SymbolType::Integer || returnType == SymbolType::Float)))
     {
-      semantic_error("Semantic error: 'return' in the program block '" + name_parent + "' must not have an expression.");
+      semantic_error("Semantic error: 'return' in function block '" + name_parent + "' doesn't match the function type.");
     }
   }
-  else if (global->get_type(name_parent) != semantic_expr(rtnStmt->returnValue))
-  {
-    semantic_error("Semantic error: 'return' in function block '" + name_parent + "' doesn't match the function type.");
-  }
+
   // Dimension of return
-  //  FunctionSymbol *fs = global->retrieve_function(name_parent);
-  //  if(fs->dim != )
+  int dim_func = global->retrieve_function(name_parent)->dim;
+  int dim_return = 0;
+  if (dynamic_cast<ArrayLiteral *>(rtnStmt->returnValue))
+  {
+    pair<SymbolType, int> array_value = semantic_array((ArrayLiteral *)rtnStmt->returnValue);
+    dim_return = array_value.second;
+  }
+  else if (dynamic_cast<Identifier *>(rtnStmt->returnValue))
+  {
+    Identifier *var = static_cast<Identifier *>(rtnStmt->returnValue);
+    VariableSymbol *vs = is_initialized_var(var);
+    dim_return = vs->dim;
+  }
+  if (dim_func != dim_return)
+  {
+    semantic_error("Semantic error: 'return' in function block '" + name_parent + "' doesn't match the function dimensions.");
+  }
 }
 
 void SemanticAnalyzer::semantic_read(ReadStatement *readStmt)

@@ -403,7 +403,14 @@ ReturnStatement *RecursiveDecentParser::parse_return_stmt()
 
   if (!lookahead(TokenType::SEMI_COLON_SY))
   {
-    val = parse_or_expr();
+    if (lookahead(TokenType::LEFT_CURLY_PR))
+    {
+      val = (Expression *)parse_array();
+    }
+    else
+    {
+      val = parse_or_expr();
+    }
   }
 
   match(TokenType::SEMI_COLON_SY);

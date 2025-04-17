@@ -6,7 +6,6 @@ SemanticAnalyzer::SemanticAnalyzer(ParserBase *pr) : parser(pr) {};
 
 void SemanticAnalyzer::analyze()
 {
-  parser->reset_parser();
   Source *source = (Source *)parser->parse_ast();
   semantic_source(source);
 }

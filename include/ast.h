@@ -76,14 +76,14 @@ private:
   static map<AstNodeType, string> NodeNames;
 };
 
-class Statement : public AstNode
+class Statement : public virtual AstNode
 {
 public:
   Statement();
   Statement(int sl, int el, int s, int e);
 };
 
-class Expression : public Statement
+class Expression : public virtual Statement
 {
 public:
   Expression();
@@ -96,10 +96,16 @@ public:
   BooleanExpression(int sl, int el, int s, int e);
 };
 
-class AssignableExpression : public Expression
+class AssignableExpression : public virtual Expression
 {
 public:
   AssignableExpression(int sl, int el, int s, int e);
+};
+
+class ItertableExpression : public virtual Expression
+{
+public:
+  ItertableExpression(int sl, int el, int s, int e);
 };
 
 class DataType : public AstNode
@@ -115,7 +121,7 @@ public:
 };
 
 // Literal Nodes Implementation
-class Identifier : public AssignableExpression
+class Identifier : public AssignableExpression, public ItertableExpression
 {
 public:
   string name;
@@ -277,7 +283,7 @@ public:
   ~UnaryExpression();
 };
 
-class CallFunctionExpression : public Expression
+class CallFunctionExpression : public ItertableExpression
 {
 public:
   Identifier *function;

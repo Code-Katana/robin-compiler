@@ -90,12 +90,17 @@ BooleanExpression::BooleanExpression(int sl, int el, int s, int e) : Expression(
 
 AssignableExpression::AssignableExpression(int sl, int el, int s, int e) : Expression(sl, el, s, e) {}
 
+ItertableExpression::ItertableExpression(int sl, int el, int s, int e) : Expression(sl, el, s, e) {}
+
 DataType::DataType(int sl, int el, int s, int e) : AstNode(sl, el, s, e) {}
 
 Literal::Literal(int sl, int el, int s, int e) : Expression(sl, el, s, e) {}
 
 // Identifier Node Implementation
-Identifier::Identifier(const string &name, int sl, int el, int s, int e) : AssignableExpression(sl, el, s, e), name(name)
+Identifier::Identifier(const string &name, int sl, int el, int s, int e)
+    : AssignableExpression(sl, el, s, e),
+      ItertableExpression(sl, el, s, e),
+      name(name)
 {
   type = AstNodeType::Identifier;
 }
@@ -265,7 +270,7 @@ UnaryExpression::~UnaryExpression()
 
 // CallFunctionExpression Node Implementation
 CallFunctionExpression::CallFunctionExpression(Identifier *func, const vector<Expression *> &args, int sl, int el, int s, int e)
-    : Expression(sl, el, s, e), function(func), arguments(args)
+    : ItertableExpression(sl, el, s, e), function(func), arguments(args)
 {
   type = AstNodeType::CallFunctionExpression;
 }

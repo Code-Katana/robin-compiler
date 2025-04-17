@@ -166,9 +166,8 @@ string JSON::stringify_node(const AstNode *node)
     const FunctionDefinition *func = static_cast<const FunctionDefinition *>(node);
     return stringify_function(func);
   }
-  else if (dynamic_cast<const Statement *>(node))
+  else if (const Statement *stmt = dynamic_cast<const Statement *>(node))
   {
-    const Statement *stmt = static_cast<const Statement *>(node);
     return stringify_stmt(stmt);
   }
 
@@ -329,9 +328,8 @@ string JSON::stringify_var_init(const VariableInitialization *node)
 // Statements to json
 string JSON::stringify_stmt(const Statement *stmt)
 {
-  if (dynamic_cast<const Expression *>(stmt))
+  if (const Expression *expr = dynamic_cast<const Expression *>(stmt))
   {
-    const Expression *expr = static_cast<const Expression *>(stmt);
     return stringify_expr(expr);
   }
   else if (dynamic_cast<const IfStatement *>(stmt))
@@ -543,9 +541,8 @@ string JSON::stringify_expr(const Expression *expr)
     const Literal *litNode = static_cast<const Literal *>(expr);
     return stringify_literal(litNode);
   }
-  else if (dynamic_cast<const AssignableExpression *>(expr))
+  else if (const AssignableExpression *assignable = dynamic_cast<const AssignableExpression *>(expr))
   {
-    const AssignableExpression *assignable = static_cast<const AssignableExpression *>(expr);
     return stringify_assignable_expr(assignable);
   }
   else if (dynamic_cast<const AssignmentExpression *>(expr))
@@ -588,9 +585,8 @@ string JSON::stringify_expr(const Expression *expr)
     const UnaryExpression *unaryExpr = static_cast<const UnaryExpression *>(expr);
     return stringify_unary_expr(unaryExpr);
   }
-  else if (dynamic_cast<const CallFunctionExpression *>(expr))
+  else if (const CallFunctionExpression *cfExpr = dynamic_cast<const CallFunctionExpression *>(expr))
   {
-    const CallFunctionExpression *cfExpr = static_cast<const CallFunctionExpression *>(expr);
     return stringify_call_function_expr(cfExpr);
   }
   else if (dynamic_cast<const PrimaryExpression *>(expr))

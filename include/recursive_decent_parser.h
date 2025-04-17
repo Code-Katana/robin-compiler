@@ -56,5 +56,6 @@ private:
   Expression *parse_unary_expr();
   Expression *parse_call_expr(Identifier *id);
   Expression *parse_index_expr();
+  ItertableExpression *parse_itertable_expr(Expression *expr);
   Expression *parse_primary_expr();
 };

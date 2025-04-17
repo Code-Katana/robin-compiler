@@ -590,12 +590,12 @@ Expression *RecursiveDecentParser::parse_assign_expr()
 
 AssignableExpression *RecursiveDecentParser::parse_assignable_expr(Expression *expr)
 {
-  if (!dynamic_cast<AssignableExpression *>(expr))
+  AssignableExpression *assignable = dynamic_cast<AssignableExpression *>(expr);
+  if (!assignable)
   {
     syntax_error("Invalid left hand side in assignment expression");
   }
-
-  return static_cast<AssignableExpression *>(expr);
+  return assignable;
 }
 
 Expression *RecursiveDecentParser::parse_or_expr()
@@ -882,6 +882,8 @@ Expression *RecursiveDecentParser::parse_index_expr()
 
   while (lookahead(TokenType::LEFT_SQUARE_PR))
   {
+    ItertableExpression *base_index = parse_itertable_expr(base);
+
     match(TokenType::LEFT_SQUARE_PR);
     Expression *index = parse_expr();
     match(TokenType::RIGHT_SQUARE_PR);
@@ -889,10 +891,20 @@ Expression *RecursiveDecentParser::parse_index_expr()
     int node_end = previous_token.end;
     int end_line = previous_token.line;
 
-    base = new IndexExpression(base, index, start_line, end_line, node_start, node_end);
+    base = new IndexExpression(base_index, index, start_line, end_line, node_start, node_end);
   }
 
   return base;
+}
+
+ItertableExpression *RecursiveDecentParser::parse_itertable_expr(Expression *expr)
+{
+  ItertableExpression *Itertable = dynamic_cast<ItertableExpression *>(expr);
+  if (!Itertable)
+  {
+    syntax_error("Invalid base in index expression");
+  }
+  return Itertable;
 }
 
 Expression *RecursiveDecentParser::parse_primary_expr()

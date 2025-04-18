@@ -30,6 +30,8 @@ private:
   IRBuilder<> builder;
   stack<map<string, Value *>> symbolTable;
 
+  void codegenGlobalVariable(VariableDeclaration* varDecl);
+
   Type *getLLVMType(SymbolType type, int dim = 0);
   Value *codegen(AstNode *node);
   Value *codegenProgram(ProgramDefinition *program);
@@ -37,8 +39,8 @@ private:
   Value *codegenStatement(Statement *stmt);
   Value *codegenExpression(Expression *expr);
   Value *codegenVariableDeclaration(VariableDeclaration *decl);
-
-  Value *codegenAssignment(AssignmentExpression *assign);
+  Value* codegenVariableInitialization(VariableInitialization* init);
+  
   Value *codegenIdentifier(Identifier *id);
   Value *codegenLiteral(Literal *lit);
   Value *codegenOrExpr(OrExpression *expr);
@@ -47,14 +49,19 @@ private:
   Value *codegenEqualityExpr(EqualityExpression *expr);
   Value *codegenAdditiveExpr(AdditiveExpression *expr);
   Value *codegenMultiplicativeExpr(MultiplicativeExpression *expr);
+
+  Value *codegenAssignment(AssignmentExpression *assign);
   Value *codegenCall(CallFunctionExpression *call);
-  Value *codegenConditional(IfStatement *ifStmt);
-  Value *codegenLoop(WhileLoop *loop);
-  Value *codegenForLoop(ForLoop *loop);
+  
+  Value* codegenWhileLoop(WhileLoop* loop);
+  Value* codegenForLoop(ForLoop* forLoop);
+  Value* codegenIfStatement(IfStatement* ifStmt);
+  Value* codegenReturnStatement(ReturnStatement* retStmt);
   Value *codegenWriteStatement(WriteStatement *write);
   Value *codegenReadStatement(ReadStatement *read);
 
   void pushScope() { symbolTable.push({}); }
   void popScope() { symbolTable.pop(); }
+  Value* castToBoolean(Value* value);
   Value *findValue(const string &name);
 };

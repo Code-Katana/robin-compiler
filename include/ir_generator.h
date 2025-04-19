@@ -1,10 +1,10 @@
 #pragma once
 
-#include "ast.h"
-#include "symbol.h"
+  #include "ast.h"
+  #include "symbol.h"
 
-#include <llvm/Support/TargetSelect.h>
-#include "llvm/Support/FileSystem.h"
+  #include <llvm/Support/TargetSelect.h>
+  #include "llvm/Support/FileSystem.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/IRBuilder.h"
@@ -12,6 +12,10 @@
 
 #include <stack>
 #include <map>
+
+#include "llvm/IR/DataLayout.h"
+#include "llvm/IR/Operator.h"
+#include "llvm/IR/Type.h"
 
 using namespace std;
 using namespace llvm;
@@ -53,6 +57,11 @@ private:
   Value *codegenForLoop(ForLoop *loop);
   Value *codegenWriteStatement(WriteStatement *write);
   Value *codegenReadStatement(ReadStatement *read);
+  Value *codegenIndexExpression(IndexExpression *expr);
+  Value *createArrayAllocation(Type *elementType, Value *size);
+
+  Constant *createNestedArray(ArrayLiteral *lit, ArrayType *parentType);
+  Value *createArrayAllocation(Type *baseType, const std::vector<Value*> &dims);
 
   void pushScope() { symbolTable.push({}); }
   void popScope() { symbolTable.pop(); }

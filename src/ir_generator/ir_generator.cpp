@@ -9,27 +9,24 @@ IRGenerator::IRGenerator() : builder(context)
   module = make_unique<Module>("main_module", context);
   pushScope();
 }
-
-Type *IRGenerator::getLLVMType(SymbolType type, int dim)
-{
-  if (dim > 0)
-    return PointerType::getUnqual(getLLVMType(type, dim - 1));
-
-  switch (type)
-  {
-  case SymbolType::Integer:
-    return Type::getInt32Ty(context);
-  case SymbolType::Float:
-    return Type::getFloatTy(context);
-  case SymbolType::Boolean:
-    return Type::getInt1Ty(context);
-  case SymbolType::String:
-    return PointerType::getInt8Ty(context);
-  case SymbolType::Void:
-    return Type::getVoidTy(context);
-  default:
-    return Type::getVoidTy(context);
+Type *IRGenerator::getLLVMType(SymbolType type, int dim) {
+  Type *baseType = nullptr;
+  switch (type) {
+    case SymbolType::Integer: baseType = Type::getInt32Ty(context); break;
+    case SymbolType::Float:   baseType = Type::getFloatTy(context); break;
+    case SymbolType::Boolean: baseType = Type::getInt1Ty(context); break;
+    case SymbolType::String:  baseType = PointerType::getInt8Ty(context); break;
+    case SymbolType::Void:    baseType = Type::getVoidTy(context); break;
+    default:                  baseType = Type::getVoidTy(context); break;
   }
+
+ // Create nested array types
+ for (int i = 0; i < dim; i++) {
+  baseType = ArrayType::get(baseType, 0); // 0 = unspecified size
+}
+
+// Return pointer to array type
+return PointerType::get(baseType, 0);
 }
 
 void IRGenerator::generate(Source *source, const string &filename)
@@ -330,21 +327,137 @@ Value *IRGenerator::codegenExpression(Expression *expr)
     return codegenEqualityExpr(eq);
   if (auto re = dynamic_cast<RelationalExpression *>(expr))
     return codegenRelationalExpr(re);
+  if (auto index = dynamic_cast<IndexExpression *>(expr))
+    return codegenIndexExpression(index);
   return nullptr;
 }
 
-Value *IRGenerator::codegenVariableDeclaration(VariableDeclaration *decl)
-{
-  Type *ty = getLLVMType(Symbol::get_datatype(decl->datatype),
-                         Symbol::get_dimension(decl->datatype));
 
-  for (auto var : decl->variables)
-  {
-    AllocaInst *alloca = builder.CreateAlloca(ty, nullptr, var->name);
+// Implement index expression
+Value *IRGenerator::codegenIndexExpression(IndexExpression *expr) {
+  Value *base = nullptr;
+  std::vector<Value*> indices;
+
+  // Traverse nested IndexExpressions
+  IndexExpression* current = expr;
+  std::vector<Expression*> reversedIndices;
+
+  while (current) {
+    reversedIndices.push_back(current->index);
+
+    if (auto nextBase = dynamic_cast<IndexExpression*>(current->base)) {
+      current = nextBase;
+    } else {
+      base = codegen(current->base);
+      break;
+    }
+  }
+
+  if (!base) return nullptr;
+
+  // First GEP index is always 0 for arrays
+  indices.push_back(ConstantInt::get(context, APInt(32, 0)));
+
+  // Insert all indices in REVERSE order
+  for (auto it = reversedIndices.rbegin(); it != reversedIndices.rend(); ++it) {
+    Value *idx = codegen(*it);
+    if (!idx) return nullptr;
+
+    idx = builder.CreateIntCast(idx, Type::getInt32Ty(context), true);
+    indices.push_back(idx);
+  }
+
+  // ⚡ NEW: in LLVM 15+, just pass base type
+  return builder.CreateInBoundsGEP(
+      base->getType()->getScalarType(),  // Scalar type, not pointer type
+      base,
+      indices,
+      "arrayidx"
+  );
+}
+
+
+
+
+
+Value *IRGenerator::createArrayAllocation(Type *elementType, Value *size) {
+  // Calculate total bytes needed
+DataLayout dl = module->getDataLayout();
+  uint64_t typeSize = dl.getTypeAllocSize(elementType);
+  Value *allocSize = builder.CreateMul(
+      size, 
+      ConstantInt::get(context, APInt(32, typeSize)),
+      "total_size");
+
+  // Create malloc call
+  Function *mallocFunc = module->getFunction("malloc");
+  if (!mallocFunc) {
+    FunctionType *mallocType = FunctionType::get(
+        PointerType::getInt8Ty(context), 
+        {Type::getInt64Ty(context)}, 
+        false);
+    mallocFunc = Function::Create(
+        mallocType, 
+        Function::ExternalLinkage, 
+        "malloc", 
+        module.get());
+  }
+
+  Value *rawPtr = builder.CreateCall(
+      mallocFunc, 
+      {builder.CreateIntCast(allocSize, Type::getInt64Ty(context), false)},
+      "malloc");
+
+  // Cast to appropriate pointer type
+  return builder.CreateBitCast(
+      rawPtr, 
+      PointerType::get(elementType, 0), 
+      "array_ptr");
+}
+
+// In codegenVariableDeclaration function
+Value *IRGenerator::codegenVariableDeclaration(VariableDeclaration *decl) {
+  for (auto var : decl->variables) {
+    AllocaInst *alloca = nullptr;
+    bool isArrayInit = false;
+
+    // Check if there's an initializer and it's an array literal
+    if (auto init = dynamic_cast<VariableInitialization*>(decl)) {
+      if (auto arrayLit = dynamic_cast<ArrayLiteral*>(init->initializer)) {
+        Constant *constArray = createNestedArray(arrayLit, nullptr);
+        if (constArray) {
+          // Get the actual array type from the initializer
+          Type *arrayType = constArray->getType();
+          // Allocate stack space for the entire array
+          alloca = builder.CreateAlloca(arrayType, nullptr, var->name);
+          // Store the initializer into the allocated space
+          builder.CreateStore(constArray, alloca);
+          isArrayInit = true;
+        }
+      }
+    }
+
+    // If not array initialization, use normal type handling
+    if (!isArrayInit) {
+      Type *ty = getLLVMType(Symbol::get_datatype(decl->datatype),
+                             Symbol::get_dimension(decl->datatype));
+      alloca = builder.CreateAlloca(ty, nullptr, var->name);
+    }
+
     symbolTable.top()[var->name] = alloca;
+
+    // Handle non-array initializations
+    if (auto init = dynamic_cast<VariableInitialization*>(decl)) {
+      if (!isArrayInit) {
+        Value *initVal = codegen(init->initializer);
+        if (initVal)
+          builder.CreateStore(initVal, alloca);
+      }
+    }
   }
   return nullptr;
 }
+
 
 Value *IRGenerator::codegenAssignment(AssignmentExpression *assign)
 {
@@ -379,8 +492,55 @@ Value *IRGenerator::codegenLiteral(Literal *lit)
   {
     return ConstantInt::get(context, APInt(1, boolLit->value));
   }
+  if (auto arrayLit = dynamic_cast<ArrayLiteral *>(lit)) {
+    return createNestedArray(arrayLit, nullptr);
+  }
   return nullptr;
 }
+
+
+Constant *IRGenerator::createNestedArray(ArrayLiteral *lit, ArrayType *parentType) {
+  if (lit->elements.empty()) return nullptr;
+  std::vector<Constant*> elements;
+  Type *elementType = nullptr;
+
+  // Determine element type from first element
+  if (!lit->elements.empty()) {
+    if (auto subArray = dynamic_cast<ArrayLiteral*>(lit->elements[0])) {
+      elementType = createNestedArray(subArray, nullptr)->getType();
+    } else {
+      elementType = codegen(lit->elements[0])->getType();
+    }
+  }
+
+  // Create array type
+  ArrayType *arrayType = ArrayType::get(elementType, lit->elements.size());
+
+  // Process elements
+  for (auto elem : lit->elements) {
+    if (auto subLit = dynamic_cast<ArrayLiteral*>(elem)) {
+      elements.push_back(createNestedArray(subLit, arrayType));
+    } else {
+      elements.push_back(dyn_cast<Constant>(codegen(elem)));
+    }
+  }
+
+  return ConstantArray::get(arrayType, elements);
+}
+
+
+Value *IRGenerator::createArrayAllocation(Type *baseType, const std::vector<Value*> &dims) {
+  // Create nested array type
+  Type *arrayType = baseType;
+  for (auto it = dims.rbegin(); it != dims.rend(); ++it) {
+    arrayType = ArrayType::get(arrayType, cast<ConstantInt>(*it)->getZExtValue());
+  }
+  
+  // Allocate on stack
+  AllocaInst *alloca = builder.CreateAlloca(arrayType);
+  return builder.CreateBitCast(alloca, PointerType::get(arrayType, 0));
+}
+
 
 Value *IRGenerator::codegenOrExpr(OrExpression *expr)
 {

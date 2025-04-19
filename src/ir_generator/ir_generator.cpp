@@ -78,10 +78,8 @@ Value *IRGenerator::codegenProgram(ProgramDefinition *program)
   // Process global variables (as actual globals)
   for (auto global : program->globals)
   {
-    if (auto varDecl = dynamic_cast<VariableDeclaration *>(global->def))
-    {
-      codegenGlobalVariable(varDecl);
-    }
+
+    codegenGlobalVariable(global);
   }
 
   // Process program body
@@ -94,33 +92,60 @@ Value *IRGenerator::codegenProgram(ProgramDefinition *program)
   return mainFunc;
 }
 
-void IRGenerator::codegenGlobalVariable(VariableDeclaration *varDecl)
+void IRGenerator::codegenGlobalVariable(VariableDefinition *dif)
 {
-  Type *ty = getLLVMType(Symbol::get_datatype(varDecl->datatype),
-                         Symbol::get_dimension(varDecl->datatype));
+  Type *ty = nullptr;
+  Constant *init = nullptr;
+  std::string name;
 
-  // Default initializer (zero/null)
-  Constant *init = Constant::getNullValue(ty);
+  // Handle VariableDeclaration (multiple variables)
+  if (auto varDecl = dynamic_cast<VariableDeclaration *>(dif->def))
+  {
+    ty = getLLVMType(Symbol::get_datatype(varDecl->datatype),
+                     Symbol::get_dimension(varDecl->datatype));
+    init = Constant::getNullValue(ty);
 
-  // Handle explicit initializers if present
-  // if (!varDecl->variables.empty() && varDecl->variables[0]->initializer) {
-  //     Value* initVal = codegenExpression(varDecl->variables[0]->initializer);
-  //     if (auto* constant = dyn_cast<Constant>(initVal)) {
-  //         init = constant;
-  //     }
-  // }
+    // Create global for each variable in declaration
+    for (auto var : varDecl->variables)
+    {
+      GlobalVariable *gVar = new GlobalVariable(
+          *module,
+          ty,
+          false,
+          GlobalValue::ExternalLinkage,
+          init,
+          var->name);
+      symbolTable.top()[var->name] = gVar;
+    }
+  }
+  // Handle VariableInitialization (single variable with initializer)
+  else if (auto varInit = dynamic_cast<VariableInitialization *>(dif->def))
+  {
+    ty = getLLVMType(Symbol::get_datatype(varInit->datatype),
+                     Symbol::get_dimension(varInit->datatype));
+    name = varInit->name->name;
 
-  // Create global variable
-  GlobalVariable *gVar = new GlobalVariable(
-      *module,
-      ty,
-      false, // isConstant
-      GlobalValue::ExternalLinkage,
-      init,
-      varDecl->variables[0]->name);
+    // Get initializer value (must be constant)
+    Value *initVal = codegenExpression(varInit->initializer);
+    if (auto *constant = dyn_cast<Constant>(initVal))
+    {
+      init = constant;
+    }
+    else
+    {
+      module->getContext().emitError("Global initializer must be constant");
+      return;
+    }
 
-  // Store in symbol table (raw pointer)
-  symbolTable.top()[varDecl->variables[0]->name] = gVar;
+    GlobalVariable *gVar = new GlobalVariable(
+        *module,
+        ty,
+        false,
+        GlobalValue::ExternalLinkage,
+        init,
+        name);
+    symbolTable.top()[name] = gVar;
+  }
 }
 
 Value *IRGenerator::codegenFunction(FunctionDefinition *func)
@@ -659,7 +684,16 @@ Value *IRGenerator::codegenEqualityExpr(EqualityExpression *expr)
   Value *R = codegen(expr->right);
   if (!L || !R)
     return nullptr;
-  return builder.CreateICmpEQ(L, R, "eqtmp");
+
+  if (expr->optr == "==")
+  {
+    return builder.CreateICmpEQ(L, R, "eqtmp");
+  }
+  else
+  {
+    return builder.CreateICmpNE(L, R, "netmp");
+  }
+  return nullptr;
 }
 
 Value *IRGenerator::codegenAdditiveExpr(AdditiveExpression *expr)
@@ -668,7 +702,7 @@ Value *IRGenerator::codegenAdditiveExpr(AdditiveExpression *expr)
   Value *R = codegen(expr->right);
   if (!L || !R)
     return nullptr;
-
+  // todo string +
   if (expr->optr == "+")
   {
     if (L->getType()->isIntegerTy() || L->getType()->isFloatTy())
@@ -689,7 +723,7 @@ Value *IRGenerator::codegenMultiplicativeExpr(MultiplicativeExpression *expr)
   Value *R = codegen(expr->right);
   if (!L || !R)
     return nullptr;
-
+  // todo %
   if (expr->optr == "*")
   {
     if (L->getType()->isIntegerTy())
@@ -723,7 +757,7 @@ Value *IRGenerator::findValue(const std::string &name)
   }
   return nullptr;
 }
-//!! to boolean unary
+//!! to boolean unary opr
 Value *IRGenerator::castToBoolean(Value *value)
 {
   if (value->getType()->isIntegerTy(1))

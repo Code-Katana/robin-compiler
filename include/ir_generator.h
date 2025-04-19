@@ -30,12 +30,13 @@ private:
   IRBuilder<> builder;
   stack<map<string, Value *>> symbolTable;
 
-  void codegenGlobalVariable(VariableDeclaration* varDecl);
+  void codegenGlobalVariable(VariableDefinition* dif);
 
   Type *getLLVMType(SymbolType type, int dim = 0);
   Value *codegen(AstNode *node);
   Value *codegenProgram(ProgramDefinition *program);
   Value *codegenFunction(FunctionDefinition *func);
+  
   Value *codegenStatement(Statement *stmt);
   Value *codegenExpression(Expression *expr);
   Value *codegenVariableDeclaration(VariableDeclaration *decl);

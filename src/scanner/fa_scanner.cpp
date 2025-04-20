@@ -532,10 +532,14 @@ vector<Token> FAScanner::get_tokens_stream(void)
   while (tk.type != TokenType::END_OF_FILE)
   {
     stream.push_back(tk);
-    if (tk.type == TokenType::ERROR && (error_placeholder.value.empty() || error_placeholder.value != error_token.value))
+    if (tk.type == TokenType::ERROR && error_placeholder.value.empty())
     {
       error_placeholder = tk;
       error_token = Token();
+      curr = token_end;
+    }
+    else if (error_placeholder.value != error_token.value)
+    {
       curr = token_end;
     }
     tk = get_token();

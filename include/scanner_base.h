@@ -24,6 +24,11 @@ protected:
   bool is_eof();
   int update_line_count();
   Token create_token(string val, TokenType type);
+  // TODO: Create a `lexical_error` function, here some more details
+  /** the function should not stop the program but stop the scanner itself
+   * every place you type 'error_token = something;' you should replace this code with 'return lexical_error("the error message");'
+   * if you look at the fa_scanner.cpp or the handcoded_scanner.cpp file you will find more details
+   */
 
   char ch;
   int curr;

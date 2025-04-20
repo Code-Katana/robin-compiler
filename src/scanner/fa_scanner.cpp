@@ -487,6 +487,7 @@ Token FAScanner::get_token()
       return error_token;
 
     case 44:
+      // TODO: those 3 lines of should be in the `lexical_error` function
       curr = source.length() + 1;
       error_token = create_token("Invalid floating point number " + str, TokenType::ERROR);
       return error_token;

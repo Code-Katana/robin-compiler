@@ -268,6 +268,7 @@ Token HandCodedScanner::get_token()
 
         if (!isdigit(peek()))
         {
+          // TODO: those 3 lines of should be in the `lexical_error` function
           curr = source.length() + 1;
           error_token = create_token("Invalid floating point number " + str, TokenType::ERROR);
           return error_token;

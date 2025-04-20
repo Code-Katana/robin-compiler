@@ -6,11 +6,6 @@ Token HandCodedScanner::get_token()
 {
   str = "";
 
-  // if (error_token.type == TokenType::ERROR && !is_eof())
-  // {
-  //   return lexical_error("Unexpected end of input.");
-  // }
-
   while (isspace(peek()) && !is_eof())
   {
     if (expect('\n'))
@@ -305,11 +300,11 @@ vector<Token> HandCodedScanner::get_tokens_stream(void)
   while (tk.type != TokenType::END_OF_FILE)
   {
     stream.push_back(tk);
-    if (tk.type == TokenType::ERROR && error_placeholder.value.empty())
+    if (tk.type == TokenType::ERROR && (error_placeholder.value.empty() || error_placeholder.value != error_token.value))
     {
       error_placeholder = tk;
       error_token = Token();
-      curr = token_end + 1;
+      curr = token_end;
     }
     tk = get_token();
   }

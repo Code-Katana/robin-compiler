@@ -9,6 +9,7 @@ ScannerBase::ScannerBase(string src)
   line_count = 1;
   token_start = 0;
   token_end = 0;
+  error_token = Token();
 }
 
 bool ScannerBase::is_eof()
@@ -64,6 +65,7 @@ void ScannerBase::reset_scanner()
   line_count = 1;
   token_start = 0;
   token_end = 0;
+  error_token = Token();
 }
 
 Token ScannerBase::create_token(string val, TokenType type)
@@ -74,7 +76,16 @@ Token ScannerBase::create_token(string val, TokenType type)
 
 Token ScannerBase::lexical_error(string message)
 {
+  error_token = create_token("Lexical Error: " + message, TokenType::ERROR);
   curr = source.length() + 1;
-  cerr << "Lexical Error: " << message << endl;
-  return Token(message, TokenType::ERROR, line_count, token_start, token_end);
+  return error_token;
+}
+
+Token *ScannerBase::get_error()
+{
+  if (error_token.value.empty())
+  {
+    return nullptr;
+  }
+  return &error_token;
 }

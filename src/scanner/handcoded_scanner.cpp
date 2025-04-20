@@ -295,6 +295,8 @@ vector<Token> HandCodedScanner::get_tokens_stream(void)
       {"token_end", token_end},
   };
 
+  Token error_placeholder = Token();
+
   line_count = 1;
   token_start = token_end = curr = 0;
   vector<Token> stream = {};
@@ -303,6 +305,12 @@ vector<Token> HandCodedScanner::get_tokens_stream(void)
   while (tk.type != TokenType::END_OF_FILE)
   {
     stream.push_back(tk);
+    if (tk.type == TokenType::ERROR && error_placeholder.value.empty())
+    {
+      error_placeholder = tk;
+      error_token = Token();
+      curr = token_end + 1;
+    }
     tk = get_token();
   }
 
@@ -312,6 +320,7 @@ vector<Token> HandCodedScanner::get_tokens_stream(void)
   line_count = placeholders["line_count"];
   token_start = placeholders["token_start"];
   token_end = placeholders["token_end"];
+  error_token = error_placeholder;
 
   return stream;
 }

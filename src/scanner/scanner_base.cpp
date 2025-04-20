@@ -73,3 +73,19 @@ Token ScannerBase::create_token(string val, TokenType type)
   token_end = curr;
   return Token(val, type, line_count, token_start, token_end);
 }
+
+Token ScannerBase::lexical_error(string message)
+{
+  error_token = create_token("Lexical Error: " + message, TokenType::ERROR);
+  curr = source.length() + 1;
+  return error_token;
+}
+
+Token *ScannerBase::get_error()
+{
+  if (error_token.value.empty())
+  {
+    return nullptr;
+  }
+  return &error_token;
+}

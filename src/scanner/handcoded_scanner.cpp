@@ -6,12 +6,6 @@ Token HandCodedScanner::get_token()
 {
   str = "";
 
-  if (error_token.type == TokenType::ERROR && !is_eof())
-  {
-    curr = source.length() + 1;
-    return error_token;
-  }
-
   while (isspace(peek()) && !is_eof())
   {
     if (expect('\n'))
@@ -245,9 +239,7 @@ Token HandCodedScanner::get_token()
 
     if (is_eof())
     {
-      curr = source.length() + 1;
-      error_token = create_token("Unclosed string literal: " + str, TokenType::ERROR);
-      return error_token;
+      return lexical_error("Unclosed string literal: " + str);
     }
 
     eat();
@@ -268,9 +260,7 @@ Token HandCodedScanner::get_token()
 
         if (!isdigit(peek()))
         {
-          curr = source.length() + 1;
-          error_token = create_token("Invalid floating point number " + str, TokenType::ERROR);
-          return error_token;
+          return lexical_error("Invalid floating point number " + str);
         }
       }
 
@@ -287,9 +277,7 @@ Token HandCodedScanner::get_token()
   else
   {
     str += eat();
-    curr = source.length() + 1;
-    error_token = create_token("Unrecognized token: " + str, TokenType::ERROR);
-    return error_token;
+    return lexical_error("Unrecognized token: " + str);
   }
 }
 
@@ -302,6 +290,8 @@ vector<Token> HandCodedScanner::get_tokens_stream(void)
       {"token_end", token_end},
   };
 
+  Token error_placeholder = Token();
+
   line_count = 1;
   token_start = token_end = curr = 0;
   vector<Token> stream = {};
@@ -310,6 +300,12 @@ vector<Token> HandCodedScanner::get_tokens_stream(void)
   while (tk.type != TokenType::END_OF_FILE)
   {
     stream.push_back(tk);
+    if (tk.type == TokenType::ERROR && (error_placeholder.value.empty() || error_placeholder.value != error_token.value))
+    {
+      error_placeholder = tk;
+      error_token = Token();
+      curr = token_end;
+    }
     tk = get_token();
   }
 
@@ -319,6 +315,7 @@ vector<Token> HandCodedScanner::get_tokens_stream(void)
   line_count = placeholders["line_count"];
   token_start = placeholders["token_start"];
   token_end = placeholders["token_end"];
+  error_token = error_placeholder;
 
   return stream;
 }

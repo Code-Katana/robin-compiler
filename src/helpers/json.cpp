@@ -21,7 +21,38 @@ bool JSON::debug_file(string path, string json)
 // Helpers
 string JSON::quote(string str)
 {
-  return "\\\"" + str + "\\\"";
+  string escaped;
+  for (char c : str)
+  {
+    switch (c)
+    {
+    case '\"':
+      escaped += "\\\"";
+      break;
+    case '\\':
+      escaped += "\\\\";
+      break;
+    case '\b':
+      escaped += "\\b";
+      break;
+    case '\f':
+      escaped += "\\f";
+      break;
+    case '\n':
+      escaped += "\\n";
+      break;
+    case '\r':
+      escaped += "\\r";
+      break;
+    case '\t':
+      escaped += "\\t";
+      break;
+    default:
+      escaped += c;
+      break;
+    }
+  }
+  return "\"" + escaped + "\"";
 }
 
 string JSON::node_type(const AstNode *node)
@@ -128,10 +159,29 @@ string JSON::format(string json)
 string JSON::stringify_token(Token tk)
 {
   string type = quote("type") + ":" + quote(Token::get_token_name(tk.type));
-  string val = quote("value") + ":" + quote(tk.value);
   string line = quote("line") + ":" + to_string(tk.line);
   string start = quote("start") + ":" + to_string(tk.start);
   string end = quote("end") + ":" + to_string(tk.end);
+
+  string value_str = tk.value;
+  if (tk.type == TokenType::ERROR)
+  {
+    // Process the value to add indentation after newlines
+    string processed_value;
+    size_t last_pos = 0;
+    size_t newline_pos = value_str.find('\n', last_pos);
+    while (newline_pos != string::npos)
+    {
+      processed_value += value_str.substr(last_pos, newline_pos - last_pos + 1); // include the newline
+      processed_value += " ";
+      last_pos = newline_pos + 1;
+      newline_pos = value_str.find('\n', last_pos);
+    }
+    processed_value += value_str.substr(last_pos);
+    value_str = processed_value;
+  }
+
+  string val = quote("value") + ":" + quote(value_str);
 
   return "{" + type + "," + val + "," + line + "," + start + "," + end + "}";
 }

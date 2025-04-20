@@ -12,6 +12,7 @@ class ScannerBase
 public:
   Token check_reserved(string s);
   void reset_scanner();
+  Token *get_error();
   virtual Token get_token() = 0;
   virtual vector<Token> get_tokens_stream() = 0;
 
@@ -24,6 +25,7 @@ protected:
   bool is_eof();
   int update_line_count();
   Token create_token(string val, TokenType type);
+  Token lexical_error(string message);
 
   char ch;
   int curr;

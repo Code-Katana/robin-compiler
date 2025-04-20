@@ -6,11 +6,10 @@ Token HandCodedScanner::get_token()
 {
   str = "";
 
-  if (error_token.type == TokenType::ERROR && !is_eof())
-  {
-    curr = source.length() + 1;
-    return error_token;
-  }
+  // if (error_token.type == TokenType::ERROR && !is_eof())
+  // {
+  //   return lexical_error("Unexpected end of input.");
+  // }
 
   while (isspace(peek()) && !is_eof())
   {
@@ -245,9 +244,7 @@ Token HandCodedScanner::get_token()
 
     if (is_eof())
     {
-      curr = source.length() + 1;
-      error_token = create_token("Unclosed string literal: " + str, TokenType::ERROR);
-      return error_token;
+      return lexical_error("Unclosed string literal: " + str);
     }
 
     eat();
@@ -268,10 +265,7 @@ Token HandCodedScanner::get_token()
 
         if (!isdigit(peek()))
         {
-          // TODO: those 3 lines of should be in the `lexical_error` function
-          curr = source.length() + 1;
-          error_token = create_token("Invalid floating point number " + str, TokenType::ERROR);
-          return error_token;
+          return lexical_error("Invalid floating point number " + str);
         }
       }
 
@@ -288,9 +282,7 @@ Token HandCodedScanner::get_token()
   else
   {
     str += eat();
-    curr = source.length() + 1;
-    error_token = create_token("Unrecognized token: " + str, TokenType::ERROR);
-    return error_token;
+    return lexical_error("Unrecognized token: " + str);
   }
 }
 

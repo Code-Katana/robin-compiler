@@ -481,21 +481,14 @@ Token FAScanner::get_token()
       break;
     case 43:
       str += eat();
-      curr = source.length() + 1;
-      error_token = create_token("Unrecognized token: " + str, TokenType::ERROR);
 
-      return error_token;
+      return lexical_error("Unrecognized token: " + str);
 
     case 44:
-      // TODO: those 3 lines of should be in the `lexical_error` function
-      curr = source.length() + 1;
-      error_token = create_token("Invalid floating point number " + str, TokenType::ERROR);
-      return error_token;
+      return lexical_error("Invalid floating point number " + str);
 
     case 45:
-      curr = source.length() + 1;
-      error_token = create_token("Unclosed string literal: " + str, TokenType::ERROR);
-      return error_token;
+      return lexical_error("Unclosed string literal: " + str);
 
     case 46:
       return create_token("$", TokenType::STRINGIFY_OP);
@@ -513,8 +506,7 @@ Token FAScanner::get_token()
       return create_token("Φ", TokenType::END_OF_FILE);
 
     default:
-      error_token = create_token("Unexpected end of input.", TokenType::ERROR);
-      return error_token;
+      return lexical_error("Unexpected end of input.");
     }
   }
 

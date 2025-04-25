@@ -3,6 +3,8 @@
 #include "ast.h"
 #include "symbol.h"
 
+#include <llvm/IR/Type.h>
+#include <llvm/IR/DerivedTypes.h>
 #include <llvm/Support/TargetSelect.h>
 #include "llvm/Support/FileSystem.h"
 #include "llvm/IR/LLVMContext.h"
@@ -30,18 +32,20 @@ private:
   IRBuilder<> builder;
   stack<map<string, Value *>> symbolTable;
 
-  void codegenGlobalVariable(VariableDefinition* dif);
+  void codegenGlobalVariable(VariableDefinition *dif);
 
   Type *getLLVMType(SymbolType type, int dim = 0);
   Value *codegen(AstNode *node);
   Value *codegenProgram(ProgramDefinition *program);
   Value *codegenFunction(FunctionDefinition *func);
   
-  Value *codegenStatement(Statement *stmt);
-  Value *codegenExpression(Expression *expr);
+
+  //def
+  Value *codegenVariableDefinition(VariableDefinition *def);
   Value *codegenVariableDeclaration(VariableDeclaration *decl);
-  Value* codegenVariableInitialization(VariableInitialization* init);
-  
+  Value *codegenVariableInitialization(VariableInitialization *init);
+  //expr
+  Value *codegenExpression(Expression *expr);
   Value *codegenIdentifier(Identifier *id);
   Value *codegenLiteral(Literal *lit);
   Value *codegenOrExpr(OrExpression *expr);
@@ -50,19 +54,23 @@ private:
   Value *codegenEqualityExpr(EqualityExpression *expr);
   Value *codegenAdditiveExpr(AdditiveExpression *expr);
   Value *codegenMultiplicativeExpr(MultiplicativeExpression *expr);
-
+  Value *codegenUnaryExpr(UnaryExpression *expr);
+  //stat
+  Value *codegenStatement(Statement *stmt);
   Value *codegenAssignment(AssignmentExpression *assign);
   Value *codegenCall(CallFunctionExpression *call);
-  
-  Value* codegenWhileLoop(WhileLoop* loop);
-  Value* codegenForLoop(ForLoop* forLoop);
-  Value* codegenIfStatement(IfStatement* ifStmt);
-  Value* codegenReturnStatement(ReturnStatement* retStmt);
+  Value *codegenWhileLoop(WhileLoop *loop);
+  Value *codegenForLoop(ForLoop *forLoop);
+  Value *codegenIfStatement(IfStatement *ifStmt);
+  Value *codegenReturnStatement(ReturnStatement *retStmt);
   Value *codegenWriteStatement(WriteStatement *write);
   Value *codegenReadStatement(ReadStatement *read);
-
+  //helpers
   void pushScope() { symbolTable.push({}); }
   void popScope() { symbolTable.pop(); }
-  Value* castToBoolean(Value* value);
+  Value *castToBoolean(Value *value);
   Value *findValue(const string &name);
+  Value *codegenIdentifierAddress(Identifier *id);
+  Value *codegenLvalue(AssignableExpression *expr);
+  void printSymbolTable();
 };

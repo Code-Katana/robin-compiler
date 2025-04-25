@@ -24,7 +24,7 @@ Type *IRGenerator::getLLVMType(SymbolType type, int dim)
   case SymbolType::Boolean:
     return Type::getInt1Ty(context);
   case SymbolType::String:
-    return Type::getInt8Ty(context);
+    return PointerType::getUnqual(Type::getInt8Ty(context));
   case SymbolType::Void:
     return Type::getVoidTy(context);
   default:
@@ -55,10 +55,15 @@ void IRGenerator::generate(Source *source, const string &filename)
   outfile.flush();
 
   outs() << "LLVM IR written to " << filename << "\n";
+  IRGenerator::printSymbolTable();
 }
 
 Value *IRGenerator::codegen(AstNode *node)
 {
+  if (auto decl = dynamic_cast<VariableDeclaration *>(node))
+    return codegenVariableDeclaration(decl);
+  if (auto init = dynamic_cast<VariableInitialization *>(node))
+    return codegenVariableInitialization(init);
   if (auto expr = dynamic_cast<Expression *>(node))
     return codegenExpression(expr);
   if (auto stmt = dynamic_cast<Statement *>(node))
@@ -68,6 +73,7 @@ Value *IRGenerator::codegen(AstNode *node)
 
 Value *IRGenerator::codegenProgram(ProgramDefinition *program)
 {
+
   // Create main function
   FunctionType *funcType = FunctionType::get(Type::getInt32Ty(context), false);
   Function *mainFunc = Function::Create(funcType, Function::ExternalLinkage, "main", module.get());
@@ -81,7 +87,7 @@ Value *IRGenerator::codegenProgram(ProgramDefinition *program)
 
     codegenGlobalVariable(global);
   }
-
+  pushScope();
   // Process program body
   for (auto stmt : program->body)
   {
@@ -89,6 +95,7 @@ Value *IRGenerator::codegenProgram(ProgramDefinition *program)
   }
 
   builder.CreateRet(ConstantInt::get(context, APInt(32, 0)));
+  popScope();
   return mainFunc;
 }
 
@@ -233,10 +240,7 @@ Value *IRGenerator::codegenVariableInitialization(VariableInitialization *init)
 }
 Value *IRGenerator::codegenStatement(Statement *stmt)
 {
-  if (auto varDecl = dynamic_cast<VariableDeclaration *>(stmt))
-  {
-    return codegenVariableDeclaration(varDecl);
-  }
+
   if (auto assign = dynamic_cast<AssignmentExpression *>(stmt))
   {
     return codegenAssignment(assign);
@@ -412,23 +416,37 @@ Value *IRGenerator::codegenReturnStatement(ReturnStatement *retStmt)
 
 Value *IRGenerator::codegenWriteStatement(WriteStatement *write)
 {
-  FunctionType *printfType = FunctionType::get(
-      Type::getInt32Ty(context),
-      {PointerType::get(Type::getInt8Ty(context), 0)},
-      true);
-  Function *printfFunc = Function::Create(
-      printfType,
-      Function::ExternalLinkage,
-      "printf",
-      module.get());
+  // Check if printf is already declared
+  Function *printfFunc = module->getFunction("printf");
+
+  // Declare printf if it doesn't exist yet
+  if (!printfFunc)
+  {
+    FunctionType *printfType = FunctionType::get(
+        Type::getInt32Ty(context),
+        {PointerType::getUnqual(context)}, // i8* for format string
+        true);                             // variadic function
+
+    printfFunc = Function::Create(
+        printfType,
+        Function::ExternalLinkage,
+        "printf",
+        module.get());
+  }
 
   std::vector<Value *> args;
   std::string formatStr;
 
   for (auto expr : write->args)
   {
+    Type *ty;
     Value *val = codegenExpression(expr);
-    Type *ty = val->getType();
+    if (auto global = dyn_cast<GlobalVariable>(val))
+      ty = global->getInitializer()->getType();
+    else if (auto local = dyn_cast<AllocaInst>(val))
+      ty = local->getAllocatedType();
+    else
+      ty = val->getType();
 
     if (ty->isIntegerTy(32))
     {
@@ -438,7 +456,7 @@ Value *IRGenerator::codegenWriteStatement(WriteStatement *write)
     {
       formatStr += "%f ";
     }
-    else if (ty == Type::getInt1Ty(context))
+    else if (ty->isIntegerTy(1))
     {
       formatStr += "%d ";
       val = builder.CreateZExt(val, Type::getInt32Ty(context));
@@ -454,21 +472,24 @@ Value *IRGenerator::codegenWriteStatement(WriteStatement *write)
     }
     args.push_back(val);
   }
-  formatStr += "\n";
 
-  Constant *formatConst = ConstantDataArray::getString(context, formatStr);
+  formatStr += "\n\0"; // Explicit newline + null terminator
+
+  // Create format string constant
+  Constant *formatConst = ConstantDataArray::getString(context, formatStr, true);
   GlobalVariable *fmtVar = new GlobalVariable(
       *module,
       formatConst->getType(),
       true,
       GlobalValue::PrivateLinkage,
       formatConst,
-      "fmt.str");
+      "printf.fmt");
 
-  Value *fmtPtr = builder.CreateConstInBoundsGEP2_32(
-      formatConst->getType(),
+  // Get pointer to format string
+  Value *fmtPtr = builder.CreateInBoundsGEP(
+      fmtVar->getValueType(),
       fmtVar,
-      0, 0);
+      {builder.getInt64(0), builder.getInt64(0)});
 
   args.insert(args.begin(), fmtPtr);
   return builder.CreateCall(printfFunc, args);
@@ -476,42 +497,89 @@ Value *IRGenerator::codegenWriteStatement(WriteStatement *write)
 
 Value *IRGenerator::codegenReadStatement(ReadStatement *read)
 {
-  FunctionType *scanfType = FunctionType::get(
-      Type::getInt32Ty(context),
-      {PointerType::get(Type::getInt8Ty(context), 0)},
-      true);
-  Function *scanfFunc = Function::Create(
-      scanfType,
-      Function::ExternalLinkage,
-      "scanf",
-      module.get());
+  Function *scanfFunc = module->getFunction("scanf");
+  if (!scanfFunc)
+  {
+    // Declare scanf if not found
+    FunctionType *scanfType = FunctionType::get(
+        Type::getInt32Ty(context),
+        {PointerType::getUnqual(context)}, // i8* for format string
+        true);                             // variadic function
+
+    scanfFunc = Function::Create(
+        scanfType,
+        Function::ExternalLinkage,
+        "scanf",
+        module.get());
+  }
 
   std::vector<Value *> args;
   std::string formatStr;
 
   for (auto var : read->variables)
   {
-    auto id = dynamic_cast<Identifier *>(var);
-    Value *addr = codegenIdentifier(id);
-    Type *ty = cast<AllocaInst>(addr)->getAllocatedType();
-
-    if (ty->isIntegerTy(32))
+    Type *baseType;
+    // Get address of the variable
+    Value *addr = codegenIdentifierAddress(dynamic_cast<Identifier *>(var));
+    if (!addr)
     {
-      formatStr += "%d";
+      module->getContext().emitError("Invalid variable in read statement");
+      return nullptr;
     }
-    else if (ty->isFloatTy())
+    if (auto global = dyn_cast<GlobalVariable>(addr))
     {
-      formatStr += "%f";
+      // builder.CreateLoad(global->getInitializer()->getType(), global);
+      baseType = global->getInitializer()->getType();
+    }
+    else if (auto local = dyn_cast<AllocaInst>(addr))
+    {
+      // builder.CreateLoad(local->getAllocatedType(), local);
+      baseType = local->getAllocatedType();
+    }
+    // Now: instead of asking getPointerElementType()
+    // just check the address TYPE directly
+
+    if (addr->getType()->isPointerTy())
+    {
+      // Assume it is pointer to int32
+      // Type *baseType = Type::getFloatTy(context);
+
+      if (baseType->isIntegerTy(32))
+      {
+        formatStr += "%d";
+      }
+      else if (baseType->isFloatTy())
+      {
+        formatStr += "%f";
+      }
+      else if (baseType->isIntegerTy(1))
+      {
+        formatStr += "%d";
+        addr = builder.CreateBitCast(addr, PointerType::get(Type::getInt32Ty(context), 0));
+      }
+      else
+      {
+        module->getContext().emitError("Unsupported type in read statement");
+        return nullptr;
+      }
+      
     }
     else
     {
-      module->getContext().emitError("Unsupported read type");
+      module->getContext().emitError("Expected pointer type");
       return nullptr;
     }
+
     formatStr += " ";
     args.push_back(addr);
   }
 
+  // Finalize format string
+  if (!formatStr.empty())
+    formatStr.pop_back();
+  formatStr += "\n";
+
+  // Create global format string
   Constant *formatConst = ConstantDataArray::getString(context, formatStr);
   GlobalVariable *fmtVar = new GlobalVariable(
       *module,
@@ -519,18 +587,29 @@ Value *IRGenerator::codegenReadStatement(ReadStatement *read)
       true,
       GlobalValue::PrivateLinkage,
       formatConst,
-      "scan.fmt");
+      "readfmt");
 
-  Value *fmtPtr = builder.CreateConstInBoundsGEP2_32(
+  Value *fmtPtr = builder.CreateInBoundsGEP(
       formatConst->getType(),
       fmtVar,
-      0, 0);
+      {ConstantInt::get(Type::getInt32Ty(context), 0), ConstantInt::get(Type::getInt32Ty(context), 0)});
 
   args.insert(args.begin(), fmtPtr);
   return builder.CreateCall(scanfFunc, args);
 }
+
+Value *IRGenerator::codegenVariableDefinition(VariableDefinition *def)
+{
+  if (auto decl = dynamic_cast<VariableDeclaration *>(def))
+    return codegenVariableDeclaration(decl);
+  if (auto init = dynamic_cast<VariableInitialization *>(def))
+    return codegenVariableInitialization(init);
+  return nullptr;
+}
+
 Value *IRGenerator::codegenExpression(Expression *expr)
 {
+  
   if (auto lit = dynamic_cast<Literal *>(expr))
     return codegenLiteral(lit);
   if (auto id = dynamic_cast<Identifier *>(expr))
@@ -543,10 +622,14 @@ Value *IRGenerator::codegenExpression(Expression *expr)
     return codegenAdditiveExpr(add);
   if (auto mult = dynamic_cast<MultiplicativeExpression *>(expr))
     return codegenMultiplicativeExpr(mult);
-
   if (auto assign = dynamic_cast<AssignmentExpression *>(expr))
   {
     return codegenAssignment(assign);
+  }
+  //unary
+  if (auto unary = dynamic_cast<UnaryExpression *>(expr))
+  {
+    return codegenUnaryExpr(unary);
   }
   // boolean operation
   if (auto OR = dynamic_cast<OrExpression *>(expr))
@@ -575,21 +658,40 @@ Value *IRGenerator::codegenVariableDeclaration(VariableDeclaration *decl)
 
 Value *IRGenerator::codegenAssignment(AssignmentExpression *assign)
 {
-  Value *target = codegen(assign->assignee);
-  Value *value = codegenExpression(assign->value);
-
+  Value *target = codegenIdentifierAddress(dynamic_cast<Identifier *>(assign->assignee));
+  Value *value = codegen(assign->value);
   if (!target || !value)
     return nullptr;
+  if (auto global = dyn_cast<GlobalVariable>(value))
+  {
 
-  return builder.CreateStore(value, target);
+    return builder.CreateStore(builder.CreateLoad(global->getValueType(), global), target);
+  }
+  else if (auto local = dyn_cast<AllocaInst>(value))
+  {
+
+    return builder.CreateStore(builder.CreateLoad(local->getAllocatedType(), local), target);
+  }
+  else
+    return builder.CreateStore(value, target);
 }
 Value *IRGenerator::codegenIdentifier(Identifier *id)
 {
   Value *val = findValue(id->name);
   if (!val)
     return nullptr;
-  return builder.CreateLoad(val->getType(), val);
-  // codegenLiteral(dynamic_cast<Literal *>(id));
+  if (auto global = dyn_cast<GlobalVariable>(val))
+  {
+    //builder.CreateLoad(global->getValueType(), global, id->name);
+    return builder.CreateLoad(global->getValueType(), global, id->name);
+  }
+  else if (auto local = dyn_cast<AllocaInst>(val))
+  {
+    //builder.CreateLoad(local->getAllocatedType(), local, id->name);
+    return builder.CreateLoad(local->getAllocatedType(), local, id->name);
+  }
+  return builder.CreateLoad(val->getType(), val, id->name);;
+  
 }
 
 Value *IRGenerator::codegenLiteral(Literal *lit)
@@ -606,6 +708,31 @@ Value *IRGenerator::codegenLiteral(Literal *lit)
   {
     return ConstantInt::get(context, APInt(1, boolLit->value));
   }
+  if (auto stringLit = dynamic_cast<::StringLiteral *>(lit))
+  {
+    // Create global string constant
+    Constant *strConst = ConstantDataArray::getString(
+        context,
+        StringRef(stringLit->value.c_str()),
+        true // Add null terminator
+    );
+
+    GlobalVariable *gvar = new GlobalVariable(
+        *module,
+        strConst->getType(),
+        true, // isConstant
+        GlobalValue::PrivateLinkage,
+        strConst,
+        ".str");
+
+    // Cast to i8* (char pointer) for string usage
+    return builder.CreateInBoundsGEP(
+        strConst->getType(),
+        gvar,
+        {builder.getInt32(0), builder.getInt32(0)});
+  }
+
+  module->getContext().emitError("Unknown literal type");
   return nullptr;
 }
 
@@ -627,117 +754,316 @@ Value *IRGenerator::codegenAndExpr(AndExpression *expr)
   return builder.CreateAnd(L, R, "andtmp");
 }
 
-Value *IRGenerator::codegenRelationalExpr(RelationalExpression *expr)
-{
+Value *IRGenerator::codegenRelationalExpr(RelationalExpression *expr) {
   Value *L = codegenExpression(expr->left);
   Value *R = codegenExpression(expr->right);
 
   if (!L || !R)
     return nullptr;
 
-  // Ensure types are compatible
-  // if (L->getType() != R->getType()) {
-  //     // Try to cast R to L's type
-  //     R = castValue(R, L->getType());
-  //     if (!R) return nullptr;
-  // }
+  Type *LTy = L->getType();
+  Type *RTy = R->getType();
 
-  // Map operator to comparison predicate
-  std::map<std::string, CmpInst::Predicate> intPredicates = {
-      {"<", CmpInst::ICMP_SLT},
-      {"<=", CmpInst::ICMP_SLE},
-      {">", CmpInst::ICMP_SGT},
-      {">=", CmpInst::ICMP_SGE}};
-
-  std::map<std::string, CmpInst::Predicate> floatPredicates = {
-      {"<", CmpInst::FCMP_OLT},
-      {"<=", CmpInst::FCMP_OLE},
-      {">", CmpInst::FCMP_OGT},
-      {">=", CmpInst::FCMP_OGE}};
-
-  Type *ty = L->getType();
-
-  if (ty->isIntegerTy())
-  {
-    auto it = intPredicates.find(expr->optr);
-    if (it != intPredicates.end())
-    {
-      return builder.CreateICmp(it->second, L, R, "cmptmp");
-    }
-  }
-  else if (ty->isFloatingPointTy())
-  {
-    auto it = floatPredicates.find(expr->optr);
-    if (it != floatPredicates.end())
-    {
-      return builder.CreateFCmp(it->second, L, R, "cmptmp");
+  // Type conversion: match types
+  if (LTy != RTy) {
+    if (LTy->isFloatingPointTy() && RTy->isIntegerTy()) {
+      R = builder.CreateSIToFP(R, LTy, "int2fp");
+      RTy = LTy;
+    } else if (LTy->isIntegerTy() && RTy->isFloatingPointTy()) {
+      L = builder.CreateSIToFP(L, RTy, "int2fp");
+      LTy = RTy;
+    } else {
+      module->getContext().emitError("Incompatible types in relational expression");
+      return nullptr;
     }
   }
 
-  // Error handling for unsupported types/operators
-  module->getContext().emitError("Invalid relational operator or types");
+  if (LTy->isIntegerTy()) {
+    if (expr->optr == "<") return builder.CreateICmpSLT(L, R, "cmptmp");
+    if (expr->optr == "<=") return builder.CreateICmpSLE(L, R, "cmptmp");
+    if (expr->optr == ">") return builder.CreateICmpSGT(L, R, "cmptmp");
+    if (expr->optr == ">=") return builder.CreateICmpSGE(L, R, "cmptmp");
+  } else if (LTy->isFloatingPointTy()) {
+    if (expr->optr == "<") return builder.CreateFCmpOLT(L, R, "cmptmp");
+    if (expr->optr == "<=") return builder.CreateFCmpOLE(L, R, "cmptmp");
+    if (expr->optr == ">") return builder.CreateFCmpOGT(L, R, "cmptmp");
+    if (expr->optr == ">=") return builder.CreateFCmpOGE(L, R, "cmptmp");
+  }
+
+  module->getContext().emitError("Invalid relational operator or operand types");
   return nullptr;
 }
-Value *IRGenerator::codegenEqualityExpr(EqualityExpression *expr)
-{
+Value *IRGenerator::codegenEqualityExpr(EqualityExpression *expr) {
   Value *L = codegen(expr->left);
   Value *R = codegen(expr->right);
   if (!L || !R)
     return nullptr;
 
-  if (expr->optr == "==")
-  {
-    return builder.CreateICmpEQ(L, R, "eqtmp");
+  Type *LTy = L->getType();
+  Type *RTy = R->getType();
+
+  if (LTy != RTy) {
+    if (LTy->isFloatingPointTy() && RTy->isIntegerTy()) {
+      R = builder.CreateSIToFP(R, LTy, "int2fp");
+      RTy = LTy;
+    } else if (LTy->isIntegerTy() && RTy->isFloatingPointTy()) {
+      L = builder.CreateSIToFP(L, RTy, "int2fp");
+      LTy = RTy;
+    } else {
+      module->getContext().emitError("Incompatible types in equality expression");
+      return nullptr;
+    }
   }
-  else
-  {
-    return builder.CreateICmpNE(L, R, "netmp");
+
+  if (LTy->isFloatingPointTy()) {
+    if (expr->optr == "==") return builder.CreateFCmpOEQ(L, R, "eqtmp");
+    else return builder.CreateFCmpONE(L, R, "netmp");
+  } else {
+    if (expr->optr == "==") return builder.CreateICmpEQ(L, R, "eqtmp");
+    else return builder.CreateICmpNE(L, R, "netmp");
   }
-  return nullptr;
 }
+
 
 Value *IRGenerator::codegenAdditiveExpr(AdditiveExpression *expr)
 {
-  Value *L = codegen(expr->left);
-  Value *R = codegen(expr->right);
+  Value *L = codegenExpression(expr->left);
+  Value *R = codegenExpression(expr->right);
+  
+  L->getType()->print(llvm::errs());
+  errs() << "\n";
+  R->getType()->print(llvm::errs());
+  errs() << "\n";
   if (!L || !R)
     return nullptr;
-  // todo string +
-  if (expr->optr == "+")
+
+  // Check types to determine which operation to use
+  if (L->getType()->isIntOrPtrTy() && R->getType()->isIntOrPtrTy())
   {
-    if (L->getType()->isIntegerTy() || L->getType()->isFloatTy())
+    // Integer addition/subtraction
+    if (expr->optr == "+")
+    {
       return builder.CreateAdd(L, R, "addtmp");
-    return builder.CreateFAdd(L, R, "addtmp");
+    }
+    else
+    { // "-"
+      return builder.CreateSub(L, R, "subtmp");
+    }
+  }
+  else if (L->getType()->isFloatTy() && R->getType()->isFloatTy())
+  {
+    // Float addition/subtraction
+    if (expr->optr == "+")
+    {
+      return builder.CreateFAdd(L, R, "faddtmp");
+    }
+    else
+    { // "-"
+      return builder.CreateFSub(L, R, "fsubtmp");
+    }
   }
   else
   {
-    if (L->getType()->isIntegerTy() || L->getType()->isFloatTy())
-      return builder.CreateSub(L, R, "subtmp");
-    return builder.CreateFSub(L, R, "subtmp");
+    // Handle type conversion if needed
+    if (L->getType()->isIntegerTy() && R->getType()->isFloatTy())
+    {
+      L = builder.CreateSIToFP(L, Type::getFloatTy(context), "int2fp");
+    }
+    else if (L->getType()->isFloatTy() && R->getType()->isIntegerTy())
+    {
+      R = builder.CreateSIToFP(R, Type::getFloatTy(context), "int2fp");
+    }
+
+    // Now both should be float
+    if (expr->optr == "+")
+    {
+      return builder.CreateFAdd(L, R, "faddtmp");
+    }
+    else
+    { // "-"
+      return builder.CreateFSub(L, R, "fsubtmp");
+    }
   }
 }
 
 Value *IRGenerator::codegenMultiplicativeExpr(MultiplicativeExpression *expr)
 {
-  Value *L = codegen(expr->left);
-  Value *R = codegen(expr->right);
+  Value *L = codegenExpression(expr->left);
+  Value *R = codegenExpression(expr->right);
+  L->getType()->print(llvm::errs());
+  errs() << "\n";
+  R->getType()->print(llvm::errs());
+  errs() << "\n";
+  
   if (!L || !R)
     return nullptr;
-  // todo %
-  if (expr->optr == "*")
+
+  // Check types to determine which operation to use
+  if (L->getType()->isIntegerTy() && R->getType()->isIntegerTy())
   {
-    if (L->getType()->isIntegerTy())
+    // Integer multiplication/division
+    if (expr->optr == "*")
+    {
       return builder.CreateMul(L, R, "multmp");
-    return builder.CreateFMul(L, R, "multmp");
+    }
+    else if (expr->optr == "/")
+    {
+      return builder.CreateSDiv(L, R, "sdivtmp"); // Signed division
+    }
+    else if (expr->optr == "%")
+    {
+      return builder.CreateSRem(L, R, "sremtmp"); // Remainder
+    }
+  }
+  else if (L->getType()->isFloatTy() && R->getType()->isFloatTy())
+  {
+    // Float multiplication/division
+    if (expr->optr == "*")
+    {
+      return builder.CreateFMul(L, R, "fmultmp");
+    }
+    else if (expr->optr == "/")
+    {
+      return builder.CreateFDiv(L, R, "fdivtmp");
+    }
+    else if (expr->optr == "%")
+    {
+      return builder.CreateFRem(L, R, "fremtmp"); // Float remainder
+    }
   }
   else
   {
-    if (L->getType()->isIntegerTy())
-      return builder.CreateSDiv(L, R, "divtmp");
-    return builder.CreateFDiv(L, R, "divtmp");
+    // Handle type conversion
+    if (L->getType()->isIntegerTy() && R->getType()->isFloatTy())
+    {
+      L = builder.CreateSIToFP(L, Type::getFloatTy(context), "int2fp");
+    }
+    else if (L->getType()->isFloatTy() && R->getType()->isIntegerTy())
+    {
+      R = builder.CreateSIToFP(R, Type::getFloatTy(context), "int2fp");
+    }
+
+    // Now both should be float
+    if (expr->optr == "*")
+    {
+      return builder.CreateFMul(L, R, "fmultmp");
+    }
+    else if (expr->optr == "/")
+    {
+      return builder.CreateFDiv(L, R, "fdivtmp");
+    }
+    else if (expr->optr == "%")
+    {
+      return builder.CreateFRem(L, R, "fremtmp"); // Float remainder
+    }
   }
+
+  // Shouldn't reach here, but just in case
+  module->getContext().emitError("Unsupported multiplicative operator: " + expr->optr);
+  return nullptr;
+}
+Value *IRGenerator::codegenUnaryExpr(UnaryExpression *expr) {
+  Value *operand = codegenExpression(expr->operand);
+  Type *ty =operand->getType();
+  if (!operand) return nullptr;
+  if (auto global = dyn_cast<GlobalVariable>(operand))
+  {
+    // builder.CreateLoad(global->getInitializer()->getType(), global);
+    ty = global->getInitializer()->getType();
+  }
+  else if (auto local = dyn_cast<AllocaInst>(operand))
+  {
+    // builder.CreateLoad(local->getAllocatedType(), local);
+    ty = local->getAllocatedType();
+  }
+
+  // 1. NOT Operator
+  if (expr->optr == "NOT()") {
+    if (!ty->isIntegerTy(1)) {
+      operand = builder.CreateICmpNE(operand, ConstantInt::get(ty, 0), "boolcast");
+    }
+    return builder.CreateNot(operand, "nottmp");
+  }
+// 2. Boolean Conversion (?)
+if (expr->optr == "?") {
+  if (ty->isIntegerTy()) {
+    return builder.CreateICmpNE(operand, ConstantInt::get(ty, 0), "boolconv");
+  } else if (ty->isFloatingPointTy()) {
+    return builder.CreateFCmpONE(operand, ConstantFP::get(ty, 0.0), "boolconv");
+  } else if (ty->isPointerTy()) {
+    return builder.CreateICmpNE(operand, ConstantPointerNull::get(cast<PointerType>(ty)), "ptrbool");
+  }
+  module->getContext().emitError("Invalid type for ? operator");
+  return nullptr;
 }
 
+  // 3. Array Size (#)
+  if (expr->optr == "#") {
+    if (!ty->isPointerTy()) {
+      module->getContext().emitError("# requires array pointer");
+      return nullptr;
+    }
+    Value *sizePtr = builder.CreateStructGEP(nullptr, operand, 0);
+    return builder.CreateLoad(builder.getInt32Ty(), sizePtr, "arraysize");
+  }
+
+  // 4. Increment/Decrement (++/--)
+  if (expr->optr == "++" || expr->optr == "--") {
+    Value *addr = codegenIdentifierAddress(dynamic_cast<Identifier *>(expr->operand));
+    if (!addr) return nullptr;
+    //Type *valTy = cast<PointerType>(addr->getType())->getNonOpaquePointerElementType();
+    Value *current = builder.CreateLoad(ty, addr);
+    Value *one = ty->isIntegerTy() ? ConstantInt::get(ty, 1) : ConstantFP::get(ty, 1.0);
+    Value *result = (expr->optr == "++") ? 
+                    (ty->isIntegerTy() ? builder.CreateAdd(current, one) : builder.CreateFAdd(current, one)) :
+                    (ty->isIntegerTy() ? builder.CreateSub(current, one) : builder.CreateFSub(current, one));
+    builder.CreateStore(result, addr);
+    return expr->postfix ? current : result;
+  }
+
+
+  // 5. Rounding/Boolean to Int (@)
+  if (expr->optr == "@") {
+    if (ty->isIntegerTy(1)) {
+      return builder.CreateZExt(operand, builder.getInt32Ty(), "booltoint");
+    } else if (ty->isFloatingPointTy()) {
+      FunctionCallee roundFunc = Intrinsic::getOrInsertDeclaration(module.get(), Intrinsic::round, {ty});
+    return builder.CreateCall(roundFunc, {operand}, "round");
+    }
+    module->getContext().emitError("Invalid type for @ operator");
+    return nullptr;
+  }
+
+ // 6. Negation (-)
+ if (expr->optr == "-") {
+  if (ty->isIntegerTy()) {
+    return builder.CreateNeg(operand, "negtmp");
+  } else if (ty->isFloatingPointTy()) {
+    return builder.CreateFNeg(operand, "fnegtmp");
+  }
+  module->getContext().emitError("Invalid type for - operator");
+  return nullptr;
+}
+
+  // 7. Stringify ($)
+  if (expr->optr == "$") {
+    FunctionCallee convertFunc;
+    if (ty->isIntegerTy()) {
+      convertFunc = module->getOrInsertFunction("intToString", FunctionType::get(PointerType::getUnqual(Type::getInt8Ty(context)), {ty}, false));
+    } else if (ty->isFloatingPointTy()) {
+      convertFunc = module->getOrInsertFunction("floatToString", FunctionType::get(PointerType::getUnqual(Type::getInt8Ty(context)), {ty}, false));
+    } else if (ty->isIntegerTy(1)) {
+      convertFunc = module->getOrInsertFunction("boolToString", FunctionType::get(PointerType::getUnqual(Type::getInt8Ty(context)), {ty}, false));
+    } else {
+      module->getContext().emitError("Cannot stringify type");
+      return nullptr;
+    }
+    return builder.CreateCall(convertFunc, {operand}, "stringify");
+  }
+
+  module->getContext().emitError("Unknown unary operator");
+  return nullptr;
+}
 Value *IRGenerator::codegenCall(CallFunctionExpression *call)
 {
   // Implement function call logic (lookup function, prepare args, create call instruction)
@@ -768,4 +1094,48 @@ Value *IRGenerator::castToBoolean(Value *value)
       value,
       ConstantInt::get(value->getType(), 0),
       "castbool");
+}
+Value *IRGenerator::codegenIdentifierAddress(Identifier *id)
+{
+  // Directly return the pointer (for assignments/scanf)
+  Value *addr = findValue(id->name);
+
+  if (!addr)
+  {
+    module->getContext().emitError("Undefined variable: " + id->name);
+    return nullptr;
+  }
+
+  if (!addr->getType()->isPointerTy())
+  {
+    module->getContext().emitError("Variable is not addressable");
+    return nullptr;
+  }
+
+  return addr;
+}
+void IRGenerator::printSymbolTable()
+{
+  // Iterate over the symbol table stack
+  for (size_t i = 0; i < symbolTable.size(); ++i)
+  {
+    llvm::errs() << "Scope " << i << ":\n";
+
+    // Access the map at this level of the stack
+    auto &scope = symbolTable.top(); // Get the current map
+
+    // Iterate over the map (variables in this scope)
+    for (auto it = scope.begin(); it != scope.end(); ++it)
+    {
+      const std::string &name = it->first;
+      Value *value = it->second;
+
+      llvm::errs() << "  Variable: " << name << " -> ";
+      value->print(llvm::errs()); // Print the LLVM value (alloca, constant, etc.)
+      llvm::errs() << "\n";
+    }
+
+    // Pop the current scope from the stack
+    symbolTable.pop();
+  }
 }

@@ -12,12 +12,20 @@
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Value.h"
 
+#include <unordered_map>
+#include <string>
+#include <memory>
 #include <stack>
 #include <map>
 
 using namespace std;
 using namespace llvm;
 
+struct SymbolEntry
+{
+  llvm::Type *llvmType;   // The LLVM type of the variable
+  llvm::Value *llvmValue; // The LLVM value (alloca, global, etc.)
+};
 class IRGenerator
 {
 public:
@@ -30,21 +38,19 @@ private:
   static LLVMContext context;
   unique_ptr<Module> module;
   IRBuilder<> builder;
-  stack<map<string, Value *>> symbolTable;
-
-  void codegenGlobalVariable(VariableDefinition *dif);
+  stack<unordered_map<string, SymbolEntry>> symbolTable;
 
   Type *getLLVMType(SymbolType type, int dim = 0);
   Value *codegen(AstNode *node);
   Value *codegenProgram(ProgramDefinition *program);
   Value *codegenFunction(FunctionDefinition *func);
-  
 
-  //def
+  // def
+  void codegenGlobalVariable(VariableDefinition *dif);
   Value *codegenVariableDefinition(VariableDefinition *def);
   Value *codegenVariableDeclaration(VariableDeclaration *decl);
   Value *codegenVariableInitialization(VariableInitialization *init);
-  //expr
+  // expr
   Value *codegenExpression(Expression *expr);
   Value *codegenIdentifier(Identifier *id);
   Value *codegenLiteral(Literal *lit);
@@ -55,7 +61,7 @@ private:
   Value *codegenAdditiveExpr(AdditiveExpression *expr);
   Value *codegenMultiplicativeExpr(MultiplicativeExpression *expr);
   Value *codegenUnaryExpr(UnaryExpression *expr);
-  //stat
+  // stat
   Value *codegenStatement(Statement *stmt);
   Value *codegenAssignment(AssignmentExpression *assign);
   Value *codegenCall(CallFunctionExpression *call);
@@ -65,12 +71,17 @@ private:
   Value *codegenReturnStatement(ReturnStatement *retStmt);
   Value *codegenWriteStatement(WriteStatement *write);
   Value *codegenReadStatement(ReadStatement *read);
-  //helpers
+  Value *codegenStopStatement(StopStatement *stmt);
+  Value *codegenSkipStatement(SkipStatement *stmt);
+  // helpers
   void pushScope() { symbolTable.push({}); }
   void popScope() { symbolTable.pop(); }
+  void printSymbolTable();
+
   Value *castToBoolean(Value *value);
   Value *findValue(const string &name);
   Value *codegenIdentifierAddress(Identifier *id);
   Value *codegenLvalue(AssignableExpression *expr);
-  void printSymbolTable();
+
+  optional<SymbolEntry> findSymbol(const std::string &name);
 };

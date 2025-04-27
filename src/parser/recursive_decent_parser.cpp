@@ -2,6 +2,21 @@
 
 RecursiveDecentParser::RecursiveDecentParser(ScannerBase *sc) : ParserBase(sc) {}
 
+bool ParserBase::match(TokenType type)
+{
+  previous_token = current_token;
+
+  if (current_token.type != type)
+  {
+    syntax_error("expecting " + Token::get_token_name(type) +
+                 " instead of " + Token::get_token_name(current_token.type));
+    return false;
+  }
+
+  current_token = sc->get_token();
+  return true;
+}
+
 AstNode *RecursiveDecentParser::parse_ast()
 {
   AstNode *ast_tree = parse_source();

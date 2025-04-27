@@ -50,7 +50,9 @@ enum class AstNodeType
   FloatLiteral,
   StringLiteral,
   BooleanLiteral,
-  ArrayLiteral
+  ArrayLiteral,
+  // Error
+  ErrorNode
 };
 
 // Base Nodes Implementation
@@ -74,6 +76,15 @@ public:
 
 private:
   static map<AstNodeType, string> NodeNames;
+};
+
+class ErrorNode : public AstNode
+{
+public:
+  string message;
+
+  ErrorNode();
+  ErrorNode(const string &message,int sl, int el, int s, int e);
 };
 
 class Statement : public AstNode

@@ -47,6 +47,8 @@ map<AstNodeType, string> AstNode::NodeNames = {
     {AstNodeType::StringLiteral, "StringLiteral"},
     {AstNodeType::BooleanLiteral, "BooleanLiteral"},
     {AstNodeType::ArrayLiteral, "ArrayLiteral"},
+    // Error
+    {AstNodeType::ErrorNode, "ErrorNode"},
 };
 
 map<TokenType, string> AstNode::DataTypes = {
@@ -74,6 +76,13 @@ string AstNode::get_node_name(const AstNode *node)
   }
 
   return NodeNames[node->type];
+}
+// Error Node Implementation
+ErrorNode::ErrorNode() {}
+
+ErrorNode::ErrorNode(const string &message, int sl, int el, int s, int e) : AstNode(sl, el, s, e), message(message)
+{
+  type = AstNodeType::ErrorNode;
 }
 
 // Basic Nodes Implementation

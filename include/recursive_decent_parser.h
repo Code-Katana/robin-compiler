@@ -57,4 +57,6 @@ private:
   Expression *parse_call_expr(Identifier *id);
   Expression *parse_index_expr();
   Expression *parse_primary_expr();
+
+  bool match(TokenType ty);
 };

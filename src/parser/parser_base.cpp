@@ -5,6 +5,7 @@ ParserBase::ParserBase(ScannerBase *scanner)
   sc = scanner;
   current_token = sc->get_token();
   previous_token = Token();
+  has_error = false;
 }
 
 void ParserBase::reset_parser()
@@ -13,15 +14,15 @@ void ParserBase::reset_parser()
   current_token = sc->get_token();
   previous_token = Token();
 }
-
-void ParserBase::syntax_error(string message)
+ErrorNode *ParserBase::syntax_error(string message)
 {
-  error_node.message =  message;
-  current_token = Token("Φ", TokenType::END_OF_FILE, 0, 0, 0);
-  
-  //cerr << message << " at line " << previous_token.line << endl;
- // system("pause");
-  //throw runtime_error(message);
+  if (!has_error)
+  {
+    error_node = new ErrorNode(message, current_token.line, previous_token.line, current_token.start, previous_token.end);
+    has_error = true;
+  }
+
+  return nullptr;
 }
 
 bool ParserBase::lookahead(TokenType type)

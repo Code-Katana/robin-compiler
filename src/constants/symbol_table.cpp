@@ -2,9 +2,8 @@
 
 #include <set>
 
-SymbolTable::SymbolTable(int initialSize)
+SymbolTable::SymbolTable()
 {
-  hashtable.resize(initialSize);
 }
 
 vector<pair<SymbolType, int>> SymbolTable::get_parameters_type(vector<VariableDefinition *> params)
@@ -19,7 +18,7 @@ vector<pair<SymbolType, int>> SymbolTable::get_parameters_type(vector<VariableDe
       VariableInitialization *def = (VariableInitialization *)param->def;
       if (declared_names.find(def->name->name) != declared_names.end())
       {
-        // SymbolTable::semantic_error("Error: Variable '" + def->name->name + "' is already defined.");
+
         return {{SymbolType::Undefined, 0}};
       }
       else
@@ -49,30 +48,13 @@ vector<pair<SymbolType, int>> SymbolTable::get_parameters_type(vector<VariableDe
   return params_type;
 }
 
-int SymbolTable::hash(string word)
-{
-  int sum = 0;
-  for (char ch : word)
-  {
-    sum += int(ch);
-  }
-  return sum % hashtable.size();
-}
-
 bool SymbolTable::insert(Symbol *s)
 {
-  int index = hash(s->name);
-
-  for (Symbol *symbol : hashtable[index])
+  if (hashtable.find(s->name) != hashtable.end())
   {
-    if (symbol->name == s->name)
-    {
-      // semantic_error("Semantic error: Symbol '" + s->name + "' already exists.");
-      return false;
-    }
+    return false;
   }
-
-  hashtable[index].push_back(s);
+  hashtable[s->name] = s;
   return true;
 }
 
@@ -86,128 +68,82 @@ void SymbolTable::insert_vars_list(vector<VariableSymbol *> vars)
 
 bool SymbolTable::is_exist(string s)
 {
-  int index = hash(s);
-
-  for (Symbol *symbol : hashtable[index])
-  {
-    if (symbol->name == s)
-    {
-      return true;
-    }
-  }
-
-  return false;
+  return hashtable.find(s) != hashtable.end();
 }
 
 bool SymbolTable::is_initialized(string s)
 {
-  int index = hash(s);
-
-  for (Symbol *symbol : hashtable[index])
+  auto it = hashtable.find(s);
+  if (it != hashtable.end())
   {
-    if (static_cast<VariableSymbol *>(symbol))
-    {
-      VariableSymbol *varSymbol = static_cast<VariableSymbol *>(symbol);
-      if (varSymbol->name == s)
-      {
-        return varSymbol->is_initialized;
-      }
-    }
+    VariableSymbol *var = static_cast<VariableSymbol *>(it->second);
+    if (var)
+      return var->is_initialized;
   }
-
-  return NULL;
+  return false;
 }
 
 void SymbolTable::set_initialized(string s)
 {
-  int index = hash(s);
-
-  for (Symbol *symbol : hashtable[index])
+  auto it = hashtable.find(s);
+  if (it != hashtable.end())
   {
-    if (static_cast<VariableSymbol *>(symbol))
-    {
-      VariableSymbol *varSymbol = static_cast<VariableSymbol *>(symbol);
-      if (varSymbol->name == s)
-      {
-        varSymbol->is_initialized = true;
-      }
-    }
+    VariableSymbol *var = static_cast<VariableSymbol *>(it->second);
+    if (var)
+      var->is_initialized = true;
   }
 }
 
 SymbolType SymbolTable::get_type(string s)
 {
-  int index = hash(s);
-
-  for (Symbol *symbol : hashtable[index])
+  auto it = hashtable.find(s);
+  if (it != hashtable.end())
   {
-    if (symbol->name == s)
-    {
-      return symbol->type;
-    }
+    return it->second->type;
   }
-
   return SymbolType::Undefined;
 }
 
 vector<pair<SymbolType, int>> SymbolTable::get_arguments(string func_name)
 {
-  for (int i = 0; i < hashtable.size(); i++)
+  auto it = hashtable.find(func_name);
+  if (it != hashtable.end())
   {
-    for (Symbol *symbol : hashtable[i])
+    if (it->second->kind == SymbolKind::Function)
     {
-      if (symbol->kind == SymbolKind::Function)
-      {
-        FunctionSymbol *func_symbol = static_cast<FunctionSymbol *>(symbol);
-        if (func_symbol && func_symbol->name == func_name)
-        {
-          return func_symbol->parameters;
-        }
-      }
+      FunctionSymbol *func = static_cast<FunctionSymbol *>(it->second);
+      return func->parameters;
     }
   }
-  // semantic_error("Function with name " + func_name + " not found!");
   return {{SymbolType::Undefined, 0}};
 }
 
 Symbol *SymbolTable::retrieve_symbol(string s)
 {
-  int index = hash(s);
-
-  for (Symbol *symbol : hashtable[index])
+  auto it = hashtable.find(s);
+  if (it != hashtable.end())
   {
-    if (symbol->name == s)
-    {
-      return symbol;
-    }
+    return it->second;
   }
-
-  // semantic_error("Semantic error: Symbol '" + s + "' must be Declared.");
   return nullptr;
 }
 
 VariableSymbol *SymbolTable::retrieve_variable(string s)
 {
   Symbol *symbol = retrieve_symbol(s);
-
-  if (symbol->kind == SymbolKind::Variable)
+  if (symbol && symbol->kind == SymbolKind::Variable)
   {
     return static_cast<VariableSymbol *>(symbol);
   }
-
-  // semantic_error("Semantic error: Variable '" + s + "' must be Declared.");
   return nullptr;
 }
 
 FunctionSymbol *SymbolTable::retrieve_function(string s)
 {
   Symbol *symbol = retrieve_symbol(s);
-
-  if (symbol->kind == SymbolKind::Function)
+  if (symbol && symbol->kind == SymbolKind::Function)
   {
     return static_cast<FunctionSymbol *>(symbol);
   }
-
-  // semantic_error("Semantic error: Function '" + s + "' must be Declared.");
   return nullptr;
 }

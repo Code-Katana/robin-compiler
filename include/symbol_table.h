@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <typeinfo>
+#include <unordered_map>
 
 #include "symbol.h"
 
@@ -10,12 +11,10 @@ using namespace std;
 class SymbolTable
 {
 private:
-  vector<vector<Symbol *>> hashtable;
-
-  int hash(string word);
+  unordered_map<string, Symbol *> hashtable;
 
 public:
-  SymbolTable(int initialSize = 10);
+  SymbolTable();
   static vector<pair<SymbolType, int>> get_parameters_type(vector<VariableDefinition *> params);
 
   bool insert(Symbol *s);

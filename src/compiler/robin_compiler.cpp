@@ -20,6 +20,7 @@ RobinCompiler::RobinCompiler(CompilerOptions *options)
     parser = new RecursiveDecentParser(scanner);
     break;
   }
+  semantic = new SemanticAnalyzer(parser);
 }
 
 vector<Token> RobinCompiler::tokenize()

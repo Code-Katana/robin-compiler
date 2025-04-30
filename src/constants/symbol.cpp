@@ -77,3 +77,10 @@ VariableSymbol::VariableSymbol(string n, SymbolType t, bool initialized, int d) 
 {
   is_initialized = initialized;
 }
+
+ErrorSymbol::ErrorSymbol() {}
+
+ErrorSymbol::ErrorSymbol(string n, SymbolType t, string message_error, int d) : Symbol(n, t, SymbolKind::Error, d)
+{
+  message_error = message_error;
+}

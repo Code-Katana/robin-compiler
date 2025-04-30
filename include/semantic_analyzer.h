@@ -16,10 +16,13 @@ class SemanticAnalyzer
 public:
   SemanticAnalyzer(ParserBase *pr);
   void analyze();
+  ErrorSymbol get_error();
 
 private:
   ParserBase *parser;
   stack<SymbolTable *> call_stack;
+  ErrorSymbol error_symbol;
+  bool has_error;
 
   void semantic_source(Source *source);
   void semantic_program(Program *program);
@@ -55,5 +58,5 @@ private:
   SymbolTable *retrieve_scope(string sn);
   void is_array(Expression *Expr);
 
-  void semantic_error(string err);
+  ErrorSymbol semantic_error(string name, SymbolType st, string err);
 };

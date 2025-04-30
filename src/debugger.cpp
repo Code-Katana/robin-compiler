@@ -32,7 +32,6 @@ int Debugger::run()
   RobinCompiler *rc = new RobinCompiler(options);
   vector<Token> tokens = rc->tokenize();
   rc->typecheck();
-  
 
   JSON::debug_file(Debugger::DEBUGGING_FOLDER + "/tokens.json", JSON::stringify_tokens_stream(tokens));
   system("pause");

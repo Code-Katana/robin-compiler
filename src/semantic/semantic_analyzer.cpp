@@ -20,11 +20,11 @@ ErrorSymbol SemanticAnalyzer::get_error()
 void SemanticAnalyzer::analyze()
 {
   Source *source = (Source *)parser->parse_ast();
+  semantic_source(source);
   if (has_error)
   {
     cout << error_symbol.message_error << endl;
   }
-  semantic_source(source);
 }
 
 void SemanticAnalyzer::semantic_source(Source *source)
@@ -472,7 +472,12 @@ SymbolType SemanticAnalyzer::semantic_assign_expr(Expression *assignExpr)
   {
     Identifier *id = static_cast<Identifier *>(assign_Expr->assignee);
     assignee_name = id->name;
-    VariableSymbol *vr = retrieve_scope(assignee_name)->retrieve_variable(assignee_name);
+    SymbolTable *scope = retrieve_scope(assignee_name);
+    if (scope == nullptr)
+    {
+      return SymbolType::Undefined;
+    }
+    VariableSymbol *vr = scope->retrieve_variable(assignee_name);
     if (vr == nullptr)
     {
       semantic_error(assignee_name, SymbolType::Undefined, "Semantic error: Variable '" + assignee_name + "' must be Declared.");
@@ -492,7 +497,12 @@ SymbolType SemanticAnalyzer::semantic_assign_expr(Expression *assignExpr)
     }
     assignee_name = static_cast<Identifier *>(base_expr)->name;
 
-    VariableSymbol *vr = retrieve_scope(assignee_name)->retrieve_variable(assignee_name);
+    SymbolTable *scope = retrieve_scope(assignee_name);
+    if (scope == nullptr)
+    {
+      return SymbolType::Undefined;
+    }
+    VariableSymbol *vr = scope->retrieve_variable(assignee_name);
     if (vr == nullptr)
     {
       semantic_error(assignee_name, SymbolType::Undefined, "Semantic error: Variable '" + assignee_name + "' must be Declared.");
@@ -519,7 +529,13 @@ SymbolType SemanticAnalyzer::semantic_assign_expr(Expression *assignExpr)
   else if (dynamic_cast<Identifier *>(assign_Expr->value))
   {
     Identifier *id = static_cast<Identifier *>(assign_Expr->value);
-    VariableSymbol *vr = retrieve_scope(id->name)->retrieve_variable(id->name);
+    SymbolTable *scope = retrieve_scope(id->name);
+    if (scope == nullptr)
+    {
+      semantic_error(id->name, SymbolType::Undefined, "Semantic error: Variable '" + id->name + "' must be Declared.");
+      return SymbolType::Undefined;
+    }
+    VariableSymbol *vr = scope->retrieve_variable(id->name);
     if (vr == nullptr)
     {
       semantic_error(id->name, SymbolType::Undefined, "Semantic error: Variable '" + id->name + "' must be Declared.");
@@ -1049,7 +1065,13 @@ void SemanticAnalyzer::is_array(Expression *Expr)
   {
     Identifier *id = static_cast<Identifier *>(Expr);
 
-    VariableSymbol *vr = retrieve_scope(id->name)->retrieve_variable(id->name);
+    SymbolTable *scope = retrieve_scope(id->name);
+    if (scope == nullptr)
+    {
+      semantic_error(id->name, SymbolType::Undefined, "Semantic error: Variable '" + id->name + "' must be Declared.");
+      return;
+    }
+    VariableSymbol *vr = scope->retrieve_variable(id->name);
     if (vr == nullptr)
     {
       semantic_error(id->name, SymbolType::Undefined, "Semantic error: Variable '" + id->name + "' must be Declared.");

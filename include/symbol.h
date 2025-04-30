@@ -64,8 +64,8 @@ public:
 class ErrorSymbol : public Symbol
 {
 public:
+  string message_error;
+
   ErrorSymbol();
   ErrorSymbol(string n, SymbolType t, string message_error = "", int dim = 0);
-
-  string message_error;
 };

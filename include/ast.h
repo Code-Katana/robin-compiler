@@ -84,7 +84,7 @@ public:
   string message;
 
   ErrorNode();
-  ErrorNode(const string &message,int sl, int el, int s, int e);
+  ErrorNode(const string &message, int sl, int el, int s, int e);
 };
 
 class Statement : public AstNode
@@ -213,7 +213,7 @@ public:
   ~AssignmentExpression();
 };
 
-class OrExpression : public Expression
+class OrExpression : public BooleanExpression
 {
 public:
   Expression *left;
@@ -223,7 +223,7 @@ public:
   ~OrExpression();
 };
 
-class AndExpression : public Expression
+class AndExpression : public BooleanExpression
 {
 public:
   Expression *left;
@@ -438,11 +438,11 @@ class ForLoop : public Statement
 {
 public:
   AssignmentExpression *init;
-  BooleanExpression *condition;
+  Expression *condition;
   Expression *update;
   vector<Statement *> body;
 
-  ForLoop(AssignmentExpression *init, BooleanExpression *cond, Expression *iter, const vector<Statement *> &stmts, int sl, int el, int s, int e);
+  ForLoop(AssignmentExpression *init, Expression *cond, Expression *iter, const vector<Statement *> &stmts, int sl, int el, int s, int e);
   ~ForLoop();
 };
 

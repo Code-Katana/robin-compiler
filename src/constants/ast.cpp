@@ -184,7 +184,7 @@ AssignmentExpression::~AssignmentExpression()
 
 // OrExpression Node Implementation
 OrExpression::OrExpression(Expression *lhs, Expression *rhs, int sl, int el, int s, int e)
-    : Expression(sl, el, s, e), left(lhs), right(rhs)
+    : BooleanExpression(sl, el, s, e), left(lhs), right(rhs)
 {
   type = AstNodeType::OrExpression;
 }
@@ -197,7 +197,7 @@ OrExpression::~OrExpression()
 
 // AndExpression Node Implementation
 AndExpression::AndExpression(Expression *lhs, Expression *rhs, int sl, int el, int s, int e)
-    : Expression(sl, el, s, e), left(lhs), right(rhs)
+    : BooleanExpression(sl, el, s, e), left(lhs), right(rhs)
 {
   type = AstNodeType::AndExpression;
 }
@@ -480,7 +480,7 @@ WhileLoop::~WhileLoop()
 }
 
 // ForLoop Node Implementation
-ForLoop::ForLoop(AssignmentExpression *init, BooleanExpression *cond, Expression *iter, const vector<Statement *> &stmts, int sl, int el, int s, int e)
+ForLoop::ForLoop(AssignmentExpression *init, Expression *cond, Expression *iter, const vector<Statement *> &stmts, int sl, int el, int s, int e)
     : Statement(sl, el, s, e), init(init), condition(cond), update(iter), body(stmts)
 {
   type = AstNodeType::ForLoop;

@@ -551,6 +551,7 @@ Statement *RecursiveDecentParser::parse_command()
 
   return stmt;
 }
+
 SkipStatement *RecursiveDecentParser::parse_skip_expr()
 {
   int node_start = current_token.start;
@@ -846,7 +847,7 @@ ForLoop *RecursiveDecentParser::parse_for()
   int start_line = current_token.line;
 
   AssignmentExpression *init = nullptr;
-  BooleanExpression *condition = nullptr;
+  Expression *condition = nullptr;
   Expression *update = nullptr;
   vector<Statement *> body;
 
@@ -1011,7 +1012,7 @@ WhileLoop *RecursiveDecentParser::parse_while()
   return new WhileLoop(condition, body, start_line, end_line, node_start, node_end);
 }
 
-BooleanExpression *RecursiveDecentParser::parse_bool_expr()
+Expression *RecursiveDecentParser::parse_bool_expr()
 {
   Expression *expr = parse_or_expr();
   if (!expr)
@@ -1019,8 +1020,24 @@ BooleanExpression *RecursiveDecentParser::parse_bool_expr()
     syntax_error("Expected boolean expression");
     return nullptr;
   }
+  AstNodeType type = expr->type;
 
-  return dynamic_cast<BooleanExpression *>(expr);
+  switch (type)
+  {
+  case AstNodeType::OrExpression:
+  case AstNodeType::AndExpression:
+  case AstNodeType::EqualityExpression:
+  case AstNodeType::RelationalExpression:
+  case AstNodeType::Identifier:
+  case AstNodeType::IndexExpression:
+  case AstNodeType::CallFunctionExpression:
+  case AstNodeType::BooleanLiteral:
+    return expr;
+
+  default:
+    syntax_error("Invalid expression in boolean context");
+    return nullptr;
+  }
 }
 
 Expression *RecursiveDecentParser::parse_expr_stmt()
@@ -1437,7 +1454,7 @@ Expression *RecursiveDecentParser::parse_unary_expr()
       return nullptr;
     }
 
-    Expression *operand = parse_expr();
+    Expression *operand = parse_index_expr();
     if (!operand)
     {
       syntax_error("Expected expression after unary operator");

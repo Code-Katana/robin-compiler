@@ -77,7 +77,9 @@ Value *IRGenerator::codegenProgram(ProgramDefinition *program)
   // Create main function
   FunctionType *funcType = FunctionType::get(Type::getInt32Ty(context), false);
   Function *mainFunc = Function::Create(funcType, Function::ExternalLinkage, "main", module.get());
-
+  FunctionCallee pauseFunc = module->getOrInsertFunction(
+      "waitForKeypress",
+      FunctionType::get(Type::getVoidTy(context), {}, false));
   BasicBlock *entry = BasicBlock::Create(context, "entry", mainFunc);
   builder.SetInsertPoint(entry);
 
@@ -93,7 +95,7 @@ Value *IRGenerator::codegenProgram(ProgramDefinition *program)
   {
     codegen(stmt);
   }
-
+  builder.CreateCall(pauseFunc); // Call pause
   builder.CreateRet(ConstantInt::get(context, APInt(32, 0)));
   popScope();
   return mainFunc;

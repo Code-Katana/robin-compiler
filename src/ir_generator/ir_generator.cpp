@@ -34,14 +34,15 @@ Type *IRGenerator::getLLVMType(SymbolType type, int dim)
 
 void IRGenerator::generate(Source *source, const string &filename)
 {
-  // Generate code for program (main function)
-  codegenProgram(source->program);
-
-  // Generate code for all functions
   for (auto func : source->functions)
   {
     codegenFunction(func);
   }
+  // Generate code for program (main function)
+  codegenProgram(source->program);
+
+  // Generate code for all functions
+
   std::error_code EC;
   raw_fd_ostream outfile(filename, EC, llvm::sys::fs::OF_None);
 
@@ -60,10 +61,8 @@ void IRGenerator::generate(Source *source, const string &filename)
 
 Value *IRGenerator::codegen(AstNode *node)
 {
-  if (auto decl = dynamic_cast<VariableDeclaration *>(node))
-    return codegenVariableDeclaration(decl);
-  if (auto init = dynamic_cast<VariableInitialization *>(node))
-    return codegenVariableInitialization(init);
+  if (auto decl = dynamic_cast<VariableDefinition *>(node))
+    return codegenVariableDefinition(decl);
   if (auto expr = dynamic_cast<Expression *>(node))
     return codegenExpression(expr);
   if (auto stmt = dynamic_cast<Statement *>(node))
@@ -181,6 +180,13 @@ Value *IRGenerator::codegenFunction(FunctionDefinition *func)
           Symbol::get_dimension(decl->datatype));
       paramTypes.push_back(ty);
     }
+    else if (auto init = dynamic_cast<VariableInitialization *>(param->def))
+    {
+      llvm::Type *ty = getLLVMType(
+          Symbol::get_datatype(init->datatype),
+          Symbol::get_dimension(init->datatype));
+      paramTypes.push_back(ty);
+    }
   }
 
   // Create function type
@@ -200,17 +206,26 @@ Value *IRGenerator::codegenFunction(FunctionDefinition *func)
   unsigned idx = 0;
   for (auto &arg : llvmFunc->args())
   {
-    if (auto decl = dynamic_cast<VariableDeclaration *>(func->parameters[idx++]->def))
+    auto paramDef = func->parameters[idx++]->def;
+    if (auto decl = dynamic_cast<VariableDeclaration *>(paramDef))
     {
-      llvm::Type *paramType = getLLVMType(
-          Symbol::get_datatype(decl->datatype),
-          Symbol::get_dimension(decl->datatype));
-
-      llvm::AllocaInst *alloca = builder.CreateAlloca(paramType, nullptr, decl->variables[0]->name);
-      builder.CreateStore(&arg, alloca);
-
-      // Insert into symbol table
-      symbolTable.top()[decl->variables[0]->name] = SymbolEntry{paramType, alloca};
+      // Use your codegenVariableDeclaration
+      codegenVariableDeclaration(decl);
+      // Store the argument value into the alloca
+      auto varName = decl->variables[0]->name;
+      auto entryOpt = findSymbol(varName);
+      if (entryOpt)
+        builder.CreateStore(&arg, entryOpt->llvmValue);
+    }
+    else if (auto init = dynamic_cast<VariableInitialization *>(paramDef))
+    {
+      // Use your codegenVariableInitialization
+      codegenVariableInitialization(init);
+      // Store the argument value into the alloca
+      auto varName = init->name->name;
+      auto entryOpt = findSymbol(varName);
+      if (entryOpt)
+        builder.CreateStore(&arg, entryOpt->llvmValue);
     }
   }
 
@@ -253,10 +268,8 @@ Value *IRGenerator::codegenVariableInitialization(VariableInitialization *init)
 }
 Value *IRGenerator::codegenStatement(Statement *stmt)
 {
-  if (auto varDecl = dynamic_cast<VariableDeclaration *>(stmt))
-    return codegenVariableDeclaration(varDecl);
-  if (auto varInit = dynamic_cast<VariableInitialization *>(stmt))
-    return codegenVariableInitialization(varInit);
+  if (auto decl = dynamic_cast<VariableDefinition *>(stmt))
+    return codegenVariableDefinition(decl);
   if (auto assign = dynamic_cast<AssignmentExpression *>(stmt))
     return codegenAssignment(assign);
   if (auto ifStmt = dynamic_cast<IfStatement *>(stmt))
@@ -688,16 +701,17 @@ Value *IRGenerator::codegenReadStatement(ReadStatement *read)
 
 Value *IRGenerator::codegenVariableDefinition(VariableDefinition *def)
 {
-  if (auto decl = dynamic_cast<VariableDeclaration *>(def))
+  if (auto decl = dynamic_cast<VariableDeclaration *>(def->def))
     return codegenVariableDeclaration(decl);
-  if (auto init = dynamic_cast<VariableInitialization *>(def))
+  if (auto init = dynamic_cast<VariableInitialization *>(def->def))
     return codegenVariableInitialization(init);
   return nullptr;
 }
 
 Value *IRGenerator::codegenExpression(Expression *expr)
 {
-
+  if (auto decl = dynamic_cast<VariableDefinition *>(expr))
+    return codegenVariableDefinition(decl);
   if (auto lit = dynamic_cast<Literal *>(expr))
     return codegenLiteral(lit);
   if (auto id = dynamic_cast<Identifier *>(expr))
@@ -1213,6 +1227,7 @@ Value *IRGenerator::codegenUnaryExpr(UnaryExpression *expr)
 }
 Value *IRGenerator::codegenCall(CallFunctionExpression *call)
 {
+  // 1. Lookup the function in the module
   llvm::Function *callee = module->getFunction(call->function->name);
   if (!callee)
   {
@@ -1220,15 +1235,45 @@ Value *IRGenerator::codegenCall(CallFunctionExpression *call)
     return nullptr;
   }
 
+  // 2. Generate code for each argument
   std::vector<Value *> args;
-  for (auto argExpr : call->arguments)
+  auto paramIt = callee->arg_begin();
+  for (size_t i = 0; i < call->arguments.size(); ++i)
   {
-    Value *argVal = codegenExpression(argExpr);
+    Value *argVal = codegenExpression(call->arguments[i]);
     if (!argVal)
       return nullptr;
+
+    // If the function expects a float (double) but you have a float, promote it
+    if (paramIt != callee->arg_end())
+    {
+      llvm::Type *expectedType = paramIt->getType();
+      llvm::Type *actualType = argVal->getType();
+
+      // Promote float to double if needed
+      if (expectedType->isDoubleTy() && actualType->isFloatTy())
+      {
+        argVal = builder.CreateFPExt(argVal, expectedType);
+      }
+      // Truncate double to float if needed
+      else if (expectedType->isFloatTy() && actualType->isDoubleTy())
+      {
+        argVal = builder.CreateFPTrunc(argVal, expectedType);
+      }
+      // Zero-extend bool to int if needed
+      else if (expectedType->isIntegerTy(32) && actualType->isIntegerTy(1))
+      {
+        argVal = builder.CreateZExt(argVal, expectedType);
+      }
+      // Add more type conversions as needed...
+
+      ++paramIt;
+    }
+
     args.push_back(argVal);
   }
 
+  // 3. Create the call instruction
   return builder.CreateCall(callee, args, "calltmp");
 }
 Value *IRGenerator::findValue(const std::string &name)

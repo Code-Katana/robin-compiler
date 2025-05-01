@@ -31,7 +31,7 @@ int Debugger::run()
   CompilerOptions *options = new CompilerOptions(program);
 
   RobinCompiler *rc = new RobinCompiler(options);
-  // cout<< JSON::format (JSON::stringify_node( rc->parse_ast()))<<endl;
+   //cout<< JSON::format (JSON::stringify_node( rc->parse_ast()))<<endl;
  // rc->typecheck();
   rc->generate_ir(input_file + ".ll");
 

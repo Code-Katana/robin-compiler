@@ -6,6 +6,8 @@ class TypeChecker
 {
 private:
   TypeChecker();
+  // helper
+  static bool is_number(SymbolType t);
 
 public:
   static SymbolType is_valid_assign(SymbolType left, SymbolType right, int dim_left, int dim_right);

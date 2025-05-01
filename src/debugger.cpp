@@ -36,8 +36,12 @@ int Debugger::run()
   {
     cout << error->message << endl;
   }
-  JSON::debug_file(Debugger::DEBUGGING_FOLDER + "/tokens.json", JSON::stringify_tokens_stream(tokens));
-  JSON::debug_file(Debugger::DEBUGGING_FOLDER + "/tree.json", JSON::stringify_node(tree));
-  system("pause");
+  else
+  {
+    JSON::debug_file(Debugger::DEBUGGING_FOLDER + "/tokens.json", JSON::stringify_tokens_stream(tokens));
+    JSON::debug_file(Debugger::DEBUGGING_FOLDER + "/tree.json", JSON::stringify_node(tree));
+
+    rc->typecheck();
+  }
   return 0;
 }

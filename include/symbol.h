@@ -23,6 +23,7 @@ enum class SymbolKind
 {
   Variable,
   Function,
+  Error,
   Undefined
 };
 
@@ -50,6 +51,7 @@ public:
   FunctionSymbol(string n, SymbolType t, vector<pair<SymbolType, int>> p = {}, int dim = 0);
 
   vector<pair<SymbolType, int>> parameters;
+  vector<VariableDefinition *> parametersRaw;
 };
 
 class VariableSymbol : public Symbol
@@ -58,4 +60,13 @@ public:
   VariableSymbol(string n, SymbolType t, bool initialized = false, int dim = 0);
 
   bool is_initialized;
+};
+
+class ErrorSymbol : public Symbol
+{
+public:
+  string message_error;
+
+  ErrorSymbol();
+  ErrorSymbol(string n, SymbolType t, string message_error = "", int dim = 0);
 };

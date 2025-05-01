@@ -1120,13 +1120,38 @@ pair<SymbolType, int> SemanticAnalyzer::semantic_array_value(vector<Expression *
 {
   SymbolType dt = SymbolType::Undefined;
   SymbolType element_dt = SymbolType::Undefined;
+  int max_inner_dim = 0;
 
   for (auto el : elements)
   {
+    int el_dim = 0;
+
     element_dt = semantic_expr(el);
+
+    if (dynamic_cast<Identifier *>(el))
+    {
+      Identifier *id = static_cast<Identifier *>(el);
+      SymbolTable *scope = retrieve_scope(id->name);
+      if (scope)
+      {
+        VariableSymbol *var = scope->retrieve_variable(id->name);
+        if (var)
+          el_dim = var->dim;
+      }
+    }
+    else if (dynamic_cast<ArrayLiteral *>(el))
+    {
+      el_dim = semantic_array(static_cast<ArrayLiteral *>(el)).second;
+    }
+
+    if (el_dim > max_inner_dim)
+    {
+      max_inner_dim = el_dim;
+    }
+
     if (dt == SymbolType::Undefined)
     {
-      dt = semantic_expr(el);
+      dt = element_dt;
     }
     else if (element_dt != dt)
     {
@@ -1134,8 +1159,7 @@ pair<SymbolType, int> SemanticAnalyzer::semantic_array_value(vector<Expression *
       return pair<SymbolType, int>(SymbolType::Undefined, 0);
     }
   }
-
-  return pair<SymbolType, int>(dt, 1);
+  return pair<SymbolType, int>(dt, max_inner_dim + 1);
 }
 
 VariableSymbol *SemanticAnalyzer::is_initialized_var(Identifier *id)

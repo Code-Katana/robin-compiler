@@ -31,9 +31,17 @@ int Debugger::run()
 
   RobinCompiler *rc = new RobinCompiler(options);
   vector<Token> tokens = rc->tokenize();
-  rc->typecheck();
+  AstNode *tree = rc->parse_ast();
+  if (auto error = dynamic_cast<ErrorNode *>(tree))
+  {
+    cout << error->message << endl;
+  }
+  else
+  {
+    JSON::debug_file(Debugger::DEBUGGING_FOLDER + "/tokens.json", JSON::stringify_tokens_stream(tokens));
+    JSON::debug_file(Debugger::DEBUGGING_FOLDER + "/tree.json", JSON::stringify_node(tree));
 
-  JSON::debug_file(Debugger::DEBUGGING_FOLDER + "/tokens.json", JSON::stringify_tokens_stream(tokens));
-  system("pause");
+    rc->typecheck();
+  }
   return 0;
 }

@@ -721,7 +721,16 @@ SymbolType SemanticAnalyzer::semantic_unary_expr(Expression *unaryExpr)
   UnaryExpression *unary_Expr = static_cast<UnaryExpression *>(unaryExpr);
   int dim = 0;
 
-  SymbolType type = semantic_expr(unary_Expr->operand);
+  SymbolType type;
+
+  if (unary_Expr->optr == "#")
+  {
+    type = semantic_index_expr(unary_Expr->operand, false, true);
+  }
+  else
+  {
+    type = semantic_expr(unary_Expr->operand);
+  }
   if (dynamic_cast<Identifier *>(unary_Expr->operand))
   {
     Identifier *id = static_cast<Identifier *>(unary_Expr->operand);
@@ -739,6 +748,43 @@ SymbolType SemanticAnalyzer::semantic_unary_expr(Expression *unaryExpr)
       return SymbolType::Undefined;
     }
     dim = vs->dim;
+  }
+  else if (dynamic_cast<IndexExpression *>(unary_Expr->operand))
+  {
+    IndexExpression *indexExpr = static_cast<IndexExpression *>(unary_Expr->operand);
+
+    int accessed_dim = 1;
+    Expression *base = indexExpr->base;
+
+    while (dynamic_cast<IndexExpression *>(base))
+    {
+      base = static_cast<IndexExpression *>(base)->base;
+      accessed_dim++;
+    }
+
+    if (dynamic_cast<Identifier *>(base))
+    {
+      Identifier *base_id = static_cast<Identifier *>(base);
+      SymbolTable *scope = retrieve_scope(base_id->name);
+      if (!scope)
+      {
+        semantic_error(base_id->name, SymbolType::Undefined, "Semantic error: Variable '" + base_id->name + "' must be Declared.");
+        return SymbolType::Undefined;
+      }
+
+      VariableSymbol *symbol = scope->retrieve_variable(base_id->name);
+      if (!symbol)
+      {
+        semantic_error(base_id->name, SymbolType::Undefined, "Semantic error: Variable '" + base_id->name + "' must be Declared.");
+        return SymbolType::Undefined;
+      }
+      dim = symbol->dim - accessed_dim;
+    }
+    else
+    {
+      semantic_error("IndexExpr", SymbolType::Undefined, "Semantic error: Invalid base expression in indexing.");
+      return SymbolType::Undefined;
+    }
   }
 
   string op = unary_Expr->optr;
@@ -781,7 +827,7 @@ SymbolType SemanticAnalyzer::semantic_unary_expr(Expression *unaryExpr)
   return result;
 }
 
-SymbolType SemanticAnalyzer::semantic_index_expr(Expression *expr, bool set_init)
+SymbolType SemanticAnalyzer::semantic_index_expr(Expression *expr, bool set_init, bool allow_partial_indexing)
 {
   if (!dynamic_cast<IndexExpression *>(expr))
   {
@@ -816,13 +862,20 @@ SymbolType SemanticAnalyzer::semantic_index_expr(Expression *expr, bool set_init
   if (dynamic_cast<Identifier *>(idxExpr->base))
   {
     Identifier *var = static_cast<Identifier *>(idxExpr->base);
-    SymbolTable *st = retrieve_scope(var->name);
+
+    SymbolTable *scope = retrieve_scope(var->name);
+    if (!scope)
+    {
+      semantic_error(var->name, SymbolType::Undefined, "Semantic error: Symbol '" + var->name + "' must be Declared.");
+      return SymbolType::Undefined;
+    }
     if (set_init)
     {
-      st->set_initialized(var->name);
+      scope->set_initialized(var->name);
     }
-    symbol = retrieve_scope(var->name)->retrieve_symbol(var->name);
-    if (symbol == nullptr)
+
+    symbol = scope->retrieve_symbol(var->name);
+    if (!symbol)
     {
       semantic_error(var->name, SymbolType::Undefined, "Semantic error: Symbol '" + var->name + "' must be Declared.");
       return SymbolType::Undefined;
@@ -842,7 +895,7 @@ SymbolType SemanticAnalyzer::semantic_index_expr(Expression *expr, bool set_init
 
   type = semantic_expr(idxExpr->base);
 
-  if (dim != symbol->dim)
+  if ((dim != symbol->dim) && !allow_partial_indexing)
   {
     semantic_error(symbol->name, type, "Dimension mismatch for variable " + symbol->name + ": expected " + to_string(symbol->dim) + ", but got " + to_string(dim));
     return SymbolType::Undefined;

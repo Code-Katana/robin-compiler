@@ -115,6 +115,35 @@ vector<pair<SymbolType, int>> SymbolTable::get_arguments(string func_name)
   return {{SymbolType::Undefined, 0}};
 }
 
+vector<pair<SymbolType, int>> SymbolTable::get_required_arguments(string func_name)
+{
+  auto it = hashtable.find(func_name);
+  if (it != hashtable.end())
+  {
+    if (it->second->kind == SymbolKind::Function)
+    {
+      FunctionSymbol *func = static_cast<FunctionSymbol *>(it->second);
+      vector<pair<SymbolType, int>> required_args;
+
+      for (auto def : func->parametersRaw)
+      {
+        if (dynamic_cast<VariableDeclaration *>(def->def))
+        {
+          VariableDeclaration *var_decl = static_cast<VariableDeclaration *>(def->def);
+          for (auto id : var_decl->variables)
+          {
+            required_args.push_back({Symbol::get_datatype(var_decl->datatype), Symbol::get_dimension(var_decl->datatype)});
+          }
+        }
+      }
+
+      return required_args;
+    }
+  }
+
+  return {{SymbolType::Undefined, 0}};
+}
+
 Symbol *SymbolTable::retrieve_symbol(string s)
 {
   auto it = hashtable.find(s);

@@ -51,6 +51,7 @@ public:
   FunctionSymbol(string n, SymbolType t, vector<pair<SymbolType, int>> p = {}, int dim = 0);
 
   vector<pair<SymbolType, int>> parameters;
+  vector<VariableDefinition *> parametersRaw;
 };
 
 class VariableSymbol : public Symbol

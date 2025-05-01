@@ -53,17 +53,36 @@ void SemanticAnalyzer::semantic_source(Source *source)
     string name = func->funcname->name;
     DataType *dt = func->return_type->return_type;
     vector<pair<SymbolType, int>> parameters = SymbolTable::get_parameters_type(func->parameters);
+
+    bool found_default = false;
+    for (auto def : func->parameters)
+    {
+      if (dynamic_cast<VariableInitialization *>(def->def))
+      {
+        found_default = true;
+      }
+      else if (found_default)
+      {
+        semantic_error(name, SymbolType::Undefined, "Semantic error: Required parameters cannot follow optional parameters.");
+        return;
+      }
+    }
+
     if (!parameters.empty() && parameters[0].first == SymbolType::Undefined)
     {
-      semantic_error(name, SymbolType::Undefined, "Error: Variable name is already defined.");
+      semantic_error(name, SymbolType::Undefined, "Semantic error: Variable name is already defined.");
       return;
     }
 
-    bool check = st->insert(new FunctionSymbol(
+    auto func_symbol = new FunctionSymbol(
         name,
         Symbol::get_datatype(dt),
         parameters,
-        Symbol::get_dimension(dt)));
+        Symbol::get_dimension(dt));
+
+    func_symbol->parametersRaw = func->parameters;
+
+    bool check = st->insert(func_symbol);
     if (!check)
     {
       semantic_error(name, Symbol::get_datatype(dt), "Semantic error: Symbol '" + name + "' already exists.");
@@ -959,48 +978,85 @@ SymbolType SemanticAnalyzer::semantic_call_function_expr(Expression *cfExpr)
   CallFunctionExpression *cf_Expr = static_cast<CallFunctionExpression *>(cfExpr);
 
   stack<SymbolTable *> temp = call_stack;
+  SymbolTable *global = nullptr;
   Identifier *func_name = cf_Expr->function;
   vector<Expression *> arguments = cf_Expr->arguments;
-  for (auto ar : arguments)
-  {
-    if (dynamic_cast<Identifier *>(ar))
-    {
-      Identifier *id = static_cast<Identifier *>(ar);
-      is_initialized_var(id);
-    }
-  }
-  SymbolTable *global = nullptr;
   while (!temp.empty())
   {
     global = temp.top();
     temp.pop();
   }
-  if (!(global->is_exist(func_name->name)))
+
+  if (!global || !global->is_exist(func_name->name))
   {
     semantic_error(func_name->name, SymbolType::Undefined, "Semantic error: Function '" + func_name->name + "' Not Declared.");
     return SymbolType::Undefined;
   }
-  vector<pair<SymbolType, int>> args = global->get_arguments(func_name->name);
-  if (!args.empty() && args[0].first == SymbolType::Undefined)
+
+  FunctionSymbol *fn = global->retrieve_function(func_name->name);
+  if (!fn)
   {
-    semantic_error(func_name->name, SymbolType::Undefined, "Function with name " + func_name->name + " not found!");
+    semantic_error(func_name->name, SymbolType::Undefined, "Semantic error: Invalid function object.");
     return SymbolType::Undefined;
   }
-  if (arguments.size() != args.size())
+  auto all_args = fn->parameters;
+  auto required_args = global->get_required_arguments(func_name->name);
+
+  if (arguments.size() < required_args.size() || arguments.size() > all_args.size())
   {
-    semantic_error(func_name->name, SymbolType::Undefined, "Semantic error: Function '" + func_name->name + "' Arguments doesn't match in size.");
+    semantic_error(func_name->name, SymbolType::Undefined, "Semantic error: Function '" + func_name->name + "' expects between " + to_string(required_args.size()) + " and " + to_string(all_args.size()) + " arguments, but got " + to_string(arguments.size()) + ".");
     return SymbolType::Undefined;
   }
-  for (int i = 0; i < args.size(); ++i)
+
+  for (int i = 0; i < arguments.size(); ++i)
   {
     SymbolType type = semantic_expr(arguments[i]);
-    if (type != args[i].first)
+
+    // 1. Get dimension of current argument
+    int arg_dim = 0;
+    if (dynamic_cast<ArrayLiteral *>(arguments[i]))
     {
-      semantic_error(func_name->name, SymbolType::Undefined, "Semantic error: Function '" + func_name->name + "' Arguments doesn't match in datatype.");
+      arg_dim = semantic_array(static_cast<ArrayLiteral *>(arguments[i])).second;
+    }
+    else if (dynamic_cast<Identifier *>(arguments[i]))
+    {
+      Identifier *id = static_cast<Identifier *>(arguments[i]);
+      SymbolTable *scope = retrieve_scope(id->name);
+      if (scope)
+      {
+        VariableSymbol *vs = scope->retrieve_variable(id->name);
+        if (vs)
+          arg_dim = vs->dim;
+      }
+    }
+
+    // 2. Get expected type + dimension from function signature
+    SymbolType expected_type = all_args[i].first;
+    int expected_dim = all_args[i].second;
+
+    // 3. Type check
+    if (type != expected_type)
+    {
+      semantic_error(func_name->name, SymbolType::Undefined,
+                     "Semantic error: Argument " + to_string(i + 1) + " in function '" + func_name->name +
+                         "' should be of type " + Symbol::get_name_symboltype(expected_type) +
+                         ", but got " + Symbol::get_name_symboltype(type) + ".");
+      return SymbolType::Undefined;
+    }
+
+    // 4. Dimension check
+    if (arg_dim != expected_dim)
+    {
+      semantic_error(func_name->name, SymbolType::Undefined,
+                     "Semantic error: Dimension mismatch in argument " + to_string(i + 1) +
+                         " in function '" + func_name->name +
+                         "': expected dim " + to_string(expected_dim) +
+                         ", but got " + to_string(arg_dim) + ".");
       return SymbolType::Undefined;
     }
   }
-  return global->get_type(func_name->name);
+
+  return fn->type;
 }
 
 SymbolType SemanticAnalyzer::semantic_id(Identifier *id, bool set_init)

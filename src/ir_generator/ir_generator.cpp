@@ -9,106 +9,168 @@ IRGenerator::IRGenerator() : builder(context)
   module = make_unique<Module>("main_module", context);
   pushScope();
 }
-Type *IRGenerator::getLLVMType(SymbolType type, int dim) {
-  Type *baseType = nullptr;
+
+Type* IRGenerator::getLLVMType(SymbolType type, int dim, bool hasLiteralInit) {
+  Type* baseType = nullptr;
   switch (type) {
     case SymbolType::Integer: baseType = Type::getInt32Ty(context); break;
     case SymbolType::Float:   baseType = Type::getFloatTy(context); break;
     case SymbolType::Boolean: baseType = Type::getInt1Ty(context); break;
-    case SymbolType::String:  baseType = PointerType::getInt8Ty(context); break;
+    case SymbolType::String:  baseType = PointerType::getUnqual(Type::getInt8Ty(context)); break;
     case SymbolType::Void:    baseType = Type::getVoidTy(context); break;
     default:                  baseType = Type::getVoidTy(context); break;
   }
 
- // Create nested array types
- for (int i = 0; i < dim; i++) {
-  baseType = ArrayType::get(baseType, 0); // 0 = unspecified size
-}
-
-// Return pointer to array type
-return PointerType::get(baseType, 0);
-}
-
-void IRGenerator::generate(Source *source, const string &filename)
-{
-  // Generate code for program (main function)
-  codegenProgram(source->program);
-
-  // Generate code for all functions
-  for (auto func : source->functions)
-  {
-    codegenFunction(func);
-  }
-  std::error_code EC;
-  raw_fd_ostream outfile(filename, EC, llvm::sys::fs::OF_None);
-
-  if (EC)
-  {
-    errs() << "Could not open file: " << EC.message() << "\n";
-    return;
+  // Use pointer types for arrays and jagged arrays
+  for (int i = 0; i < dim; i++) {
+    baseType = PointerType::getUnqual(baseType);
   }
 
-  module->print(outfile, nullptr);
-  outfile.flush();
-
-  outs() << "LLVM IR written to " << filename << "\n";
+  return baseType;
 }
 
-Value *IRGenerator::codegen(AstNode *node)
-{
-  if (auto expr = dynamic_cast<Expression *>(node))
-    return codegenExpression(expr);
-  if (auto stmt = dynamic_cast<Statement *>(node))
-    return codegenStatement(stmt);
-  return nullptr;
-}
 
-Value *IRGenerator::codegenProgram(ProgramDefinition *program)
-{
+  void IRGenerator::generate(Source *source, const string &filename)
+  {
+    // Generate code for program (main function)
+    codegenProgram(source->program);
+
+    // Generate code for all functions
+    for (auto func : source->functions)
+    {
+      codegenFunction(func);
+    }
+    std::error_code EC;
+    raw_fd_ostream outfile(filename, EC, llvm::sys::fs::OF_None);
+
+    if (EC)
+    {
+      errs() << "Could not open file: " << EC.message() << "\n";
+      return;
+    }
+
+    module->print(outfile, nullptr);
+    outfile.flush();
+
+    outs() << "LLVM IR written to " << filename << "\n";
+  }
+
+  // Value* IRGenerator::codegen(AstNode* node) {
+  //   if (auto expr = dynamic_cast<Expression*>(node))
+  //     return codegenExpression(expr);
+  //   if (auto stmt = dynamic_cast<Statement*>(node)) {
+  //     if (auto varDecl = dynamic_cast<VariableDeclaration*>(stmt))
+  //       return codegenVariableDeclaration(varDecl);
+  //     if (auto varInit = dynamic_cast<VariableInitialization*>(stmt))  // Fixed declaration
+  //       return codegenVariableInitialization(varInit);
+  //     // Handle other statement types
+  //     if (auto write = dynamic_cast<WriteStatement*>(stmt))
+  //       return codegenWriteStatement(write);
+  //     if (auto read = dynamic_cast<ReadStatement*>(stmt))
+  //       return codegenReadStatement(read);
+  //     // Add other statement handlers...
+  //   }
+  //   return nullptr;
+  // }
+
+ // In codegenProgram function:
+void IRGenerator::codegenProgram(ProgramDefinition* program) {
   // Create main function
-  FunctionType *funcType = FunctionType::get(Type::getInt32Ty(context), false);
-  llvm::Function *mainFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, "main", module.get());
-
-  BasicBlock *entry = BasicBlock::Create(context, "entry", mainFunc);
+  FunctionType* funcType = FunctionType::get(Type::getInt32Ty(context), false);
+  Function* mainFunc = Function::Create(funcType, Function::ExternalLinkage, "main", module.get());
+  
+  BasicBlock* entry = BasicBlock::Create(context, "entry", mainFunc);
   builder.SetInsertPoint(entry);
 
   // Process global variables
-  for (auto global : program->globals)
-  {
-    codegen(global->def);
+  for (auto global : program->globals) {
+    if (auto varDef = dynamic_cast<VariableDefinition*>(global)) {
+      if (auto varDecl = dynamic_cast<VariableDeclaration*>(varDef->def)) {
+        // Handle uninitialized declarations
+        codegenVariableDeclaration(varDecl);
+      } else if (auto varInit = dynamic_cast<VariableInitialization*>(varDef->def)) {
+        // Handle initialized variables
+        codegenVariableInitialization(varInit);
+      }
+    }
   }
 
-  // Process program body
-  for (auto stmt : program->body)
-  {
+  // Process program body (assignments)
+  for (auto stmt : program->body) {
     codegen(stmt);
   }
 
   builder.CreateRet(ConstantInt::get(context, APInt(32, 0)));
-  return mainFunc;
 }
 
-Value *IRGenerator::codegenFunction(FunctionDefinition *func)
-{
-  // Get return type
-  Type *retType = getLLVMType(Symbol::get_datatype(func->return_type->return_type),
-                              Symbol::get_dimension(func->return_type->return_type));
+// New helper function for initialized variables
+// Value* IRGenerator::codegenVariableInitialization(VariableInitialization* init) {
+//   Type* ty = getLLVMType(
+//     Symbol::get_datatype(init->datatype),
+//     Symbol::get_dimension(init->datatype),
+//     true
+//   );
 
-  // Get parameter types
-  std::vector<Type *> paramTypes;
-  for (auto param : func->parameters)
-  {
-    if (auto decl = dynamic_cast<VariableDeclaration *>(param->def))
-    {
-      Type *ty = getLLVMType(Symbol::get_datatype(decl->datatype),
-                             Symbol::get_dimension(decl->datatype));
+//   AllocaInst* alloca = builder.CreateAlloca(ty, nullptr, init->name->name);
+//   symbolTable.top()[init->name->name] = alloca;
+
+//   Value* initVal = codegen(init->initializer);
+//   if (!initVal) return nullptr;
+
+//   if (auto arrayLit = dynamic_cast<ArrayLiteral*>(init->initializer)) {
+//     if (isUniformArray(arrayLit)) {
+//       ArrayType* arrType = inferArrayType(arrayLit);
+//       Constant* constArray = createNestedArray(arrayLit, arrType);
+//       builder.CreateStore(constArray, alloca);
+//     } else {
+//       Function* mallocFn = declareMalloc();
+//       Value* jagged = createJaggedArray(arrayLit, mallocFn);
+//       builder.CreateStore(jagged, alloca);
+//     }
+//   } else {
+//     builder.CreateStore(initVal, alloca);
+//   }
+
+//   return alloca;
+// }
+
+// Updated variable declaration handler
+// Value* IRGenerator::codegenVariableDeclaration(VariableDeclaration* decl) {
+//   for (auto var : decl->variables) {
+//     Type* ty = getLLVMType(
+//       Symbol::get_datatype(decl->datatype),
+//       Symbol::get_dimension(decl->datatype),
+//       false  // No literal initialization
+//     );
+
+//     AllocaInst* alloca = builder.CreateAlloca(ty, nullptr, var->name);
+//     symbolTable.top()[var->name] = alloca;
+//   }
+//   return nullptr;
+// }
+  Value *IRGenerator::codegenFunction(FunctionDefinition *func) {
+    // Get return type
+    Type *retType = getLLVMType(
+      Symbol::get_datatype(func->return_type->return_type),
+      Symbol::get_dimension(func->return_type->return_type),
+      false  // Not a literal initialization
+    );
+
+    // Get parameter types
+    std::vector<Type *> paramTypes;
+  for (auto param : func->parameters) {
+    if (auto decl = dynamic_cast<VariableDeclaration *>(param->def)) {
+      Type *ty = getLLVMType(
+        Symbol::get_datatype(decl->datatype),
+        Symbol::get_dimension(decl->datatype),
+        false  // Not a literal initialization
+      );
       paramTypes.push_back(ty);
     }
   }
 
-  // Explicitly qualify LLVM components with llvm::
   llvm::FunctionType *funcType = llvm::FunctionType::get(retType, paramTypes, false);
-  llvm::Function *llvmFunc = llvm::Function::Create( // <-- Fully qualified
+  llvm::Function *llvmFunc = llvm::Function::Create(
       funcType,
       llvm::Function::ExternalLinkage,
       func->funcname->name,
@@ -121,10 +183,8 @@ Value *IRGenerator::codegenFunction(FunctionDefinition *func)
 
   // Process parameters
   unsigned idx = 0;
-  for (auto &arg : llvmFunc->args())
-  {
-    if (auto decl = dynamic_cast<VariableDeclaration *>(func->parameters[idx++]->def))
-    {
+  for (auto &arg : llvmFunc->args()) {
+    if (auto decl = dynamic_cast<VariableDeclaration *>(func->parameters[idx++]->def)) {
       llvm::AllocaInst *alloca = builder.CreateAlloca(arg.getType());
       builder.CreateStore(&arg, alloca);
       symbolTable.top()[decl->variables[0]->name] = alloca;
@@ -132,13 +192,11 @@ Value *IRGenerator::codegenFunction(FunctionDefinition *func)
   }
 
   // Process function body
-  for (auto stmt : func->body)
-  {
+  for (auto stmt : func->body) {
     codegen(stmt);
   }
 
-  if (retType->isVoidTy())
-  {
+  if (retType->isVoidTy()) {
     builder.CreateRetVoid();
   }
 
@@ -334,42 +392,26 @@ Value *IRGenerator::codegenExpression(Expression *expr)
 
 
 // Implement index expression
-Value *IRGenerator::codegenIndexExpression(IndexExpression *expr) {
-  Value *base = nullptr;
+Value* IRGenerator::codegenIndexExpression(IndexExpression* expr) {
+  Value* base = codegen(expr->base);
   std::vector<Value*> indices;
 
-  // Traverse nested IndexExpressions
+  // First index is always 0 for the outermost array
+  indices.push_back(llvm::ConstantInt::get(context, llvm::APInt(32, 0)));
+
+  // Process indices (x[i][j][k] becomes [0, i, j, k])
   IndexExpression* current = expr;
-  std::vector<Expression*> reversedIndices;
-
   while (current) {
-    reversedIndices.push_back(current->index);
-
-    if (auto nextBase = dynamic_cast<IndexExpression*>(current->base)) {
-      current = nextBase;
-    } else {
-      base = codegen(current->base);
-      break;
-    }
+    indices.push_back(codegen(current->index));
+    current = dynamic_cast<IndexExpression*>(current->base);
   }
 
-  if (!base) return nullptr;
+  // Reverse to get correct nesting order
+  std::reverse(indices.begin() + 1, indices.end());
 
-  // First GEP index is always 0 for arrays
-  indices.push_back(ConstantInt::get(context, APInt(32, 0)));
-
-  // Insert all indices in REVERSE order
-  for (auto it = reversedIndices.rbegin(); it != reversedIndices.rend(); ++it) {
-    Value *idx = codegen(*it);
-    if (!idx) return nullptr;
-
-    idx = builder.CreateIntCast(idx, Type::getInt32Ty(context), true);
-    indices.push_back(idx);
-  }
-
-  // ⚡ NEW: in LLVM 15+, just pass base type
+  // Opaque pointer GEP (LLVM 15+)
   return builder.CreateInBoundsGEP(
-      base->getType()->getScalarType(),  // Scalar type, not pointer type
+      base->getType()->getScalarType(),  // Base pointer type
       base,
       indices,
       "arrayidx"
@@ -415,59 +457,231 @@ DataLayout dl = module->getDataLayout();
       "array_ptr");
 }
 
+
+ArrayType* IRGenerator::inferArrayTypeFromLiteral(ArrayLiteral* lit) {
+  std::vector<uint64_t> dims;
+  ArrayLiteral* current = lit;
+
+  // Traverse nested literals to get dimensions
+  while (!current->elements.empty() && 
+         dynamic_cast<ArrayLiteral*>(current->elements[0])) {
+    dims.push_back(current->elements.size());
+    current = dynamic_cast<ArrayLiteral*>(current->elements[0]);
+  }
+  dims.push_back(current->elements.size());
+
+  // Infer element type from the innermost literal
+  Type* elementType = codegen(current->elements[0])->getType();
+
+  // Build nested ArrayType (e.g., [2 x [3 x float]])
+  ArrayType* arrType = ArrayType::get(elementType, dims.back());
+  for (int i = dims.size() - 2; i >= 0; i--) {
+    arrType = ArrayType::get(arrType, dims[i]);
+  }
+
+  return arrType; // Now returns ArrayType*
+}
 // In codegenVariableDeclaration function
-Value *IRGenerator::codegenVariableDeclaration(VariableDeclaration *decl) {
+Value* IRGenerator::codegenVariableDeclaration(VariableDeclaration* decl) {
   for (auto var : decl->variables) {
-    AllocaInst *alloca = nullptr;
-    bool isArrayInit = false;
-
-    // Check if there's an initializer and it's an array literal
-    if (auto init = dynamic_cast<VariableInitialization*>(decl)) {
-      if (auto arrayLit = dynamic_cast<ArrayLiteral*>(init->initializer)) {
-        Constant *constArray = createNestedArray(arrayLit, nullptr);
-        if (constArray) {
-          // Get the actual array type from the initializer
-          Type *arrayType = constArray->getType();
-          // Allocate stack space for the entire array
-          alloca = builder.CreateAlloca(arrayType, nullptr, var->name);
-          // Store the initializer into the allocated space
-          builder.CreateStore(constArray, alloca);
-          isArrayInit = true;
-        }
-      }
-    }
-
-    // If not array initialization, use normal type handling
-    if (!isArrayInit) {
-      Type *ty = getLLVMType(Symbol::get_datatype(decl->datatype),
-                             Symbol::get_dimension(decl->datatype));
-      alloca = builder.CreateAlloca(ty, nullptr, var->name);
-    }
-
+    Type* ty = getLLVMType(
+      Symbol::get_datatype(decl->datatype),
+      Symbol::get_dimension(decl->datatype),
+      false  // No literal initialization
+    );
+    AllocaInst* alloca = builder.CreateAlloca(ty, nullptr, var->name);
     symbolTable.top()[var->name] = alloca;
-
-    // Handle non-array initializations
-    if (auto init = dynamic_cast<VariableInitialization*>(decl)) {
-      if (!isArrayInit) {
-        Value *initVal = codegen(init->initializer);
-        if (initVal)
-          builder.CreateStore(initVal, alloca);
-      }
-    }
   }
   return nullptr;
 }
 
+Value* IRGenerator::codegenVariableInitialization(VariableInitialization* init) {
+  Type* ty = getLLVMType(
+      Symbol::get_datatype(init->datatype),
+      Symbol::get_dimension(init->datatype),
+      true
+  );
 
-Value *IRGenerator::codegenAssignment(AssignmentExpression *assign)
-{
-  Value *target = codegen(assign->assignee);
-  Value *value = codegen(assign->value);
+  AllocaInst* alloca = builder.CreateAlloca(ty, nullptr, Twine(init->name->name));
+  symbolTable.top()[init->name->name] = alloca;
+
+  Expression* initializer = init->initializer;
+  if (auto arrayLit = dynamic_cast<ArrayLiteral*>(initializer)) {
+      Function* mallocFn = declareMalloc();
+
+      if (!isUniformArray(arrayLit)) {
+          // ✅ Jagged — handle with malloc
+          Value* jagged = createJaggedArray(arrayLit, mallocFn);
+          builder.CreateStore(jagged, alloca);
+      } else {
+          // ✅ Uniform — handle with constant array
+          ArrayType* arrType = inferArrayType(arrayLit);
+          Constant* constArray = createNestedArray(arrayLit, arrType);
+          builder.CreateStore(constArray, alloca);
+      }
+
+      return alloca;
+  }
+
+  // Handle scalar case (int, float, etc.)
+  Value* initVal = codegen(initializer);
+  builder.CreateStore(initVal, alloca);
+  return alloca;
+}
+
+
+Value* IRGenerator::createJaggedArray(ArrayLiteral* lit, Function* mallocFn) {
+  size_t numElements = lit->elements.size();
+  Type* elementType = getElementType(lit); // base type, e.g. int/float
+  PointerType* elementPtrTy = PointerType::get(elementType, 0);
+  PointerType* ptrToPtr = PointerType::get(elementPtrTy, 0);
+
+  DataLayout dl = module->getDataLayout();
+  uint64_t ptrSize = dl.getPointerSize();
+  Value* totalSize = ConstantInt::get(Type::getInt64Ty(context), ptrSize * numElements);
+  Value* rawMem = builder.CreateCall(mallocFn, { totalSize }, "malloc.outer");
+  Value* outerPtr = builder.CreateBitCast(rawMem, ptrToPtr, "jagged");
+
+  for (size_t i = 0; i < numElements; i++) {
+      Value* index = ConstantInt::get(Type::getInt32Ty(context), i);
+      Value* gep = builder.CreateInBoundsGEP(elementPtrTy, outerPtr, index);
+
+      Expression* item = lit->elements[i];
+
+      if (auto subLit = dynamic_cast<ArrayLiteral*>(item)) {
+          Value* nested = createJaggedArray(subLit, mallocFn);
+          builder.CreateStore(nested, gep);
+      } else {
+          Value* scalarVal = codegen(item);
+          uint64_t scalarSize = dl.getTypeAllocSize(elementType);
+          Value* allocSize = ConstantInt::get(Type::getInt64Ty(context), scalarSize);
+          Value* scalarMem = builder.CreateCall(mallocFn, { allocSize }, "malloc.elem");
+          Value* typedPtr = builder.CreateBitCast(scalarMem, elementPtrTy);
+          builder.CreateStore(scalarVal, typedPtr);
+          builder.CreateStore(typedPtr, gep);
+      }
+  }
+
+  return outerPtr;
+}
+
+Type* IRGenerator::getElementType(ArrayLiteral* lit) {
+  ArrayLiteral* current = lit;
+  while (auto sub = dynamic_cast<ArrayLiteral*>(current->elements[0])) {
+    current = sub;
+  }
+
+  return codegen(current->elements[0])->getType();
+}
+
+// Handle array assignments in codegenAssignment
+Value* IRGenerator::codegenAssignment(AssignmentExpression* assign) {
+  Value* target = codegen(assign->assignee);
+  Value* value = codegen(assign->value);
 
   if (!target || !value)
     return nullptr;
 
+  if (!target->getType()->isPointerTy()) {
+    module->getContext().emitError("Assignment target is not a pointer.");
+    return nullptr;
+  }
+
+  Type* valueType = value->getType();
+
+  // Handle uniform arrays via memcpy
+  if (valueType->isArrayTy()) {
+    // Create temporary alloca to hold the array value
+    AllocaInst* tempArray = builder.CreateAlloca(valueType, nullptr, "tmp.array");
+    builder.CreateStore(value, tempArray);
+
+    // Compute size of the array
+    DataLayout dl = module->getDataLayout();
+    uint64_t size = dl.getTypeAllocSize(valueType);
+
+    // Cast both pointers to i8* (LLVM IR opaque pointers)
+    Value* srcPtr = builder.CreateBitCast(tempArray, builder.getPtrTy(), "src.cast");
+    Value* destPtr = builder.CreateBitCast(target, builder.getPtrTy(), "dest.cast");
+
+    // Use CreateMemCpy instead of manual @llvm.memcpy
+    builder.CreateMemCpy(
+      destPtr,
+      Align(4),                 // Destination alignment
+      srcPtr,
+      Align(4),                 // Source alignment
+      ConstantInt::get(Type::getInt64Ty(context), size)
+    );
+
+    return target;
+  }
+
+  // Scalars (int, float, bool, pointer/string)
   return builder.CreateStore(value, target);
+}
+
+Value* IRGenerator::codegen(AstNode* node) {
+  if (!node) return nullptr;
+
+  // Handle expressions
+  if (auto expr = dynamic_cast<Expression*>(node)) {
+    return codegenExpression(expr);
+  }
+
+  // Handle statements
+  if (auto stmt = dynamic_cast<Statement*>(node)) {
+
+    if (auto varDecl = dynamic_cast<VariableDeclaration*>(stmt)) {
+      return codegenVariableDeclaration(varDecl);
+    }
+
+    if (auto varInit = dynamic_cast<VariableInitialization*>(stmt)) {
+      return codegenVariableInitialization(varInit);
+    }
+
+    if (auto write = dynamic_cast<WriteStatement*>(stmt)) {
+      return codegenWriteStatement(write);
+    }
+
+    if (auto read = dynamic_cast<ReadStatement*>(stmt)) {
+      return codegenReadStatement(read);
+    }
+
+    if (auto ifStmt = dynamic_cast<IfStatement*>(stmt)) {
+      return codegenConditional(ifStmt);
+    }
+
+    if (auto whileLoop = dynamic_cast<WhileLoop*>(stmt)) {
+      return codegenLoop(whileLoop);
+    }
+
+    if (auto forLoop = dynamic_cast<ForLoop*>(stmt)) {
+      return codegenForLoop(forLoop);
+    }
+
+    if (auto returnStmt = dynamic_cast<ReturnStatement*>(stmt)) {
+      if (returnStmt->returnValue)
+          return builder.CreateRet(codegenExpression(returnStmt->returnValue));
+      else
+          return builder.CreateRetVoid(); // handle void return
+    }
+
+    if (dynamic_cast<SkipStatement*>(stmt)) {
+      return nullptr;
+    }
+
+    if (dynamic_cast<StopStatement*>(stmt)) {
+      Function* exitFunc = module->getFunction("exit");
+      if (!exitFunc) {
+        FunctionType* exitType = FunctionType::get(Type::getVoidTy(context), { Type::getInt32Ty(context) }, false);
+        exitFunc = Function::Create(exitType, Function::ExternalLinkage, "exit", module.get());
+      }
+      builder.CreateCall(exitFunc, ConstantInt::get(Type::getInt32Ty(context), 0));
+      return nullptr;
+    }
+  }
+
+  errs() << "Unknown AST node in codegen: " << AstNode::get_node_name(node) << "\n";
+  return nullptr;
 }
 
 Value *IRGenerator::codegenIdentifier(Identifier *id)
@@ -499,33 +713,28 @@ Value *IRGenerator::codegenLiteral(Literal *lit)
 }
 
 
-Constant *IRGenerator::createNestedArray(ArrayLiteral *lit, ArrayType *parentType) {
-  if (lit->elements.empty()) return nullptr;
+Constant* IRGenerator::createNestedArray(ArrayLiteral* lit, ArrayType* arrType) {
   std::vector<Constant*> elements;
-  Type *elementType = nullptr;
 
-  // Determine element type from first element
-  if (!lit->elements.empty()) {
-    if (auto subArray = dynamic_cast<ArrayLiteral*>(lit->elements[0])) {
-      elementType = createNestedArray(subArray, nullptr)->getType();
-    } else {
-      elementType = codegen(lit->elements[0])->getType();
-    }
+  // ⚠️ Infer array type if not passed
+  if (!arrType) {
+      arrType = inferArrayType(lit);
   }
 
-  // Create array type
-  ArrayType *arrayType = ArrayType::get(elementType, lit->elements.size());
+  Type* elementType = arrType->getElementType();
 
-  // Process elements
   for (auto elem : lit->elements) {
-    if (auto subLit = dynamic_cast<ArrayLiteral*>(elem)) {
-      elements.push_back(createNestedArray(subLit, arrayType));
-    } else {
-      elements.push_back(dyn_cast<Constant>(codegen(elem)));
-    }
+      if (auto subLit = dynamic_cast<ArrayLiteral*>(elem)) {
+          // Recurse
+          ArrayType* subArrType = cast<ArrayType>(elementType);
+          elements.push_back(createNestedArray(subLit, subArrType));
+      } else {
+          Constant* c = cast<Constant>(codegen(elem));
+          elements.push_back(c);
+      }
   }
 
-  return ConstantArray::get(arrayType, elements);
+  return ConstantArray::get(arrType, elements);
 }
 
 
@@ -657,4 +866,70 @@ Value *IRGenerator::findValue(const string &name)
     }
   }
   return nullptr;
+}
+
+
+
+bool IRGenerator::isUniformArray(ArrayLiteral* lit) {
+  if (lit->elements.empty()) return true;
+
+  bool isNested = dynamic_cast<ArrayLiteral*>(lit->elements[0]) != nullptr;
+  size_t expectedSize = isNested ? 
+    dynamic_cast<ArrayLiteral*>(lit->elements[0])->elements.size() : 0;
+
+  Type* expectedType = codegen(lit->elements[0])->getType();
+
+  for (auto elem : lit->elements) {
+      auto sub = dynamic_cast<ArrayLiteral*>(elem);
+
+      if ((sub != nullptr) != isNested) return false;
+
+      if (isNested && sub) {
+          if (sub->elements.size() != expectedSize) return false;
+          if (!isUniformArray(sub)) return false;
+      }
+
+      if (!isNested) {
+          if (codegen(elem)->getType() != expectedType) return false;
+      }
+  }
+
+  return true;
+}
+
+
+ArrayType* IRGenerator::inferArrayType(ArrayLiteral* lit) {
+  std::vector<uint64_t> dims;
+  ArrayLiteral* current = lit;
+  while (dynamic_cast<ArrayLiteral*>(current->elements[0])) {
+    dims.push_back(current->elements.size());
+    current = dynamic_cast<ArrayLiteral*>(current->elements[0]);
+  }
+  dims.push_back(current->elements.size());
+
+  Type* elementType = codegen(current->elements[0])->getType();
+  ArrayType* arrType = ArrayType::get(elementType, dims.back());
+  for (int i = dims.size()-2; i >= 0; --i) {
+    arrType = ArrayType::get(arrType, dims[i]);
+  }
+  return arrType;
+}
+
+Function* IRGenerator::declareMalloc() {
+  Function* mallocFn = module->getFunction("malloc");
+
+  if (!mallocFn) {
+    FunctionType* mallocType = FunctionType::get(
+      PointerType::getInt8Ty(context),
+      { Type::getInt64Ty(context) },
+      false
+    );
+
+    mallocFn = Function::Create(
+      mallocType,
+      Function::ExternalLinkage,
+      "malloc",
+      module.get());
+  }
+  return mallocFn;
 }

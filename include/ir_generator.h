@@ -9,6 +9,8 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Value.h"
+#include "llvm/Support/Alignment.h"
+
 
 #include <stack>
 #include <map>
@@ -34,9 +36,9 @@ private:
   IRBuilder<> builder;
   stack<map<string, Value *>> symbolTable;
 
-  Type *getLLVMType(SymbolType type, int dim = 0);
+  Type* getLLVMType(SymbolType type, int dim, bool hasLiteralInit);
   Value *codegen(AstNode *node);
-  Value *codegenProgram(ProgramDefinition *program);
+  void codegenProgram(ProgramDefinition* program);
   Value *codegenFunction(FunctionDefinition *func);
   Value *codegenStatement(Statement *stmt);
   Value *codegenExpression(Expression *expr);
@@ -62,7 +64,23 @@ private:
 
   Constant *createNestedArray(ArrayLiteral *lit, ArrayType *parentType);
   Value *createArrayAllocation(Type *baseType, const std::vector<Value*> &dims);
+  Value* codegenAssignableExpr(AssignableExpression*);
+  
+  Constant *createFlatArrayInitializer(ArrayLiteral* lit);
+  Value* createMemCpy(Value* dest, Value* src, Value* size);
+  Value* createMalloc(Type* ty, Value* count);
+  Value *createMultiDimArray(ArrayLiteral* lit, int dim);
+  //Value *createJaggedArray(ArrayLiteral *lit, Type *elementType);
+  ArrayType *inferArrayTypeFromLiteral(ArrayLiteral *lit);
 
+
+  bool isUniformArray(ArrayLiteral* lit);
+  ArrayType* inferArrayType(ArrayLiteral* lit);
+  Function*declareMalloc();
+  Value* createJaggedArray(ArrayLiteral* lit, Function* mallocFunc);
+  Type* getElementType(ArrayLiteral* lit);
+  Value* codegenVariableInitialization(VariableInitialization* init);
+  
   void pushScope() { symbolTable.push({}); }
   void popScope() { symbolTable.pop(); }
   Value *findValue(const string &name);

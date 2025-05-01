@@ -53,7 +53,7 @@ void SemanticAnalyzer::semantic_source(Source *source)
     string name = func->funcname->name;
     DataType *dt = func->return_type->return_type;
     vector<pair<SymbolType, int>> parameters = SymbolTable::get_parameters_type(func->parameters);
-    if (parameters[0].first == SymbolType::Undefined)
+    if (!parameters.empty() && parameters[0].first == SymbolType::Undefined)
     {
       semantic_error(name, SymbolType::Undefined, "Error: Variable name is already defined.");
       return;
@@ -214,7 +214,7 @@ void SemanticAnalyzer::semantic_if(IfStatement *ifStmt, string name_parent)
 void SemanticAnalyzer::semantic_return(ReturnStatement *rtnStmt, string name_parent)
 {
   stack<SymbolTable *> temp = call_stack;
-  SymbolTable *global = new SymbolTable();
+  SymbolTable *global = nullptr;
   while (!temp.empty())
   {
     global = temp.top();
@@ -725,10 +725,17 @@ SymbolType SemanticAnalyzer::semantic_unary_expr(Expression *unaryExpr)
   if (dynamic_cast<Identifier *>(unary_Expr->operand))
   {
     Identifier *id = static_cast<Identifier *>(unary_Expr->operand);
-    VariableSymbol *vs = retrieve_scope(id->name)->retrieve_variable(id->name);
-    if (vs == nullptr)
+    SymbolTable *scope = retrieve_scope(id->name);
+    if (!scope)
     {
-      semantic_error(id->name, vs->type, "Semantic error: Variable '" + id->name + "' must be Declared.");
+      semantic_error(id->name, SymbolType::Undefined, "Semantic error: Variable '" + id->name + "' must be Declared.");
+      return SymbolType::Undefined;
+    }
+
+    VariableSymbol *vs = scope->retrieve_variable(id->name);
+    if (!vs)
+    {
+      semantic_error(id->name, SymbolType::Undefined, "Semantic error: Variable '" + id->name + "' must be Declared.");
       return SymbolType::Undefined;
     }
     dim = vs->dim;
@@ -909,7 +916,7 @@ SymbolType SemanticAnalyzer::semantic_call_function_expr(Expression *cfExpr)
       is_initialized_var(id);
     }
   }
-  SymbolTable *global = new SymbolTable();
+  SymbolTable *global = nullptr;
   while (!temp.empty())
   {
     global = temp.top();
@@ -921,7 +928,7 @@ SymbolType SemanticAnalyzer::semantic_call_function_expr(Expression *cfExpr)
     return SymbolType::Undefined;
   }
   vector<pair<SymbolType, int>> args = global->get_arguments(func_name->name);
-  if (args[0].first == SymbolType::Undefined)
+  if (!args.empty() && args[0].first == SymbolType::Undefined)
   {
     semantic_error(func_name->name, SymbolType::Undefined, "Function with name " + func_name->name + " not found!");
     return SymbolType::Undefined;
@@ -947,7 +954,7 @@ SymbolType SemanticAnalyzer::semantic_id(Identifier *id, bool set_init)
 {
   stack<SymbolTable *> temp = call_stack;
   string var = id->name;
-  SymbolTable *st = new SymbolTable();
+  SymbolTable *st = nullptr;
   while (!temp.empty())
   {
     st = temp.top();
@@ -1087,8 +1094,14 @@ void SemanticAnalyzer::is_array(Expression *Expr)
   else if (dynamic_cast<CallFunctionExpression *>(Expr))
   {
     CallFunctionExpression *cf = static_cast<CallFunctionExpression *>(Expr);
-    FunctionSymbol *fn = retrieve_scope(cf->function->name)->retrieve_function(cf->function->name);
-    if (fn == nullptr)
+    SymbolTable *scope = retrieve_scope(cf->function->name);
+    if (!scope)
+    {
+      semantic_error(cf->function->name, SymbolType::Undefined, "Semantic error: Function '" + cf->function->name + "' must be Declared.");
+      return;
+    }
+    FunctionSymbol *fn = scope->retrieve_function(cf->function->name);
+    if (!fn)
     {
       semantic_error(cf->function->name, SymbolType::Undefined, "Semantic error: Function '" + cf->function->name + "' must be Declared.");
       return;

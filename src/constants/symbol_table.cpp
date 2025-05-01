@@ -107,13 +107,10 @@ SymbolType SymbolTable::get_type(string s)
 vector<pair<SymbolType, int>> SymbolTable::get_arguments(string func_name)
 {
   auto it = hashtable.find(func_name);
-  if (it != hashtable.end())
+  if (it != hashtable.end() && it->second->kind == SymbolKind::Function)
   {
-    if (it->second->kind == SymbolKind::Function)
-    {
-      FunctionSymbol *func = static_cast<FunctionSymbol *>(it->second);
-      return func->parameters;
-    }
+    FunctionSymbol *func = static_cast<FunctionSymbol *>(it->second);
+    return func->parameters;
   }
   return {{SymbolType::Undefined, 0}};
 }

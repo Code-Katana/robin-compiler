@@ -21,9 +21,9 @@ protected:
   ScannerBase *sc;
   Token current_token;
   Token previous_token;
-  ErrorNode* error_node;
+  ErrorNode *error_node;
   bool has_error;
-  //!
+
   virtual bool match(TokenType type) = 0;
   ErrorNode *syntax_error(string message);
   bool lookahead(TokenType type);

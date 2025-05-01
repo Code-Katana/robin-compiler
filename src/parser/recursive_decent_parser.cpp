@@ -1639,28 +1639,47 @@ Expression *RecursiveDecentParser::parse_call_expr(Identifier *id)
 
   if (!lookahead(TokenType::RIGHT_PR))
   {
-    Expression *arg = parse_or_expr();
+    Expression *arg = nullptr;
+    if (lookahead(TokenType::LEFT_CURLY_PR))
+    {
+      arg = parse_array();
+    }
+    else
+    {
+      arg = parse_or_expr();
+    }
+
     if (!arg)
     {
-      syntax_error("Expected expression as function call argument");
+      syntax_error("Expected expression or array literal as function call argument");
       return nullptr;
     }
+
     args.push_back(arg);
 
     while (lookahead(TokenType::COMMA_SY))
     {
       if (!match(TokenType::COMMA_SY))
       {
-        syntax_error("Expected ',' between function call arguments");
+        syntax_error("Expected ',' between arguments");
         return nullptr;
       }
 
-      arg = parse_or_expr();
+      if (lookahead(TokenType::LEFT_CURLY_PR))
+      {
+        arg = parse_array();
+      }
+      else
+      {
+        arg = parse_or_expr();
+      }
+
       if (!arg)
       {
         syntax_error("Expected expression after ',' in function call arguments");
         return nullptr;
       }
+
       args.push_back(arg);
     }
   }

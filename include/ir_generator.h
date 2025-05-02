@@ -29,6 +29,8 @@ struct SymbolEntry
    // Add these new fields
    SymbolType baseType;  // Original type without pointers
    int dimensions;       // Array dimension count
+   size_t arrayLength = 0;
+   llvm::Value *lengthAlloca = nullptr;
 };
 class IRGenerator
 {

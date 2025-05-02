@@ -151,60 +151,77 @@ ArrayType *IRGenerator::inferArrayType(ArrayLiteral *lit)
 }
 
 // Modified function signature
-Value* IRGenerator::codegenIndexExpression(IndexExpression* expr, Type** outElementType){
-  Value* base = codegenLValue(expr->base);
+Value* IRGenerator::codegenIndexExpression(IndexExpression* expr, Type** outElementType) {
   std::vector<Value*> indices;
-  SymbolType currentType;
+  const Identifier* rootId = nullptr;
+  SymbolType baseType;
   int totalDims;
 
-  // Get array metadata
-  if (auto id = dynamic_cast<Identifier*>(expr->base)) {
-      auto entry = findSymbol(id->name).value();
-      currentType = entry.baseType;
-      totalDims = entry.dimensions;
-  } else {
-      module->getContext().emitError("Complex index expressions not supported");
+  // Traverse to find root Identifier and collect indices
+  IndexExpression* current = expr;
+  while (current) {
+      if (auto id = dynamic_cast<Identifier*>(current->base)) {
+          rootId = id;
+          break;
+      } else if (auto innerExpr = dynamic_cast<IndexExpression*>(current->base)) {
+          indices.push_back(codegen(current->index));
+          current = innerExpr;
+      } else {
+          module->getContext().emitError("Unsupported base expression in index");
+          return nullptr;
+      }
+  }
+
+  if (!rootId) {
+      module->getContext().emitError("Could not find root array in index expression");
       return nullptr;
   }
 
-  // Collect all indices in reverse order (from leaf to root)
-  IndexExpression* current = expr;
+  // Collect remaining indices from the root's IndexExpressions
   while (current) {
       indices.push_back(codegen(current->index));
       current = dynamic_cast<IndexExpression*>(current->base);
   }
   std::reverse(indices.begin(), indices.end());
 
+  // Get array metadata from root symbol
+  auto entryOpt = findSymbol(rootId->name);
+  if (!entryOpt) {
+      module->getContext().emitError("Undefined variable: " + rootId->name);
+      return nullptr;
+  }
+  baseType = entryOpt->baseType;
+  totalDims = entryOpt->dimensions;
+
   if (indices.size() > totalDims) {
-      module->getContext().emitError("Too many array indices");
+      module->getContext().emitError("Too many array indices for '" + rootId->name + "'");
       return nullptr;
   }
 
-  Value* currentPtr = builder.CreateLoad(getLLVMType(currentType, totalDims), base);
-  
-  // Process each dimension sequentially
+  // Load root array pointer
+  Value* currentPtr = builder.CreateLoad(getLLVMType(baseType, totalDims), entryOpt->llvmValue);
+
+  // Process each index
   for (size_t i = 0; i < indices.size(); ++i) {
       int remainingDims = totalDims - i - 1;
-      Type* elementType = getLLVMType(currentType, remainingDims);
+      Type* elementType = getLLVMType(baseType, remainingDims);
 
-      // Create GEP with single index for pointer arithmetic
       currentPtr = builder.CreateInBoundsGEP(
           elementType,
           currentPtr,
-          {indices[i]},  // Use single index for pointer offset
+          {indices[i]},
           "dim" + std::to_string(i) + ".idx"
       );
 
-      // Load next level pointer except for last dimension
       if (i < indices.size() - 1) {
           currentPtr = builder.CreateLoad(elementType, currentPtr);
       }
   }
 
   if (outElementType) {
-      *outElementType = getLLVMType(currentType, totalDims - indices.size());
+      *outElementType = getLLVMType(baseType, totalDims - indices.size());
   }
-  
+
   return currentPtr;
 }
 

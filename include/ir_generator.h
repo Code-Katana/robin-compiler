@@ -39,6 +39,7 @@ private:
   unique_ptr<Module> module;
   IRBuilder<> builder;
   stack<unordered_map<string, SymbolEntry>> symbolTable;
+  std::unordered_map<std::string, FunctionDefinition *> functionTable;
 
   Type *getLLVMType(SymbolType type, int dim = 0);
   Value *codegen(AstNode *node);

@@ -36,6 +36,7 @@ void IRGenerator::generate(Source *source, const string &filename)
 {
   for (auto func : source->functions)
   {
+    functionTable[func->funcname->name] = func;
     codegenFunction(func);
   }
   // Generate code for program (main function)
@@ -164,13 +165,11 @@ void IRGenerator::codegenGlobalVariable(VariableDefinition *dif)
 }
 Value *IRGenerator::codegenFunction(FunctionDefinition *func)
 {
-  // Get return type
-  llvm::Type *retType = getLLVMType(
-      Symbol::get_datatype(func->return_type->return_type),
-      Symbol::get_dimension(func->return_type->return_type));
-
-  // Get parameter types
+  // 1. Collect parameter types (only for parameters, not all locals)
   std::vector<llvm::Type *> paramTypes;
+  std::vector<VariableDeclaration *> paramDecls;
+  std::vector<VariableInitialization *> paramInits;
+
   for (auto param : func->parameters)
   {
     if (auto decl = dynamic_cast<VariableDeclaration *>(param->def))
@@ -179,6 +178,8 @@ Value *IRGenerator::codegenFunction(FunctionDefinition *func)
           Symbol::get_datatype(decl->datatype),
           Symbol::get_dimension(decl->datatype));
       paramTypes.push_back(ty);
+      paramDecls.push_back(decl);
+      paramInits.push_back(nullptr);
     }
     else if (auto init = dynamic_cast<VariableInitialization *>(param->def))
     {
@@ -186,10 +187,15 @@ Value *IRGenerator::codegenFunction(FunctionDefinition *func)
           Symbol::get_datatype(init->datatype),
           Symbol::get_dimension(init->datatype));
       paramTypes.push_back(ty);
+      paramDecls.push_back(nullptr);
+      paramInits.push_back(init);
     }
   }
 
-  // Create function type
+  // 2. Create function type
+  llvm::Type *retType = getLLVMType(
+      Symbol::get_datatype(func->return_type->return_type),
+      Symbol::get_dimension(func->return_type->return_type));
   llvm::FunctionType *funcType = llvm::FunctionType::get(retType, paramTypes, false);
   llvm::Function *llvmFunc = llvm::Function::Create(
       funcType,
@@ -197,45 +203,43 @@ Value *IRGenerator::codegenFunction(FunctionDefinition *func)
       func->funcname->name,
       module.get());
 
-  // Create entry block
+  // 3. Create entry block
   llvm::BasicBlock *entry = llvm::BasicBlock::Create(context, "entry", llvmFunc);
   builder.SetInsertPoint(entry);
   pushScope();
 
-  // Process parameters
+  // 4. Process parameters: allocate and store incoming values
   unsigned idx = 0;
   for (auto &arg : llvmFunc->args())
   {
-    auto paramDef = func->parameters[idx++]->def;
-    if (auto decl = dynamic_cast<VariableDeclaration *>(paramDef))
+    if (paramDecls[idx])
     {
-      // Use your codegenVariableDeclaration
-      codegenVariableDeclaration(decl);
-      // Store the argument value into the alloca
-      auto varName = decl->variables[0]->name;
+      // Use your codegenVariableDeclaration for the parameter
+      codegenVariableDeclaration(paramDecls[idx]);
+      auto varName = paramDecls[idx]->variables[0]->name;
       auto entryOpt = findSymbol(varName);
       if (entryOpt)
         builder.CreateStore(&arg, entryOpt->llvmValue);
     }
-    else if (auto init = dynamic_cast<VariableInitialization *>(paramDef))
+    else if (paramInits[idx])
     {
-      // Use your codegenVariableInitialization
-      codegenVariableInitialization(init);
-      // Store the argument value into the alloca
-      auto varName = init->name->name;
+      // Use your codegenVariableInitialization for the parameter
+      codegenVariableInitialization(paramInits[idx]);
+      auto varName = paramInits[idx]->name->name;
       auto entryOpt = findSymbol(varName);
       if (entryOpt)
         builder.CreateStore(&arg, entryOpt->llvmValue);
     }
+    ++idx;
   }
 
-  // Process function body
+  // 5. Process function body (locals and statements)
   for (auto stmt : func->body)
   {
     codegen(stmt);
   }
 
-  // If function has no explicit return, add return void
+  // 6. If function has no explicit return, add return void
   if (retType->isVoidTy() && !builder.GetInsertBlock()->getTerminator())
   {
     builder.CreateRetVoid();
@@ -257,11 +261,6 @@ Value *IRGenerator::codegenVariableInitialization(VariableInitialization *init)
   {
     Value *initVal = codegenExpression(init->initializer);
     builder.CreateStore(initVal, alloca);
-  }
-  else
-  {
-    Value *defaultVal = llvm::Constant::getNullValue(ty);
-    builder.CreateStore(defaultVal, alloca);
   }
 
   return alloca;
@@ -1235,32 +1234,72 @@ Value *IRGenerator::codegenCall(CallFunctionExpression *call)
     return nullptr;
   }
 
-  // 2. Generate code for each argument
+  // 2. Lookup the function definition in your AST (needed for default values)
+  FunctionDefinition *funcDef = nullptr;
+  auto it = functionTable.find(call->function->name);
+  if (it != functionTable.end())
+  {
+    funcDef = it->second;
+  }
+  else
+  {
+    module->getContext().emitError("No AST for function: " + call->function->name);
+    return nullptr;
+  }
+
+  size_t numParams = callee->arg_size();
+  size_t numArgs = call->arguments.size();
+
+  if (numArgs > numParams)
+  {
+    module->getContext().emitError("Too many arguments for function: " + call->function->name);
+    return nullptr;
+  }
+
   std::vector<Value *> args;
   auto paramIt = callee->arg_begin();
-  for (size_t i = 0; i < call->arguments.size(); ++i)
+
+  for (size_t i = 0; i < numParams; ++i)
   {
-    Value *argVal = codegenExpression(call->arguments[i]);
+    Value *argVal = nullptr;
+
+    if (i < numArgs)
+    {
+      // User provided this argument
+      argVal = codegenExpression(call->arguments[i]);
+    }
+    else
+    {
+      // User did not provide this argument, use default from AST
+      auto paramDef = funcDef->parameters[i]->def;
+      if (auto init = dynamic_cast<VariableInitialization *>(paramDef))
+      {
+        argVal = codegenExpression(init->initializer);
+      }
+      else
+      {
+        module->getContext().emitError("Missing argument and no default for parameter " + std::to_string(i));
+        return nullptr;
+      }
+    }
+
     if (!argVal)
       return nullptr;
 
-    // If the function expects a float (double) but you have a float, promote it
+    // Type conversion (as before)
     if (paramIt != callee->arg_end())
     {
       llvm::Type *expectedType = paramIt->getType();
       llvm::Type *actualType = argVal->getType();
 
-      // Promote float to double if needed
       if (expectedType->isDoubleTy() && actualType->isFloatTy())
       {
         argVal = builder.CreateFPExt(argVal, expectedType);
       }
-      // Truncate double to float if needed
       else if (expectedType->isFloatTy() && actualType->isDoubleTy())
       {
         argVal = builder.CreateFPTrunc(argVal, expectedType);
       }
-      // Zero-extend bool to int if needed
       else if (expectedType->isIntegerTy(32) && actualType->isIntegerTy(1))
       {
         argVal = builder.CreateZExt(argVal, expectedType);

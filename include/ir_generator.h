@@ -1,27 +1,35 @@
 #pragma once
 
-  #include "ast.h"
-  #include "symbol.h"
+#include "ast.h"
+#include "symbol.h"
 
-  #include <llvm/Support/TargetSelect.h>
-  #include "llvm/Support/FileSystem.h"
+#include <llvm/IR/Type.h>
+#include <llvm/IR/DerivedTypes.h>
+#include <llvm/Support/TargetSelect.h>
+#include "llvm/Support/FileSystem.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Value.h"
-#include "llvm/Support/Alignment.h"
 
-
+#include <unordered_map>
+#include <string>
+#include <memory>
 #include <stack>
 #include <map>
-
-#include "llvm/IR/DataLayout.h"
-#include "llvm/IR/Operator.h"
-#include "llvm/IR/Type.h"
 
 using namespace std;
 using namespace llvm;
 
+struct SymbolEntry
+{
+  llvm::Type *llvmType;   // The LLVM type of the variable
+  llvm::Value *llvmValue; // The LLVM value (alloca, global, etc.)
+
+   // Add these new fields
+   SymbolType baseType;  // Original type without pointers
+   int dimensions;       // Array dimension count
+};
 class IRGenerator
 {
 public:
@@ -34,17 +42,20 @@ private:
   static LLVMContext context;
   unique_ptr<Module> module;
   IRBuilder<> builder;
-  stack<map<string, Value *>> symbolTable;
+  stack<unordered_map<string, SymbolEntry>> symbolTable;
 
-  Type* getLLVMType(SymbolType type, int dim, bool hasLiteralInit);
+  Type *getLLVMType(SymbolType type, int dim = 0);
   Value *codegen(AstNode *node);
-  void codegenProgram(ProgramDefinition* program);
+  Value *codegenProgram(ProgramDefinition *program);
   Value *codegenFunction(FunctionDefinition *func);
-  Value *codegenStatement(Statement *stmt);
-  Value *codegenExpression(Expression *expr);
-  Value *codegenVariableDeclaration(VariableDeclaration *decl);
 
-  Value *codegenAssignment(AssignmentExpression *assign);
+  // def
+  void codegenGlobalVariable(VariableDefinition *dif);
+  Value *codegenVariableDefinition(VariableDefinition *def);
+  Value *codegenVariableDeclaration(VariableDeclaration *decl);
+  Value *codegenVariableInitialization(VariableInitialization *init);
+  // expr
+  Value *codegenExpression(Expression *expr);
   Value *codegenIdentifier(Identifier *id);
   Value *codegenLiteral(Literal *lit);
   Value *codegenOrExpr(OrExpression *expr);
@@ -53,35 +64,44 @@ private:
   Value *codegenEqualityExpr(EqualityExpression *expr);
   Value *codegenAdditiveExpr(AdditiveExpression *expr);
   Value *codegenMultiplicativeExpr(MultiplicativeExpression *expr);
+  Value *codegenUnaryExpr(UnaryExpression *expr);
+  // stat
+  Value *codegenStatement(Statement *stmt);
+  Value *codegenAssignment(AssignmentExpression *assign);
   Value *codegenCall(CallFunctionExpression *call);
-  Value *codegenConditional(IfStatement *ifStmt);
-  Value *codegenLoop(WhileLoop *loop);
-  Value *codegenForLoop(ForLoop *loop);
+  Value *codegenWhileLoop(WhileLoop *loop);
+  Value *codegenForLoop(ForLoop *forLoop);
+  Value *codegenIfStatement(IfStatement *ifStmt);
+  Value *codegenReturnStatement(ReturnStatement *retStmt);
   Value *codegenWriteStatement(WriteStatement *write);
   Value *codegenReadStatement(ReadStatement *read);
-  Value *codegenIndexExpression(IndexExpression *expr);
-  Value *createArrayAllocation(Type *elementType, Value *size);
-
-  Constant *createNestedArray(ArrayLiteral *lit, ArrayType *parentType);
-  Value *createArrayAllocation(Type *baseType, const std::vector<Value*> &dims);
-  Value* codegenAssignableExpr(AssignableExpression*);
-  
-  Constant *createFlatArrayInitializer(ArrayLiteral* lit);
-  Value* createMemCpy(Value* dest, Value* src, Value* size);
-  Value* createMalloc(Type* ty, Value* count);
-  Value *createMultiDimArray(ArrayLiteral* lit, int dim);
-  //Value *createJaggedArray(ArrayLiteral *lit, Type *elementType);
-  ArrayType *inferArrayTypeFromLiteral(ArrayLiteral *lit);
-
-
-  bool isUniformArray(ArrayLiteral* lit);
-  ArrayType* inferArrayType(ArrayLiteral* lit);
-  Function*declareMalloc();
-  Value* createJaggedArray(ArrayLiteral* lit, Function* mallocFunc);
-  Type* getElementType(ArrayLiteral* lit);
-  Value* codegenVariableInitialization(VariableInitialization* init);
-  
+  Value *codegenStopStatement(StopStatement *stmt);
+  Value *codegenSkipStatement(SkipStatement *stmt);
+  // helpers
   void pushScope() { symbolTable.push({}); }
   void popScope() { symbolTable.pop(); }
+  void printSymbolTable();
+
+  Value *castToBoolean(Value *value);
   Value *findValue(const string &name);
+  Value *codegenIdentifierAddress(Identifier *id);
+  Value *codegenLvalue(AssignableExpression *expr);
+
+  optional<SymbolEntry> findSymbol(const std::string &name);
+
+  bool isUniformArray(ArrayLiteral *lit);
+  Type *getElementType(ArrayLiteral *lit, int* outDim);
+  Value *createJaggedArray(ArrayLiteral* lit, Function* mallocFn, 
+    SymbolType* outBaseType, int* outDimensions);
+  Constant *createNestedArray(ArrayLiteral *lit, ArrayType *arrType);
+  ArrayType *inferArrayType(ArrayLiteral *lit);
+  Value *codegenIndexExpression(IndexExpression* expr, Type** outElementType = nullptr);
+  Function *declareMalloc();
+  Value *createArrayAllocation(Type *elementType, Value *size);
+  //void printArrayLiteral(ArrayLiteral* lit, int depth = 0);
+  Value* codegenLValue(Expression* expr);
+  Value* createJaggedArrayHelper(ArrayLiteral* lit, Function* mallocFn, 
+    int remainingDims, Type* elementType);
+
+    bool isSingleDimensionArray(const SymbolEntry& entry) ;
 };

@@ -914,7 +914,7 @@ SymbolType SemanticAnalyzer::semantic_index_expr(Expression *expr, bool set_init
 
   type = semantic_expr(idxExpr->base);
 
-  if ((dim != symbol->dim) && !allow_partial_indexing)
+  if (((dim != symbol->dim) && !allow_partial_indexing) || (dim > symbol->dim))
   {
     semantic_error(symbol->name, type, "Dimension mismatch for variable " + symbol->name + ": expected " + to_string(symbol->dim) + ", but got " + to_string(dim));
     return SymbolType::Undefined;

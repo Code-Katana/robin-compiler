@@ -2,6 +2,7 @@
 
 #include "ast.h"
 #include "symbol.h"
+#include "semantic_analyzer.h"
 
 #include <llvm/IR/Type.h>
 #include <llvm/IR/DerivedTypes.h>
@@ -33,12 +34,13 @@ struct SymbolEntry
 class IRGenerator
 {
 public:
-  IRGenerator();
+  IRGenerator(SemanticAnalyzer *semantic);
   Module *getModule() { return module.get(); }
 
-  void generate(Source *source, const string &filename);
+  void generate(const string &filename);
 
 private:
+  Source *source;
   static LLVMContext context;
   unique_ptr<Module> module;
   IRBuilder<> builder;

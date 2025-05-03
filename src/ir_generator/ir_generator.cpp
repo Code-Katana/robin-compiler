@@ -2,9 +2,9 @@
 
 LLVMContext IRGenerator::context;
 
-IRGenerator::IRGenerator() : builder(context)
+IRGenerator::IRGenerator(SemanticAnalyzer *semantic) : builder(context)
 {
-
+  source = semantic->analyze();
   module = make_unique<Module>("main_module", context);
   pushScope();
 }
@@ -339,9 +339,8 @@ Value *IRGenerator::createArrayAllocation(Type *elementType, Value *size)
   return builder.CreateBitCast(rawPtr, PointerType::get(elementType, 0), "array_ptr");
 }
 
-void IRGenerator::generate(Source *source, const string &filename)
+void IRGenerator::generate(const string &filename)
 {
-
   for (auto func : source->functions)
   {
     functionTable[func->funcname->name] = func;
@@ -455,10 +454,6 @@ Value *IRGenerator::codegenProgram(ProgramDefinition *program)
     codegen(stmt);
   }
 
-  // Add pause and return
-  FunctionCallee pauseFunc = module->getOrInsertFunction(
-      "waitForKeypress",
-      FunctionType::get(Type::getVoidTy(context), {}, false));
   builder.CreateCall(pauseFunc);
   builder.CreateRet(ConstantInt::get(context, APInt(32, 0)));
 
@@ -1982,7 +1977,6 @@ Value *IRGenerator::codegenCall(CallFunctionExpression *call)
       {
         argVal = builder.CreateZExt(argVal, expectedType);
       }
-      
 
       ++paramIt;
     }

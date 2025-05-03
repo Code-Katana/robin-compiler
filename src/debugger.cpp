@@ -27,6 +27,7 @@ string read_program(string path)
 int Debugger::run()
 {
   string input_file = DEBUGGING_FOLDER + "/" + PROGRAM_FILE;
+  string output_file = DEBUGGING_FOLDER + "/" + PROGRAM_FILE + ".ll";
   string program = read_program(input_file);
   CompilerOptions *options = new CompilerOptions(program);
 
@@ -34,7 +35,7 @@ int Debugger::run()
 
   vector<Token> tokens = rc->tokenize();
   AstNode *tree = rc->parse_ast();
-  
+
   if (auto error = dynamic_cast<ErrorNode *>(tree))
   {
     cout << error->message << endl;
@@ -46,6 +47,7 @@ int Debugger::run()
 
     rc->typecheck();
   }
-  
+  rc->generate_ir(output_file);
+
   return 0;
 }

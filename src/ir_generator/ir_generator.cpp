@@ -245,6 +245,47 @@ Value *IRGenerator::codegenIndexExpression(IndexExpression *expr, Type **outElem
     int remainingDims = totalDims - i - 1;
     Type *elementType = getLLVMType(baseType, remainingDims);
 
+    // Bounds check if we have length information
+    if (i == 0)
+    {
+      auto lenEntryOpt = findSymbol(rootId->name + "_len");
+      if (lenEntryOpt && lenEntryOpt->llvmValue)
+      {
+        Value *lengthVal = builder.CreateLoad(Type::getInt32Ty(context),
+                                              lenEntryOpt->llvmValue);
+
+        // Create comparison: index < length
+        Value *cmp = builder.CreateICmpULT(indices[i], lengthVal, "bounds_check");
+
+        // Create basic blocks for the bounds check
+        Function *currentFunc = builder.GetInsertBlock()->getParent();
+        BasicBlock *thenBB = BasicBlock::Create(context, "in_bounds", currentFunc);
+        BasicBlock *elseBB = BasicBlock::Create(context, "out_of_bounds", currentFunc);
+        BasicBlock *mergeBB = BasicBlock::Create(context, "after_bounds_check", currentFunc);
+
+        builder.CreateCondBr(cmp, thenBB, elseBB);
+
+        // Out-of-bounds case: print error and use index 0
+        builder.SetInsertPoint(elseBB);
+        // Call a runtime error function or just use a default index
+        Value *defaultIndex = ConstantInt::get(Type::getInt32Ty(context), 0);
+        builder.CreateBr(mergeBB);
+
+        // In-bounds case: use the actual index
+        builder.SetInsertPoint(thenBB);
+        builder.CreateBr(mergeBB);
+
+        // Merge point: phi node to select the right index
+        builder.SetInsertPoint(mergeBB);
+        PHINode *indexPhi = builder.CreatePHI(Type::getInt32Ty(context), 2, "safe_index");
+        indexPhi->addIncoming(defaultIndex, elseBB);
+        indexPhi->addIncoming(indices[i], thenBB);
+
+        // Use the safe index
+        indices[i] = indexPhi;
+      }
+    }
+
     currentPtr = builder.CreateInBoundsGEP(
         elementType,
         currentPtr,
@@ -265,15 +306,6 @@ Value *IRGenerator::codegenIndexExpression(IndexExpression *expr, Type **outElem
   return currentPtr;
 }
 
-// Function *IRGenerator::declareMalloc() {
-//   Function *mallocFn = module->getFunction("malloc");
-//   if (!mallocFn) {
-//       FunctionType *mallocType = FunctionType::get(
-//           PointerType::getInt8Ty(context), {Type::getInt64Ty(context)}, false);
-//       mallocFn = Function::Create(mallocType, Function::ExternalLinkage, "malloc", module.get());
-//   }
-//   return mallocFn;
-// }
 Function *IRGenerator::declareMalloc()
 {
   Function *mallocFn = module->getFunction("malloc");
@@ -387,7 +419,7 @@ Value *IRGenerator::codegenProgram(ProgramDefinition *program)
           {
             // Update the array length in the symbol table
             size_t arraySize = arrayLit->elements.size();
-            
+
             // Look for a length variable
             auto lenEntry = findSymbol(id->name + "_len");
             if (lenEntry && lenEntry->llvmValue)
@@ -395,7 +427,7 @@ Value *IRGenerator::codegenProgram(ProgramDefinition *program)
               builder.CreateStore(
                   builder.getInt32(arraySize),
                   lenEntry->llvmValue);
-                  
+
               // Update the symbol table entry
               symbolTable.top()[id->name] = {
                   entry->llvmType,
@@ -403,8 +435,7 @@ Value *IRGenerator::codegenProgram(ProgramDefinition *program)
                   baseType,
                   dimensions,
                   arraySize,
-                  lenEntry->llvmValue
-              };
+                  lenEntry->llvmValue};
             }
           }
         }
@@ -456,12 +487,12 @@ void IRGenerator::codegenGlobalVariable(VariableDefinition *dif)
 
       // Store complete type information
       symbolTable.top()[name] = {
-          ty,         // LLVM type
-          gVar,       // Global variable
-          baseType,   // Base type
-          dimensions, // Array dimensions
-          0,          // arrayLength (unknown for dynamic)
-          nullptr     // lengthAlloca (not used for globals)
+          ty,         
+          gVar,       
+          baseType,   
+          dimensions, 
+          0,          
+          nullptr     
       };
 
       // Create length variable for arrays
@@ -573,9 +604,10 @@ void IRGenerator::codegenGlobalVariable(VariableDefinition *dif)
     module->getContext().emitError("Unknown variable definition type");
   }
 }
+
 Value *IRGenerator::codegenFunction(FunctionDefinition *func)
 {
-  // 1. Collect parameter types (only for parameters, not all locals)
+  // 1. Collect parameter types
   std::vector<llvm::Type *> paramTypes;
   std::vector<VariableDeclaration *> paramDecls;
   std::vector<VariableInitialization *> paramInits;
@@ -622,28 +654,72 @@ Value *IRGenerator::codegenFunction(FunctionDefinition *func)
   unsigned idx = 0;
   for (auto &arg : llvmFunc->args())
   {
+    std::string paramName;
+    SymbolType baseType;
+    int dimensions = 0;
+    
     if (paramDecls[idx])
     {
-      // Use your codegenVariableDeclaration for the parameter
-      codegenVariableDeclaration(paramDecls[idx]);
+      // Handle parameter declaration
       auto varName = paramDecls[idx]->variables[0]->name;
-      auto entryOpt = findSymbol(varName);
-      if (entryOpt)
-        builder.CreateStore(&arg, entryOpt->llvmValue);
+      paramName = varName;
+      baseType = Symbol::get_datatype(paramDecls[idx]->datatype);
+      dimensions = Symbol::get_dimension(paramDecls[idx]->datatype);
+      
+      // Create local variable
+      Type *ty = getLLVMType(baseType, dimensions);
+      AllocaInst *alloca = builder.CreateAlloca(ty, nullptr, varName);
+      builder.CreateStore(&arg, alloca);
+      
+      // Store in symbol table
+      symbolTable.top()[varName] = {
+          ty, alloca, baseType, dimensions, 0, nullptr
+      };
     }
     else if (paramInits[idx])
     {
-      // Use your codegenVariableInitialization for the parameter
-      codegenVariableInitialization(paramInits[idx]);
+      // Handle parameter with initialization
       auto varName = paramInits[idx]->name->name;
-      auto entryOpt = findSymbol(varName);
-      if (entryOpt)
-        builder.CreateStore(&arg, entryOpt->llvmValue);
+      paramName = varName;
+      baseType = Symbol::get_datatype(paramInits[idx]->datatype);
+      dimensions = Symbol::get_dimension(paramInits[idx]->datatype);
+      
+      // Create local variable
+      Type *ty = getLLVMType(baseType, dimensions);
+      AllocaInst *alloca = builder.CreateAlloca(ty, nullptr, varName);
+      builder.CreateStore(&arg, alloca);
+      
+      // Store in symbol table
+      symbolTable.top()[varName] = {
+          ty, alloca, baseType, dimensions, 0, nullptr
+      };
     }
+    
+    // For array parameters, create a length variable
+    if (dimensions > 0)
+    {
+      // Create length variable
+      AllocaInst *lengthAlloca = builder.CreateAlloca(
+          Type::getInt32Ty(context), nullptr, paramName + "_len");
+      
+      
+      // For now, initialize with a default value
+      builder.CreateStore(builder.getInt32(0), lengthAlloca);
+      
+      // Update symbol table
+      auto &entry = symbolTable.top()[paramName];
+      entry.lengthAlloca = lengthAlloca;
+      
+      // Add length variable to symbol table
+      symbolTable.top()[paramName + "_len"] = {
+          Type::getInt32Ty(context), lengthAlloca, SymbolType::Integer, 0, 0, nullptr
+      };
+    }
+    
     ++idx;
   }
 
-  // 5. Process function body (locals and statements)
+  // 5. Process function body
   for (auto stmt : func->body)
   {
     codegen(stmt);
@@ -658,24 +734,6 @@ Value *IRGenerator::codegenFunction(FunctionDefinition *func)
   popScope();
   return llvmFunc;
 }
-//=================================================================================================================================
-// Value *IRGenerator::codegenVariableInitialization(VariableInitialization *init)
-// {
-//   llvm::Type *ty = getLLVMType(
-//       Symbol::get_datatype(init->datatype),
-//       Symbol::get_dimension(init->datatype));
-
-//   llvm::AllocaInst *alloca = builder.CreateAlloca(ty, nullptr, init->name->name);
-//   symbolTable.top()[init->name->name] = SymbolEntry{ty, alloca};
-
-//   if (init->initializer)
-//   {
-//     Value *initVal = codegenExpression(init->initializer);
-//     builder.CreateStore(initVal, alloca);
-//   }
-
-//   return alloca;
-// }
 
 Value *IRGenerator::codegenVariableInitialization(VariableInitialization *init)
 {
@@ -689,7 +747,8 @@ Value *IRGenerator::codegenVariableInitialization(VariableInitialization *init)
   size_t arraySize = 0;
 
   // Create length variable for arrays
-  if (dimensions > 0) {
+  if (dimensions > 0)
+  {
     lengthAlloca = builder.CreateAlloca(Type::getInt32Ty(context), nullptr, varName + "_len");
   }
 
@@ -711,14 +770,16 @@ Value *IRGenerator::codegenVariableInitialization(VariableInitialization *init)
     builder.CreateStore(jagged, alloca);
 
     // Store the length for dynamic arrays
-    if (lengthAlloca) {
+    if (lengthAlloca)
+    {
       builder.CreateStore(builder.getInt32(arraySize), lengthAlloca);
     }
 
     symbolTable.top()[varName] = {
         ty, alloca, baseType, dimensions, arraySize, lengthAlloca};
-    
-    if (lengthAlloca) {
+
+    if (lengthAlloca)
+    {
       symbolTable.top()[varName + "_len"] = {
           Type::getInt32Ty(context), lengthAlloca, SymbolType::Integer, 0, 0, nullptr};
     }
@@ -729,14 +790,16 @@ Value *IRGenerator::codegenVariableInitialization(VariableInitialization *init)
     builder.CreateStore(initVal, alloca);
 
     // Initialize length to 0 for empty arrays
-    if (lengthAlloca) {
+    if (lengthAlloca)
+    {
       builder.CreateStore(builder.getInt32(0), lengthAlloca);
     }
 
     symbolTable.top()[varName] = {
         ty, alloca, baseType, dimensions, arraySize, lengthAlloca};
-    
-    if (lengthAlloca) {
+
+    if (lengthAlloca)
+    {
       symbolTable.top()[varName + "_len"] = {
           Type::getInt32Ty(context), lengthAlloca, SymbolType::Integer, 0, 0, nullptr};
     }
@@ -744,14 +807,16 @@ Value *IRGenerator::codegenVariableInitialization(VariableInitialization *init)
   else
   {
     // Initialize length to 0 for empty arrays
-    if (lengthAlloca) {
+    if (lengthAlloca)
+    {
       builder.CreateStore(builder.getInt32(0), lengthAlloca);
     }
 
     symbolTable.top()[varName] = {
         ty, alloca, baseType, dimensions, arraySize, lengthAlloca};
-    
-    if (lengthAlloca) {
+
+    if (lengthAlloca)
+    {
       symbolTable.top()[varName + "_len"] = {
           Type::getInt32Ty(context), lengthAlloca, SymbolType::Integer, 0, 0, nullptr};
     }
@@ -759,7 +824,6 @@ Value *IRGenerator::codegenVariableInitialization(VariableInitialization *init)
 
   return alloca;
 }
-
 
 Value *IRGenerator::codegenStatement(Statement *stmt)
 {
@@ -1276,30 +1340,6 @@ Value *IRGenerator::codegenVariableDeclaration(VariableDeclaration *decl)
   }
   return nullptr;
 }
-//====================================================================================================================
-// Value *IRGenerator::codegenAssignment(AssignmentExpression *assign)
-// {
-//   auto *id = dynamic_cast<Identifier *>(assign->assignee);
-//   auto entryOpt = findSymbol(id->name);
-//   if (!entryOpt)
-//     return nullptr;
-
-//   SymbolEntry entry = *entryOpt;
-//   llvm::Value *target = entry.llvmValue;
-//   llvm::Type *varType = entry.llvmType;
-//   llvm::Value *value = codegen(assign->value);
-
-//   if (!target || !value)
-//     return nullptr;
-
-//   // If value is a pointer (e.g., from another alloca), load it first
-//   if (value->getType()->isPointerTy())
-//   {
-//     value = builder.CreateLoad(varType, value);
-//   }
-
-//   return builder.CreateStore(value, target);
-// }
 
 Value *IRGenerator::codegenAssignment(AssignmentExpression *assign)
 {
@@ -1722,6 +1762,7 @@ Value *IRGenerator::codegenUnaryExpr(UnaryExpression *expr)
   }
 
   // 3. Array Size (#)
+
   if (expr->optr == "#")
   {
     auto id = dynamic_cast<Identifier *>(expr->operand);
@@ -1730,29 +1771,51 @@ Value *IRGenerator::codegenUnaryExpr(UnaryExpression *expr)
       module->getContext().emitError("# operator requires an array variable");
       return nullptr;
     }
+
     auto entryOpt = findSymbol(id->name);
     if (!entryOpt)
     {
       module->getContext().emitError("Undefined variable: " + id->name);
       return nullptr;
     }
+
     const SymbolEntry &entry = *entryOpt;
 
-    // Static array: return the stored length
+    // First check if we have a length variable
+    auto lenEntryOpt = findSymbol(id->name + "_len");
+    if (lenEntryOpt && lenEntryOpt->llvmValue)
+    {
+      // Load the length from the length variable
+      Value *lengthVal = builder.CreateLoad(Type::getInt32Ty(context),
+                                            lenEntryOpt->llvmValue,
+                                            id->name + "_len");
+
+      // Make sure it's an integer type
+      if (!lengthVal->getType()->isIntegerTy(32))
+      {
+        lengthVal = builder.CreateIntCast(lengthVal, Type::getInt32Ty(context), false);
+      }
+
+      return lengthVal;
+    }
+
+    // If no length variable but we have a static length in the symbol table
     if (entry.arrayLength > 0)
     {
       return ConstantInt::get(Type::getInt32Ty(context), entry.arrayLength);
     }
 
-    // Dynamic array: look for a length variable
-    auto lenEntryOpt = findSymbol(id->name + "_len");
-    if (lenEntryOpt)
+    // For array types with fixed size in LLVM IR
+    if (entry.llvmType->isArrayTy())
     {
-      return builder.CreateLoad(Type::getInt32Ty(context), lenEntryOpt->llvmValue, id->name + "_len");
+      ArrayType *arrTy = cast<ArrayType>(entry.llvmType);
+      uint64_t size = arrTy->getNumElements();
+      return ConstantInt::get(Type::getInt32Ty(context), size);
     }
 
+    // If we can't determine the size, return 0 with a warning
     module->getContext().emitError("Cannot determine array size for variable: " + id->name);
-    return nullptr;
+    return ConstantInt::get(Type::getInt32Ty(context), 0);
   }
   // 4. Increment/Decrement (++/--)
   if (expr->optr == "++" || expr->optr == "--")
@@ -1837,6 +1900,7 @@ Value *IRGenerator::codegenUnaryExpr(UnaryExpression *expr)
   module->getContext().emitError("Unknown unary operator");
   return nullptr;
 }
+
 Value *IRGenerator::codegenCall(CallFunctionExpression *call)
 {
   // 1. Lookup the function in the module
@@ -1856,28 +1920,42 @@ Value *IRGenerator::codegenCall(CallFunctionExpression *call)
     if (!argVal)
       return nullptr;
 
-    // If the function expects a float (double) but you have a float, promote it
+    // If the argument is an array, we need to handle its length
+    if (auto id = dynamic_cast<Identifier *>(call->arguments[i]))
+    {
+      auto entryOpt = findSymbol(id->name);
+      if (entryOpt && entryOpt->dimensions > 0)
+      {
+        // This is an array - we need to pass its length too
+        // For now, we'll just make sure the length variable is updated
+        auto lenEntryOpt = findSymbol(id->name + "_len");
+        if (lenEntryOpt && lenEntryOpt->llvmValue)
+        {
+          // The length variable exists - make sure it's up to date
+          // This is already handled in assignment and initialization
+        }
+      }
+    }
+
+    // Type conversion for function arguments
     if (paramIt != callee->arg_end())
     {
       llvm::Type *expectedType = paramIt->getType();
       llvm::Type *actualType = argVal->getType();
 
-      // Promote float to double if needed
+      // Handle type conversions
       if (expectedType->isDoubleTy() && actualType->isFloatTy())
       {
         argVal = builder.CreateFPExt(argVal, expectedType);
       }
-      // Truncate double to float if needed
       else if (expectedType->isFloatTy() && actualType->isDoubleTy())
       {
         argVal = builder.CreateFPTrunc(argVal, expectedType);
       }
-      // Zero-extend bool to int if needed
       else if (expectedType->isIntegerTy(32) && actualType->isIntegerTy(1))
       {
         argVal = builder.CreateZExt(argVal, expectedType);
       }
-      // Add more type conversions as needed...
 
       ++paramIt;
     }

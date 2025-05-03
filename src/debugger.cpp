@@ -26,12 +26,15 @@ string read_program(string path)
 
 int Debugger::run()
 {
-  string program = read_program(DEBUGGING_FOLDER + "/" + PROGRAM_FILE);
+  string input_file = DEBUGGING_FOLDER + "/" + PROGRAM_FILE;
+  string program = read_program(input_file);
   CompilerOptions *options = new CompilerOptions(program);
 
   RobinCompiler *rc = new RobinCompiler(options);
+
   vector<Token> tokens = rc->tokenize();
   AstNode *tree = rc->parse_ast();
+  
   if (auto error = dynamic_cast<ErrorNode *>(tree))
   {
     cout << error->message << endl;
@@ -43,5 +46,6 @@ int Debugger::run()
 
     rc->typecheck();
   }
+  
   return 0;
 }

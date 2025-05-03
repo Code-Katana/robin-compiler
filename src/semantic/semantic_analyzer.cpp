@@ -99,7 +99,7 @@ void SemanticAnalyzer::semantic_source(Source *source)
   }
 }
 
-void SemanticAnalyzer::semantic_program(Program *program)
+void SemanticAnalyzer::semantic_program(ProgramDefinition *program)
 {
   SymbolTable *st = new SymbolTable();
   call_stack.push(st);
@@ -110,7 +110,7 @@ void SemanticAnalyzer::semantic_program(Program *program)
   call_stack.pop();
 }
 
-void SemanticAnalyzer::sematic_function(Function *func)
+void SemanticAnalyzer::sematic_function(FunctionDefinition *func)
 {
   SymbolTable *st = new SymbolTable();
   SymbolTable *globals = call_stack.top();

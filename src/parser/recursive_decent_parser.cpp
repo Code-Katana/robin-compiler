@@ -37,7 +37,7 @@ Source *RecursiveDecentParser::parse_source()
 
   while (lookahead(TokenType::FUNC_KW))
   {
-    Function *func = parse_function();
+    FunctionDefinition *func = parse_function();
     if (!func)
     {
       syntax_error("Invalid function definition");

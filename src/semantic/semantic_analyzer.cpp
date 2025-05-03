@@ -17,7 +17,7 @@ ErrorSymbol SemanticAnalyzer::get_error()
   return {};
 }
 
-void SemanticAnalyzer::analyze()
+Source *SemanticAnalyzer::analyze()
 {
   Source *source = (Source *)parser->parse_ast();
   semantic_source(source);
@@ -25,6 +25,8 @@ void SemanticAnalyzer::analyze()
   {
     cout << error_symbol.message_error << endl;
   }
+
+  return source;
 }
 
 void SemanticAnalyzer::semantic_source(Source *source)

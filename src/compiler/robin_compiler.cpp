@@ -16,7 +16,7 @@ RobinCompiler::RobinCompiler(CompilerOptions *options)
 
   parser = new RecursiveDecentParser(scanner);
   semantic = new SemanticAnalyzer(parser);
-  generator = new IRGenerator();
+  generator = new IRGenerator(semantic);
 }
 
 vector<Token> RobinCompiler::tokenize()
@@ -36,5 +36,5 @@ void RobinCompiler::typecheck()
 
 void RobinCompiler::generate_ir(const string &filename)
 {
-  generator->generate((Source*)parser->parse_ast(),filename);
+  generator->generate(filename);
 }

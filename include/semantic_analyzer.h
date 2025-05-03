@@ -15,7 +15,7 @@ class SemanticAnalyzer
 {
 public:
   SemanticAnalyzer(ParserBase *pr);
-  void analyze();
+  Source *analyze();
   ErrorSymbol get_error();
 
 private:

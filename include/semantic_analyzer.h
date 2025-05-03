@@ -16,10 +16,13 @@ class SemanticAnalyzer
 public:
   SemanticAnalyzer(ParserBase *pr);
   void analyze();
+  ErrorSymbol get_error();
 
 private:
   ParserBase *parser;
   stack<SymbolTable *> call_stack;
+  ErrorSymbol error_symbol;
+  bool has_error;
 
   void semantic_source(Source *source);
   void semantic_program(ProgramDefinition *program);
@@ -44,7 +47,7 @@ private:
   SymbolType semantic_additive_expr(Expression *addExpr);
   SymbolType semantic_multiplicative_expr(Expression *mulExpr);
   SymbolType semantic_unary_expr(Expression *unaryExpr);
-  SymbolType semantic_index_expr(Expression *indexExpr, bool set_init = false);
+  SymbolType semantic_index_expr(Expression *indexExpr, bool set_init = false, bool allow_partial_indexing = false);
   SymbolType semantic_call_function_expr(Expression *cfExpr);
   SymbolType semantic_primary_expr(Expression *primaryExpr);
   SymbolType semantic_id(Identifier *id, bool set_init = false);
@@ -55,5 +58,5 @@ private:
   SymbolTable *retrieve_scope(string sn);
   void is_array(Expression *Expr);
 
-  void semantic_error(string err);
+  ErrorSymbol semantic_error(string name, SymbolType st, string err);
 };

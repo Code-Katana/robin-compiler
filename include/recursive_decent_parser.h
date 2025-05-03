@@ -32,7 +32,7 @@ private:
   ForLoop *parse_for();
   AssignmentExpression *parse_int_assign();
   WhileLoop *parse_while();
-  BooleanExpression *parse_bool_expr();
+  Expression *parse_bool_expr();
 
   Identifier *parse_identifier();
   IntegerLiteral *parse_int();
@@ -57,4 +57,6 @@ private:
   Expression *parse_call_expr(Identifier *id);
   Expression *parse_index_expr();
   Expression *parse_primary_expr();
+
+  bool match(TokenType ty);
 };

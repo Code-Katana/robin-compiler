@@ -47,6 +47,8 @@ map<AstNodeType, string> AstNode::NodeNames = {
     {AstNodeType::StringLiteral, "StringLiteral"},
     {AstNodeType::BooleanLiteral, "BooleanLiteral"},
     {AstNodeType::ArrayLiteral, "ArrayLiteral"},
+    // Error
+    {AstNodeType::ErrorNode, "ErrorNode"},
 };
 
 map<TokenType, string> AstNode::DataTypes = {
@@ -74,6 +76,13 @@ string AstNode::get_node_name(const AstNode *node)
   }
 
   return NodeNames[node->type];
+}
+// Error Node Implementation
+ErrorNode::ErrorNode() {}
+
+ErrorNode::ErrorNode(const string &message, int sl, int el, int s, int e) : AstNode(sl, el, s, e), message(message)
+{
+  type = AstNodeType::ErrorNode;
 }
 
 // Basic Nodes Implementation
@@ -175,7 +184,7 @@ AssignmentExpression::~AssignmentExpression()
 
 // OrExpression Node Implementation
 OrExpression::OrExpression(Expression *lhs, Expression *rhs, int sl, int el, int s, int e)
-    : Expression(sl, el, s, e), left(lhs), right(rhs)
+    : BooleanExpression(sl, el, s, e), left(lhs), right(rhs)
 {
   type = AstNodeType::OrExpression;
 }
@@ -188,7 +197,7 @@ OrExpression::~OrExpression()
 
 // AndExpression Node Implementation
 AndExpression::AndExpression(Expression *lhs, Expression *rhs, int sl, int el, int s, int e)
-    : Expression(sl, el, s, e), left(lhs), right(rhs)
+    : BooleanExpression(sl, el, s, e), left(lhs), right(rhs)
 {
   type = AstNodeType::AndExpression;
 }
@@ -471,7 +480,7 @@ WhileLoop::~WhileLoop()
 }
 
 // ForLoop Node Implementation
-ForLoop::ForLoop(AssignmentExpression *init, BooleanExpression *cond, Expression *iter, const vector<Statement *> &stmts, int sl, int el, int s, int e)
+ForLoop::ForLoop(AssignmentExpression *init, Expression *cond, Expression *iter, const vector<Statement *> &stmts, int sl, int el, int s, int e)
     : Statement(sl, el, s, e), init(init), condition(cond), update(iter), body(stmts)
 {
   type = AstNodeType::ForLoop;

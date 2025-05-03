@@ -31,10 +31,21 @@ int Debugger::run()
   CompilerOptions *options = new CompilerOptions(program);
 
   RobinCompiler *rc = new RobinCompiler(options);
-   //cout<< JSON::format (JSON::stringify_node( rc->parse_ast()))<<endl;
- // rc->typecheck();
-  rc->generate_ir(input_file + ".ll");
 
-  system("pause");
+  vector<Token> tokens = rc->tokenize();
+  AstNode *tree = rc->parse_ast();
+  
+  if (auto error = dynamic_cast<ErrorNode *>(tree))
+  {
+    cout << error->message << endl;
+  }
+  else
+  {
+    JSON::debug_file(Debugger::DEBUGGING_FOLDER + "/tokens.json", JSON::stringify_tokens_stream(tokens));
+    JSON::debug_file(Debugger::DEBUGGING_FOLDER + "/tree.json", JSON::stringify_node(tree));
+
+    rc->typecheck();
+  }
+  
   return 0;
 }

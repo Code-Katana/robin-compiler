@@ -23,14 +23,12 @@ using namespace llvm;
 
 struct SymbolEntry
 {
-  llvm::Type *llvmType;   // The LLVM type of the variable
-  llvm::Value *llvmValue; // The LLVM value (alloca, global, etc.)
-
-   // Add these new fields
-   SymbolType baseType;  // Original type without pointers
-   int dimensions;       // Array dimension count
-   size_t arrayLength = 0;
-   llvm::Value *lengthAlloca = nullptr;
+  llvm::Type *llvmType;
+  llvm::Value *llvmValue;
+  SymbolType baseType;
+  int dimensions;
+  size_t arrayLength = 0;
+  llvm::Value *lengthAlloca = nullptr;
 };
 class IRGenerator
 {
@@ -45,6 +43,7 @@ private:
   unique_ptr<Module> module;
   IRBuilder<> builder;
   stack<unordered_map<string, SymbolEntry>> symbolTable;
+  std::unordered_map<std::string, FunctionDefinition *> functionTable;
 
   Type *getLLVMType(SymbolType type, int dim = 0);
   Value *codegen(AstNode *node);
@@ -92,18 +91,18 @@ private:
   optional<SymbolEntry> findSymbol(const std::string &name);
 
   bool isUniformArray(ArrayLiteral *lit);
-  Type *getElementType(ArrayLiteral *lit, int* outDim);
-  Value *createJaggedArray(ArrayLiteral* lit, Function* mallocFn, 
-    SymbolType* outBaseType, int* outDimensions);
+  Type *getElementType(ArrayLiteral *lit, int *outDim);
+  Value *createJaggedArray(ArrayLiteral *lit, Function *mallocFn,
+                           SymbolType *outBaseType, int *outDimensions);
   Constant *createNestedArray(ArrayLiteral *lit, ArrayType *arrType);
   ArrayType *inferArrayType(ArrayLiteral *lit);
-  Value *codegenIndexExpression(IndexExpression* expr, Type** outElementType = nullptr);
+  Value *codegenIndexExpression(IndexExpression *expr, Type **outElementType = nullptr);
   Function *declareMalloc();
   Value *createArrayAllocation(Type *elementType, Value *size);
-  //void printArrayLiteral(ArrayLiteral* lit, int depth = 0);
-  Value* codegenLValue(Expression* expr);
-  Value* createJaggedArrayHelper(ArrayLiteral* lit, Function* mallocFn, 
-    int remainingDims, Type* elementType);
+  // void printArrayLiteral(ArrayLiteral* lit, int depth = 0);
+  Value *codegenLValue(Expression *expr);
+  Value *createJaggedArrayHelper(ArrayLiteral *lit, Function *mallocFn,
+                                 int remainingDims, Type *elementType);
 
-    bool isSingleDimensionArray(const SymbolEntry& entry) ;
+  bool isSingleDimensionArray(const SymbolEntry &entry);
 };

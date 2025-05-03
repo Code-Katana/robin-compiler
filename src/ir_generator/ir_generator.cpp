@@ -4,8 +4,7 @@ LLVMContext IRGenerator::context;
 
 IRGenerator::IRGenerator() : builder(context)
 {
-  // InitializeNativeTarget();
-  // InitializeNativeTargetAsmPrinter();
+
   module = make_unique<Module>("main_module", context);
   pushScope();
 }
@@ -45,6 +44,7 @@ Type *IRGenerator::getLLVMType(SymbolType type, int dim)
 
 bool IRGenerator::isUniformArray(ArrayLiteral *lit)
 {
+
   if (lit->elements.empty())
     return true;
 
@@ -152,8 +152,6 @@ Constant *IRGenerator::createNestedArray(ArrayLiteral *lit, ArrayType *arrType)
 
   return ConstantArray::get(arrType, elements);
 }
-
-// ------------------------ Variable Init & Assignment ------------------------
 
 ArrayType *IRGenerator::inferArrayType(ArrayLiteral *lit)
 {
@@ -343,8 +341,10 @@ Value *IRGenerator::createArrayAllocation(Type *elementType, Value *size)
 
 void IRGenerator::generate(Source *source, const string &filename)
 {
+
   for (auto func : source->functions)
   {
+    functionTable[func->funcname->name] = func;
     codegenFunction(func);
   }
   // Generate code for program (main function)
@@ -381,20 +381,24 @@ Value *IRGenerator::codegen(AstNode *node)
 
 Value *IRGenerator::codegenProgram(ProgramDefinition *program)
 {
+
+  // Create main function
   FunctionType *funcType = FunctionType::get(Type::getInt32Ty(context), false);
   Function *mainFunc = Function::Create(funcType, Function::ExternalLinkage, "main", module.get());
+  FunctionCallee pauseFunc = module->getOrInsertFunction(
+      "waitForKeypress",
+      FunctionType::get(Type::getVoidTy(context), {}, false));
   BasicBlock *entry = BasicBlock::Create(context, "entry", mainFunc);
   builder.SetInsertPoint(entry);
 
-  // Process globals
+  // Process global variables (as actual globals)
   for (auto global : program->globals)
   {
+
     codegenGlobalVariable(global);
   }
-
   pushScope();
 
-  // Process body with array initialization handling
   for (auto stmt : program->body)
   {
     if (auto assign = dynamic_cast<AssignmentExpression *>(stmt))
@@ -487,13 +491,12 @@ void IRGenerator::codegenGlobalVariable(VariableDefinition *dif)
 
       // Store complete type information
       symbolTable.top()[name] = {
-          ty,         
-          gVar,       
-          baseType,   
-          dimensions, 
-          0,          
-          nullptr     
-      };
+          ty,
+          gVar,
+          baseType,
+          dimensions,
+          0,
+          nullptr};
 
       // Create length variable for arrays
       if (dimensions > 0)
@@ -607,7 +610,7 @@ void IRGenerator::codegenGlobalVariable(VariableDefinition *dif)
 
 Value *IRGenerator::codegenFunction(FunctionDefinition *func)
 {
-  // 1. Collect parameter types
+
   std::vector<llvm::Type *> paramTypes;
   std::vector<VariableDeclaration *> paramDecls;
   std::vector<VariableInitialization *> paramInits;
@@ -619,6 +622,7 @@ Value *IRGenerator::codegenFunction(FunctionDefinition *func)
       llvm::Type *ty = getLLVMType(
           Symbol::get_datatype(decl->datatype),
           Symbol::get_dimension(decl->datatype));
+
       paramTypes.push_back(ty);
       paramDecls.push_back(decl);
       paramInits.push_back(nullptr);
@@ -629,6 +633,7 @@ Value *IRGenerator::codegenFunction(FunctionDefinition *func)
           Symbol::get_datatype(init->datatype),
           Symbol::get_dimension(init->datatype));
       paramTypes.push_back(ty);
+
       paramDecls.push_back(nullptr);
       paramInits.push_back(init);
     }
@@ -654,10 +659,11 @@ Value *IRGenerator::codegenFunction(FunctionDefinition *func)
   unsigned idx = 0;
   for (auto &arg : llvmFunc->args())
   {
+
     std::string paramName;
     SymbolType baseType;
     int dimensions = 0;
-    
+
     if (paramDecls[idx])
     {
       // Handle parameter declaration
@@ -665,16 +671,15 @@ Value *IRGenerator::codegenFunction(FunctionDefinition *func)
       paramName = varName;
       baseType = Symbol::get_datatype(paramDecls[idx]->datatype);
       dimensions = Symbol::get_dimension(paramDecls[idx]->datatype);
-      
+
       // Create local variable
       Type *ty = getLLVMType(baseType, dimensions);
       AllocaInst *alloca = builder.CreateAlloca(ty, nullptr, varName);
       builder.CreateStore(&arg, alloca);
-      
+
       // Store in symbol table
       symbolTable.top()[varName] = {
-          ty, alloca, baseType, dimensions, 0, nullptr
-      };
+          ty, alloca, baseType, dimensions, 0, nullptr};
     }
     else if (paramInits[idx])
     {
@@ -683,43 +688,38 @@ Value *IRGenerator::codegenFunction(FunctionDefinition *func)
       paramName = varName;
       baseType = Symbol::get_datatype(paramInits[idx]->datatype);
       dimensions = Symbol::get_dimension(paramInits[idx]->datatype);
-      
+
       // Create local variable
       Type *ty = getLLVMType(baseType, dimensions);
       AllocaInst *alloca = builder.CreateAlloca(ty, nullptr, varName);
       builder.CreateStore(&arg, alloca);
-      
+
       // Store in symbol table
       symbolTable.top()[varName] = {
-          ty, alloca, baseType, dimensions, 0, nullptr
-      };
+          ty, alloca, baseType, dimensions, 0, nullptr};
     }
-    
+
     // For array parameters, create a length variable
     if (dimensions > 0)
     {
       // Create length variable
       AllocaInst *lengthAlloca = builder.CreateAlloca(
           Type::getInt32Ty(context), nullptr, paramName + "_len");
-      
-      
+
       // For now, initialize with a default value
       builder.CreateStore(builder.getInt32(0), lengthAlloca);
-      
+
       // Update symbol table
       auto &entry = symbolTable.top()[paramName];
       entry.lengthAlloca = lengthAlloca;
-      
+
       // Add length variable to symbol table
       symbolTable.top()[paramName + "_len"] = {
-          Type::getInt32Ty(context), lengthAlloca, SymbolType::Integer, 0, 0, nullptr
-      };
+          Type::getInt32Ty(context), lengthAlloca, SymbolType::Integer, 0, 0, nullptr};
     }
-    
+
     ++idx;
   }
-
-  // 5. Process function body
   for (auto stmt : func->body)
   {
     codegen(stmt);
@@ -1406,7 +1406,7 @@ Value *IRGenerator::codegenAssignment(AssignmentExpression *assign)
   builder.CreateStore(value, target);
   return target;
 }
-//====================================================================================================================
+
 Value *IRGenerator::codegenIdentifier(Identifier *id)
 {
   auto entryOpt = findSymbol(id->name);
@@ -1722,6 +1722,7 @@ Value *IRGenerator::codegenMultiplicativeExpr(MultiplicativeExpression *expr)
 
   // Shouldn't reach here, but just in case
   module->getContext().emitError("Unsupported multiplicative operator: " + expr->optr);
+
   return nullptr;
 }
 Value *IRGenerator::codegenUnaryExpr(UnaryExpression *expr)
@@ -1911,39 +1912,64 @@ Value *IRGenerator::codegenCall(CallFunctionExpression *call)
     return nullptr;
   }
 
-  // 2. Generate code for each argument
+  // 2. Lookup the function definition in your AST (needed for default values)
+  FunctionDefinition *funcDef = nullptr;
+  auto it = functionTable.find(call->function->name);
+  if (it != functionTable.end())
+  {
+    funcDef = it->second;
+  }
+  else
+  {
+    module->getContext().emitError("No AST for function: " + call->function->name);
+    return nullptr;
+  }
+
+  size_t numParams = callee->arg_size();
+  size_t numArgs = call->arguments.size();
+
+  if (numArgs > numParams)
+  {
+    module->getContext().emitError("Too many arguments for function: " + call->function->name);
+    return nullptr;
+  }
+
   std::vector<Value *> args;
   auto paramIt = callee->arg_begin();
-  for (size_t i = 0; i < call->arguments.size(); ++i)
-  {
-    Value *argVal = codegenExpression(call->arguments[i]);
-    if (!argVal)
-      return nullptr;
 
-    // If the argument is an array, we need to handle its length
-    if (auto id = dynamic_cast<Identifier *>(call->arguments[i]))
+  for (size_t i = 0; i < numParams; ++i)
+  {
+    Value *argVal = nullptr;
+
+    if (i < numArgs)
     {
-      auto entryOpt = findSymbol(id->name);
-      if (entryOpt && entryOpt->dimensions > 0)
+      // User provided this argument
+      argVal = codegenExpression(call->arguments[i]);
+    }
+    else
+    {
+      // User did not provide this argument, use default from AST
+      auto paramDef = funcDef->parameters[i]->def;
+      if (auto init = dynamic_cast<VariableInitialization *>(paramDef))
       {
-        // This is an array - we need to pass its length too
-        // For now, we'll just make sure the length variable is updated
-        auto lenEntryOpt = findSymbol(id->name + "_len");
-        if (lenEntryOpt && lenEntryOpt->llvmValue)
-        {
-          // The length variable exists - make sure it's up to date
-          // This is already handled in assignment and initialization
-        }
+        argVal = codegenExpression(init->initializer);
+      }
+      else
+      {
+        module->getContext().emitError("Missing argument and no default for parameter " + std::to_string(i));
+        return nullptr;
       }
     }
 
-    // Type conversion for function arguments
+    if (!argVal)
+      return nullptr;
+
+    // Type conversion (as before)
     if (paramIt != callee->arg_end())
     {
       llvm::Type *expectedType = paramIt->getType();
       llvm::Type *actualType = argVal->getType();
 
-      // Handle type conversions
       if (expectedType->isDoubleTy() && actualType->isFloatTy())
       {
         argVal = builder.CreateFPExt(argVal, expectedType);
@@ -1956,6 +1982,7 @@ Value *IRGenerator::codegenCall(CallFunctionExpression *call)
       {
         argVal = builder.CreateZExt(argVal, expectedType);
       }
+      
 
       ++paramIt;
     }
@@ -1980,7 +2007,7 @@ Value *IRGenerator::findValue(const std::string &name)
   }
   return nullptr;
 }
-//!! to boolean unary opr
+
 Value *IRGenerator::castToBoolean(Value *value)
 {
   if (value->getType()->isIntegerTy(1))
@@ -2062,22 +2089,6 @@ optional<SymbolEntry> IRGenerator::findSymbol(const std::string &name)
   return std::nullopt;
 }
 
-// void printArrayLiteral(ArrayLiteral* lit, int depth=0) {
-//   llvm::outs() << std::string(depth * 2, ' ') << "ArrayLiteral with " << lit->elements.size() << " elements\n";
-//   for (auto elem : lit->elements) {
-//       if (auto sub = dynamic_cast<ArrayLiteral*>(elem)) {
-//           printArrayLiteral(sub, depth + 1);
-//       } else if (auto intLit = dynamic_cast<IntegerLiteral*>(elem)) {
-//           llvm::outs() << std::string((depth + 1) * 2, ' ') << "Int: " << intLit->value << "\n";
-//       } else if (auto floatLit = dynamic_cast<FloatLiteral*>(elem)) {
-//           llvm::outs() << std::string((depth + 1) * 2, ' ') << "Float: " << floatLit->value << "\n";
-//       } else {
-//           llvm::outs() << std::string((depth + 1) * 2, ' ') << "Other literal\n";
-//       }
-//   }
-// }
-
-// Modified identifier handling in codegenLValue
 Value *IRGenerator::codegenLValue(Expression *expr)
 {
   if (auto id = dynamic_cast<Identifier *>(expr))

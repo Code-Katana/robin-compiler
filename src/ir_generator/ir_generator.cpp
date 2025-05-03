@@ -4,36 +4,344 @@ LLVMContext IRGenerator::context;
 
 IRGenerator::IRGenerator() : builder(context)
 {
-  // InitializeNativeTarget();
-  // InitializeNativeTargetAsmPrinter();
+
   module = make_unique<Module>("main_module", context);
   pushScope();
 }
 
 Type *IRGenerator::getLLVMType(SymbolType type, int dim)
 {
-  if (dim > 0)
-    return PointerType::getUnqual(getLLVMType(type, dim - 1));
-
+  Type *baseType = nullptr;
   switch (type)
   {
   case SymbolType::Integer:
-    return Type::getInt32Ty(context);
+    baseType = Type::getInt32Ty(context);
+    break;
   case SymbolType::Float:
-    return Type::getFloatTy(context);
+    baseType = Type::getFloatTy(context);
+    break;
   case SymbolType::Boolean:
-    return Type::getInt1Ty(context);
+    baseType = Type::getInt1Ty(context);
+    break;
   case SymbolType::String:
-    return PointerType::getUnqual(Type::getInt8Ty(context));
+    baseType = PointerType::getUnqual(Type::getInt8Ty(context));
+    break;
   case SymbolType::Void:
-    return Type::getVoidTy(context);
+    baseType = Type::getVoidTy(context);
+    break;
   default:
-    return Type::getVoidTy(context);
+    baseType = Type::getVoidTy(context);
+    break;
   }
+
+  // Create pointer types for array dimensions
+  for (int i = 0; i < dim; i++)
+  {
+    baseType = PointerType::getUnqual(baseType);
+  }
+  return baseType;
+}
+
+bool IRGenerator::isUniformArray(ArrayLiteral *lit)
+{
+
+  if (lit->elements.empty())
+    return true;
+
+  bool isNested = dynamic_cast<ArrayLiteral *>(lit->elements[0]) != nullptr;
+  size_t expectedSize = isNested ? dynamic_cast<ArrayLiteral *>(lit->elements[0])->elements.size() : 0;
+  Type *expectedType = codegen(lit->elements[0])->getType();
+
+  for (auto elem : lit->elements)
+  {
+    auto sub = dynamic_cast<ArrayLiteral *>(elem);
+    if ((sub != nullptr) != isNested)
+      return false;
+
+    if (isNested && sub)
+    {
+      if (sub->elements.size() != expectedSize)
+        return false;
+      if (!isUniformArray(sub))
+        return false;
+    }
+
+    if (!isNested && codegen(elem)->getType() != expectedType)
+      return false;
+  }
+
+  return true;
+}
+
+Type *IRGenerator::getElementType(ArrayLiteral *lit, int *outDim)
+{
+  int dimensions = 0;
+  ArrayLiteral *current = lit;
+
+  // Calculate dimensions and find base type
+  while (true)
+  {
+    dimensions++;
+    if (current->elements.empty())
+    {
+      *outDim = dimensions;
+      return Type::getInt32Ty(context); // Default to integer if empty
+    }
+
+    auto first = current->elements[0];
+    if (auto sub = dynamic_cast<ArrayLiteral *>(first))
+    {
+      current = sub;
+    }
+    else
+    {
+      *outDim = dimensions;
+      return codegen(first)->getType();
+    }
+  }
+}
+
+Value *IRGenerator::createJaggedArray(ArrayLiteral *lit, Function *mallocFn,
+                                      SymbolType *outBaseType, int *outDimensions)
+{
+  // Determine array structure
+  int totalDimensions = 0;
+  Type *elementType = getElementType(lit, &totalDimensions);
+  SymbolType baseType;
+
+  // Map LLVM type to our symbol type
+  if (elementType->isIntegerTy(32))
+    baseType = SymbolType::Integer;
+  else if (elementType->isFloatTy())
+    baseType = SymbolType::Float;
+  else if (elementType->isIntegerTy(1))
+    baseType = SymbolType::Boolean;
+  else
+    baseType = SymbolType::Integer; // Default
+
+  // Set output parameters
+  if (outBaseType)
+    *outBaseType = baseType;
+  if (outDimensions)
+    *outDimensions = totalDimensions;
+
+  // Create nested allocations
+  return createJaggedArrayHelper(lit, mallocFn, totalDimensions, elementType);
+}
+Constant *IRGenerator::createNestedArray(ArrayLiteral *lit, ArrayType *arrType)
+{
+  std::vector<Constant *> elements;
+  if (!arrType)
+    arrType = inferArrayType(lit);
+
+  Type *elementType = arrType->getElementType();
+
+  for (auto elem : lit->elements)
+  {
+    if (auto sub = dynamic_cast<ArrayLiteral *>(elem))
+    {
+      ArrayType *subArrType = cast<ArrayType>(elementType);
+      elements.push_back(createNestedArray(sub, subArrType));
+    }
+    else
+    {
+      Constant *c = cast<Constant>(codegen(elem));
+      elements.push_back(c);
+    }
+  }
+
+  return ConstantArray::get(arrType, elements);
+}
+
+ArrayType *IRGenerator::inferArrayType(ArrayLiteral *lit)
+{
+  std::vector<uint64_t> dims;
+  ArrayLiteral *current = lit;
+  while (dynamic_cast<ArrayLiteral *>(current->elements[0]))
+  {
+    dims.push_back(current->elements.size());
+    current = dynamic_cast<ArrayLiteral *>(current->elements[0]);
+  }
+  dims.push_back(current->elements.size());
+
+  Type *elementType = codegen(current->elements[0])->getType();
+  ArrayType *arrType = ArrayType::get(elementType, dims.back());
+
+  for (int i = dims.size() - 2; i >= 0; i--)
+  {
+    arrType = ArrayType::get(arrType, dims[i]);
+  }
+
+  return arrType;
+}
+
+// Modified function signature
+Value *IRGenerator::codegenIndexExpression(IndexExpression *expr, Type **outElementType)
+{
+  std::vector<Value *> indices;
+  const Identifier *rootId = nullptr;
+  SymbolType baseType;
+  int totalDims;
+
+  // Traverse to find root Identifier and collect indices
+  IndexExpression *current = expr;
+  while (current)
+  {
+    if (auto id = dynamic_cast<Identifier *>(current->base))
+    {
+      rootId = id;
+      break;
+    }
+    else if (auto innerExpr = dynamic_cast<IndexExpression *>(current->base))
+    {
+      indices.push_back(codegen(current->index));
+      current = innerExpr;
+    }
+    else
+    {
+      module->getContext().emitError("Unsupported base expression in index");
+      return nullptr;
+    }
+  }
+
+  if (!rootId)
+  {
+    module->getContext().emitError("Could not find root array in index expression");
+    return nullptr;
+  }
+
+  // Collect remaining indices from the root's IndexExpressions
+  while (current)
+  {
+    indices.push_back(codegen(current->index));
+    current = dynamic_cast<IndexExpression *>(current->base);
+  }
+  std::reverse(indices.begin(), indices.end());
+
+  // Get array metadata from root symbol
+  auto entryOpt = findSymbol(rootId->name);
+  if (!entryOpt)
+  {
+    module->getContext().emitError("Undefined variable: " + rootId->name);
+    return nullptr;
+  }
+  baseType = entryOpt->baseType;
+  totalDims = entryOpt->dimensions;
+
+  if (indices.size() > totalDims)
+  {
+    module->getContext().emitError("Too many array indices for '" + rootId->name + "'");
+    return nullptr;
+  }
+
+  // Load root array pointer
+  Value *currentPtr = builder.CreateLoad(getLLVMType(baseType, totalDims), entryOpt->llvmValue);
+
+  // Process each index
+  for (size_t i = 0; i < indices.size(); ++i)
+  {
+    int remainingDims = totalDims - i - 1;
+    Type *elementType = getLLVMType(baseType, remainingDims);
+
+    // Bounds check if we have length information
+    if (i == 0)
+    {
+      auto lenEntryOpt = findSymbol(rootId->name + "_len");
+      if (lenEntryOpt && lenEntryOpt->llvmValue)
+      {
+        Value *lengthVal = builder.CreateLoad(Type::getInt32Ty(context),
+                                              lenEntryOpt->llvmValue);
+
+        // Create comparison: index < length
+        Value *cmp = builder.CreateICmpULT(indices[i], lengthVal, "bounds_check");
+
+        // Create basic blocks for the bounds check
+        Function *currentFunc = builder.GetInsertBlock()->getParent();
+        BasicBlock *thenBB = BasicBlock::Create(context, "in_bounds", currentFunc);
+        BasicBlock *elseBB = BasicBlock::Create(context, "out_of_bounds", currentFunc);
+        BasicBlock *mergeBB = BasicBlock::Create(context, "after_bounds_check", currentFunc);
+
+        builder.CreateCondBr(cmp, thenBB, elseBB);
+
+        // Out-of-bounds case: print error and use index 0
+        builder.SetInsertPoint(elseBB);
+        // Call a runtime error function or just use a default index
+        Value *defaultIndex = ConstantInt::get(Type::getInt32Ty(context), 0);
+        builder.CreateBr(mergeBB);
+
+        // In-bounds case: use the actual index
+        builder.SetInsertPoint(thenBB);
+        builder.CreateBr(mergeBB);
+
+        // Merge point: phi node to select the right index
+        builder.SetInsertPoint(mergeBB);
+        PHINode *indexPhi = builder.CreatePHI(Type::getInt32Ty(context), 2, "safe_index");
+        indexPhi->addIncoming(defaultIndex, elseBB);
+        indexPhi->addIncoming(indices[i], thenBB);
+
+        // Use the safe index
+        indices[i] = indexPhi;
+      }
+    }
+
+    currentPtr = builder.CreateInBoundsGEP(
+        elementType,
+        currentPtr,
+        {indices[i]},
+        "dim" + std::to_string(i) + ".idx");
+
+    if (i < indices.size() - 1)
+    {
+      currentPtr = builder.CreateLoad(elementType, currentPtr);
+    }
+  }
+
+  if (outElementType)
+  {
+    *outElementType = getLLVMType(baseType, totalDims - indices.size());
+  }
+
+  return currentPtr;
+}
+
+Function *IRGenerator::declareMalloc()
+{
+  Function *mallocFn = module->getFunction("malloc");
+  if (!mallocFn)
+  {
+    FunctionType *mallocType = FunctionType::get(
+        builder.getPtrTy(), // returns 'ptr' (opaque pointer)
+        {Type::getInt64Ty(context)},
+        false);
+    mallocFn = Function::Create(
+        mallocType,
+        Function::ExternalLinkage,
+        "malloc",
+        module.get());
+  }
+  return mallocFn;
+}
+
+Value *IRGenerator::createArrayAllocation(Type *elementType, Value *size)
+{
+  DataLayout dl = module->getDataLayout();
+  uint64_t typeSize = dl.getTypeAllocSize(elementType);
+  Value *allocSize = builder.CreateMul(
+      size,
+      ConstantInt::get(context, APInt(32, typeSize)),
+      "total_size");
+
+  Value *rawPtr = builder.CreateCall(
+      declareMalloc(),
+      {builder.CreateIntCast(allocSize, Type::getInt64Ty(context), false)},
+      "malloc");
+
+  return builder.CreateBitCast(rawPtr, PointerType::get(elementType, 0), "array_ptr");
 }
 
 void IRGenerator::generate(Source *source, const string &filename)
 {
+
   for (auto func : source->functions)
   {
     functionTable[func->funcname->name] = func;
@@ -90,82 +398,219 @@ Value *IRGenerator::codegenProgram(ProgramDefinition *program)
     codegenGlobalVariable(global);
   }
   pushScope();
-  // Process program body
+
   for (auto stmt : program->body)
   {
+    if (auto assign = dynamic_cast<AssignmentExpression *>(stmt))
+    {
+      if (auto arrayLit = dynamic_cast<ArrayLiteral *>(assign->value))
+      {
+        Function *mallocFn = declareMalloc();
+        SymbolType baseType;
+        int dimensions;
+
+        Value *array = createJaggedArray(arrayLit, mallocFn, &baseType, &dimensions);
+
+        // Get the target variable
+        if (auto id = dynamic_cast<Identifier *>(assign->assignee))
+        {
+          Value *target = codegenIdentifierAddress(id);
+          builder.CreateStore(array, target);
+
+          // Update symbol table with array type information
+          auto entry = findSymbol(id->name);
+          if (entry)
+          {
+            // Update the array length in the symbol table
+            size_t arraySize = arrayLit->elements.size();
+
+            // Look for a length variable
+            auto lenEntry = findSymbol(id->name + "_len");
+            if (lenEntry && lenEntry->llvmValue)
+            {
+              builder.CreateStore(
+                  builder.getInt32(arraySize),
+                  lenEntry->llvmValue);
+
+              // Update the symbol table entry
+              symbolTable.top()[id->name] = {
+                  entry->llvmType,
+                  entry->llvmValue,
+                  baseType,
+                  dimensions,
+                  arraySize,
+                  lenEntry->llvmValue};
+            }
+          }
+        }
+        else
+        {
+          // Handle other assignee types (like array elements)
+          Value *target = codegenLValue(assign->assignee);
+          builder.CreateStore(array, target);
+        }
+        continue;
+      }
+    }
     codegen(stmt);
   }
-  builder.CreateCall(pauseFunc); // Call pause
+
+  // Add pause and return
+  FunctionCallee pauseFunc = module->getOrInsertFunction(
+      "waitForKeypress",
+      FunctionType::get(Type::getVoidTy(context), {}, false));
+  builder.CreateCall(pauseFunc);
   builder.CreateRet(ConstantInt::get(context, APInt(32, 0)));
+
   popScope();
   return mainFunc;
 }
-
 void IRGenerator::codegenGlobalVariable(VariableDefinition *dif)
 {
-  llvm::Type *ty = nullptr;
-  llvm::Constant *init = nullptr;
-  std::string name;
-
-  // Handle VariableDeclaration (multiple variables)
+  // Handle VariableDeclaration (multiple variables without initializers)
   if (auto varDecl = dynamic_cast<VariableDeclaration *>(dif->def))
   {
-    ty = getLLVMType(
-        Symbol::get_datatype(varDecl->datatype),
-        Symbol::get_dimension(varDecl->datatype));
+    SymbolType baseType = Symbol::get_datatype(varDecl->datatype);
+    int dimensions = Symbol::get_dimension(varDecl->datatype);
+    Type *ty = getLLVMType(baseType, dimensions);
 
-    init = llvm::Constant::getNullValue(ty);
+    // Create null initializer for arrays/pointers
+    Constant *init = Constant::getNullValue(ty);
 
-    // Create global for each variable in declaration
     for (auto var : varDecl->variables)
     {
-      llvm::GlobalVariable *gVar = new llvm::GlobalVariable(
+      std::string name = var->name;
+
+      GlobalVariable *gVar = new GlobalVariable(
           *module,
           ty,
           false, // isConstant
-          llvm::GlobalValue::ExternalLinkage,
+          GlobalValue::ExternalLinkage,
           init,
-          var->name);
+          name);
 
-      // Insert into symbol table
-      symbolTable.top()[var->name] = SymbolEntry{ty, gVar};
+      // Store complete type information
+      symbolTable.top()[name] = {
+          ty,
+          gVar,
+          baseType,
+          dimensions,
+          0,
+          nullptr};
+
+      // Create length variable for arrays
+      if (dimensions > 0)
+      {
+        GlobalVariable *lengthGlobal = new GlobalVariable(
+            *module,
+            Type::getInt32Ty(context),
+            false,
+            GlobalValue::ExternalLinkage,
+            ConstantInt::get(Type::getInt32Ty(context), 0), // Initial size 0
+            name + "_len");
+
+        // Add length variable to symbol table
+        symbolTable.top()[name + "_len"] = {
+            Type::getInt32Ty(context),
+            lengthGlobal,
+            SymbolType::Integer,
+            0, // Not an array itself
+            0, // No length for the length variable
+            nullptr};
+      }
     }
   }
   // Handle VariableInitialization (single variable with initializer)
   else if (auto varInit = dynamic_cast<VariableInitialization *>(dif->def))
   {
-    ty = getLLVMType(
-        Symbol::get_datatype(varInit->datatype),
-        Symbol::get_dimension(varInit->datatype));
-    name = varInit->name->name;
+    SymbolType baseType = Symbol::get_datatype(varInit->datatype);
+    int dimensions = Symbol::get_dimension(varInit->datatype);
+    Type *ty = getLLVMType(baseType, dimensions);
+    std::string name = varInit->name->name;
 
-    // Get initializer value (must be constant)
-    llvm::Value *initVal = codegenExpression(varInit->initializer);
-    if (auto *constant = llvm::dyn_cast<llvm::Constant>(initVal))
+    Constant *init = nullptr;
+    size_t arrayLength = 0;
+
+    if (auto arrayLit = dynamic_cast<ArrayLiteral *>(varInit->initializer))
     {
-      init = constant;
+      // Handle 1D global arrays as constant arrays
+      if (dimensions == 1 && isUniformArray(arrayLit))
+      {
+        std::vector<Constant *> elements;
+        Type *elementType = getLLVMType(baseType, 0);
+
+        for (auto elem : arrayLit->elements)
+        {
+          elements.push_back(cast<Constant>(codegen(elem)));
+        }
+
+        ArrayType *arrType = ArrayType::get(elementType, elements.size());
+        init = ConstantArray::get(arrType, elements);
+        ty = arrType; // Store as array type, not pointer
+        arrayLength = elements.size();
+      }
+      else
+      {
+        // For dynamic/jagged arrays, initialize as null pointer
+        // The actual array will be created at runtime
+        ty = getLLVMType(baseType, dimensions); // pointer type
+        init = ConstantPointerNull::get(cast<PointerType>(ty));
+        arrayLength = arrayLit->elements.size();
+      }
     }
     else
     {
-      module->getContext().emitError("Global initializer must be constant");
-      return;
+      Value *initVal = codegenExpression(varInit->initializer);
+      init = dyn_cast<Constant>(initVal);
+      if (!init)
+      {
+        // If not a constant, use a default value
+        init = Constant::getNullValue(ty);
+      }
     }
 
-    llvm::GlobalVariable *gVar = new llvm::GlobalVariable(
-        *module,
-        ty,
-        false, // isConstant
-        llvm::GlobalValue::ExternalLinkage,
-        init,
-        name);
+    GlobalVariable *gVar = new GlobalVariable(
+        *module, ty, false, GlobalValue::ExternalLinkage, init, name);
 
-    // Insert into symbol table
-    symbolTable.top()[name] = SymbolEntry{ty, gVar};
+    // Store type info and static length (if known)
+    symbolTable.top()[name] = {
+        ty,
+        gVar,
+        baseType,
+        dimensions,
+        arrayLength,
+        nullptr // lengthAlloca not used for globals
+    };
+
+    // Create length variable for arrays
+    if (dimensions > 0)
+    {
+      GlobalVariable *lengthGlobal = new GlobalVariable(
+          *module,
+          Type::getInt32Ty(context),
+          false,
+          GlobalValue::ExternalLinkage,
+          ConstantInt::get(Type::getInt32Ty(context), arrayLength),
+          name + "_len");
+
+      symbolTable.top()[name + "_len"] = {
+          Type::getInt32Ty(context),
+          lengthGlobal,
+          SymbolType::Integer,
+          0,
+          0,
+          nullptr};
+    }
+  }
+  else
+  {
+    module->getContext().emitError("Unknown variable definition type");
   }
 }
+
 Value *IRGenerator::codegenFunction(FunctionDefinition *func)
 {
-  // 1. Collect parameter types (only for parameters, not all locals)
+
   std::vector<llvm::Type *> paramTypes;
   std::vector<VariableDeclaration *> paramDecls;
   std::vector<VariableInitialization *> paramInits;
@@ -177,6 +622,7 @@ Value *IRGenerator::codegenFunction(FunctionDefinition *func)
       llvm::Type *ty = getLLVMType(
           Symbol::get_datatype(decl->datatype),
           Symbol::get_dimension(decl->datatype));
+
       paramTypes.push_back(ty);
       paramDecls.push_back(decl);
       paramInits.push_back(nullptr);
@@ -187,6 +633,7 @@ Value *IRGenerator::codegenFunction(FunctionDefinition *func)
           Symbol::get_datatype(init->datatype),
           Symbol::get_dimension(init->datatype));
       paramTypes.push_back(ty);
+
       paramDecls.push_back(nullptr);
       paramInits.push_back(init);
     }
@@ -212,28 +659,67 @@ Value *IRGenerator::codegenFunction(FunctionDefinition *func)
   unsigned idx = 0;
   for (auto &arg : llvmFunc->args())
   {
+
+    std::string paramName;
+    SymbolType baseType;
+    int dimensions = 0;
+
     if (paramDecls[idx])
     {
-      // Use your codegenVariableDeclaration for the parameter
-      codegenVariableDeclaration(paramDecls[idx]);
+      // Handle parameter declaration
       auto varName = paramDecls[idx]->variables[0]->name;
-      auto entryOpt = findSymbol(varName);
-      if (entryOpt)
-        builder.CreateStore(&arg, entryOpt->llvmValue);
+      paramName = varName;
+      baseType = Symbol::get_datatype(paramDecls[idx]->datatype);
+      dimensions = Symbol::get_dimension(paramDecls[idx]->datatype);
+
+      // Create local variable
+      Type *ty = getLLVMType(baseType, dimensions);
+      AllocaInst *alloca = builder.CreateAlloca(ty, nullptr, varName);
+      builder.CreateStore(&arg, alloca);
+
+      // Store in symbol table
+      symbolTable.top()[varName] = {
+          ty, alloca, baseType, dimensions, 0, nullptr};
     }
     else if (paramInits[idx])
     {
-      // Use your codegenVariableInitialization for the parameter
-      codegenVariableInitialization(paramInits[idx]);
+      // Handle parameter with initialization
       auto varName = paramInits[idx]->name->name;
-      auto entryOpt = findSymbol(varName);
-      if (entryOpt)
-        builder.CreateStore(&arg, entryOpt->llvmValue);
+      paramName = varName;
+      baseType = Symbol::get_datatype(paramInits[idx]->datatype);
+      dimensions = Symbol::get_dimension(paramInits[idx]->datatype);
+
+      // Create local variable
+      Type *ty = getLLVMType(baseType, dimensions);
+      AllocaInst *alloca = builder.CreateAlloca(ty, nullptr, varName);
+      builder.CreateStore(&arg, alloca);
+
+      // Store in symbol table
+      symbolTable.top()[varName] = {
+          ty, alloca, baseType, dimensions, 0, nullptr};
     }
+
+    // For array parameters, create a length variable
+    if (dimensions > 0)
+    {
+      // Create length variable
+      AllocaInst *lengthAlloca = builder.CreateAlloca(
+          Type::getInt32Ty(context), nullptr, paramName + "_len");
+
+      // For now, initialize with a default value
+      builder.CreateStore(builder.getInt32(0), lengthAlloca);
+
+      // Update symbol table
+      auto &entry = symbolTable.top()[paramName];
+      entry.lengthAlloca = lengthAlloca;
+
+      // Add length variable to symbol table
+      symbolTable.top()[paramName + "_len"] = {
+          Type::getInt32Ty(context), lengthAlloca, SymbolType::Integer, 0, 0, nullptr};
+    }
+
     ++idx;
   }
-
-  // 5. Process function body (locals and statements)
   for (auto stmt : func->body)
   {
     codegen(stmt);
@@ -248,23 +734,97 @@ Value *IRGenerator::codegenFunction(FunctionDefinition *func)
   popScope();
   return llvmFunc;
 }
+
 Value *IRGenerator::codegenVariableInitialization(VariableInitialization *init)
 {
-  llvm::Type *ty = getLLVMType(
-      Symbol::get_datatype(init->datatype),
-      Symbol::get_dimension(init->datatype));
+  SymbolType baseType = Symbol::get_datatype(init->datatype);
+  int dimensions = Symbol::get_dimension(init->datatype);
+  Type *ty = getLLVMType(baseType, dimensions);
+  std::string varName = init->name->name;
 
-  llvm::AllocaInst *alloca = builder.CreateAlloca(ty, nullptr, init->name->name);
-  symbolTable.top()[init->name->name] = SymbolEntry{ty, alloca};
+  AllocaInst *alloca = builder.CreateAlloca(ty, nullptr, varName);
+  AllocaInst *lengthAlloca = nullptr;
+  size_t arraySize = 0;
 
-  if (init->initializer)
+  // Create length variable for arrays
+  if (dimensions > 0)
   {
-    Value *initVal = codegenExpression(init->initializer);
+    lengthAlloca = builder.CreateAlloca(Type::getInt32Ty(context), nullptr, varName + "_len");
+  }
+
+  if (auto arrayLit = dynamic_cast<ArrayLiteral *>(init->initializer))
+  {
+    SymbolType actualBaseType;
+    int actualDimensions;
+    arraySize = arrayLit->elements.size();
+
+    Value *jagged = createJaggedArray(arrayLit, declareMalloc(), &actualBaseType, &actualDimensions);
+
+    // Verify type matches declaration
+    if (actualBaseType != baseType || actualDimensions != dimensions)
+    {
+      module->getContext().emitError("Array literal type doesn't match declaration");
+      return nullptr;
+    }
+
+    builder.CreateStore(jagged, alloca);
+
+    // Store the length for dynamic arrays
+    if (lengthAlloca)
+    {
+      builder.CreateStore(builder.getInt32(arraySize), lengthAlloca);
+    }
+
+    symbolTable.top()[varName] = {
+        ty, alloca, baseType, dimensions, arraySize, lengthAlloca};
+
+    if (lengthAlloca)
+    {
+      symbolTable.top()[varName + "_len"] = {
+          Type::getInt32Ty(context), lengthAlloca, SymbolType::Integer, 0, 0, nullptr};
+    }
+  }
+  else if (init->initializer)
+  {
+    Value *initVal = codegen(init->initializer);
     builder.CreateStore(initVal, alloca);
+
+    // Initialize length to 0 for empty arrays
+    if (lengthAlloca)
+    {
+      builder.CreateStore(builder.getInt32(0), lengthAlloca);
+    }
+
+    symbolTable.top()[varName] = {
+        ty, alloca, baseType, dimensions, arraySize, lengthAlloca};
+
+    if (lengthAlloca)
+    {
+      symbolTable.top()[varName + "_len"] = {
+          Type::getInt32Ty(context), lengthAlloca, SymbolType::Integer, 0, 0, nullptr};
+    }
+  }
+  else
+  {
+    // Initialize length to 0 for empty arrays
+    if (lengthAlloca)
+    {
+      builder.CreateStore(builder.getInt32(0), lengthAlloca);
+    }
+
+    symbolTable.top()[varName] = {
+        ty, alloca, baseType, dimensions, arraySize, lengthAlloca};
+
+    if (lengthAlloca)
+    {
+      symbolTable.top()[varName + "_len"] = {
+          Type::getInt32Ty(context), lengthAlloca, SymbolType::Integer, 0, 0, nullptr};
+    }
   }
 
   return alloca;
 }
+
 Value *IRGenerator::codegenStatement(Statement *stmt)
 {
   if (auto decl = dynamic_cast<VariableDefinition *>(stmt))
@@ -709,30 +1269,51 @@ Value *IRGenerator::codegenVariableDefinition(VariableDefinition *def)
 
 Value *IRGenerator::codegenExpression(Expression *expr)
 {
+  // Handle index expressions first with type tracking
+  if (auto index = dynamic_cast<IndexExpression *>(expr))
+  {
+    Type *elementType = nullptr;
+    Value *gep = codegenIndexExpression(index, &elementType);
+    return builder.CreateLoad(elementType, gep, "loadidx");
+  }
+
+  // Existing other cases with adjustments for opaque pointers
   if (auto decl = dynamic_cast<VariableDefinition *>(expr))
     return codegenVariableDefinition(decl);
+
   if (auto lit = dynamic_cast<Literal *>(expr))
     return codegenLiteral(lit);
+
   if (auto id = dynamic_cast<Identifier *>(expr))
-    return codegenIdentifier(id);
+  {
+    auto entry = findSymbol(id->name);
+    if (!entry)
+      return nullptr;
+
+    // Directly return pointers for arrays
+    if (entry->dimensions > 0)
+    {
+      return entry->llvmValue;
+    }
+    return builder.CreateLoad(entry->llvmType, entry->llvmValue, id->name);
+  }
+
   if (auto call = dynamic_cast<CallFunctionExpression *>(expr))
     return codegenCall(call);
 
-  // Handle binary operations
+  // Binary operations (unchanged but included for completeness)
   if (auto add = dynamic_cast<AdditiveExpression *>(expr))
     return codegenAdditiveExpr(add);
   if (auto mult = dynamic_cast<MultiplicativeExpression *>(expr))
     return codegenMultiplicativeExpr(mult);
   if (auto assign = dynamic_cast<AssignmentExpression *>(expr))
-  {
     return codegenAssignment(assign);
-  }
-  // unary
+
+  // Unary operations
   if (auto unary = dynamic_cast<UnaryExpression *>(expr))
-  {
     return codegenUnaryExpr(unary);
-  }
-  // boolean operation
+
+  // Boolean operations
   if (auto OR = dynamic_cast<OrExpression *>(expr))
     return codegenOrExpr(OR);
   if (auto AND = dynamic_cast<AndExpression *>(expr))
@@ -741,45 +1322,91 @@ Value *IRGenerator::codegenExpression(Expression *expr)
     return codegenEqualityExpr(eq);
   if (auto re = dynamic_cast<RelationalExpression *>(expr))
     return codegenRelationalExpr(re);
+
   return nullptr;
 }
 
 Value *IRGenerator::codegenVariableDeclaration(VariableDeclaration *decl)
 {
-  Type *ty = getLLVMType(Symbol::get_datatype(decl->datatype),
-                         Symbol::get_dimension(decl->datatype));
+  SymbolType baseType = Symbol::get_datatype(decl->datatype);
+  int dimensions = Symbol::get_dimension(decl->datatype);
+  Type *ty = getLLVMType(baseType, dimensions);
 
   for (auto var : decl->variables)
   {
     AllocaInst *alloca = builder.CreateAlloca(ty, nullptr, var->name);
-    symbolTable.top()[var->name] = SymbolEntry{ty, alloca};
+    // Store type metadata in symbol table
+    symbolTable.top()[var->name] = {ty, alloca, baseType, dimensions};
   }
   return nullptr;
 }
 
 Value *IRGenerator::codegenAssignment(AssignmentExpression *assign)
 {
-  auto *id = dynamic_cast<Identifier *>(assign->assignee);
-  auto entryOpt = findSymbol(id->name);
-  if (!entryOpt)
-    return nullptr;
-
-  SymbolEntry entry = *entryOpt;
-  llvm::Value *target = entry.llvmValue;
-  llvm::Type *varType = entry.llvmType;
-  llvm::Value *value = codegen(assign->value);
+  Value *target = codegenLValue(assign->assignee);
+  Value *value = codegenExpression(assign->value);
 
   if (!target || !value)
     return nullptr;
 
-  // If value is a pointer (e.g., from another alloca), load it first
-  if (value->getType()->isPointerTy())
+  // Get the variable name (if possible)
+  std::string varName;
+  if (auto id = dynamic_cast<Identifier *>(assign->assignee))
   {
-    value = builder.CreateLoad(varType, value);
+    varName = id->name;
+  }
+  else if (auto index = dynamic_cast<IndexExpression *>(assign->assignee))
+  {
+    // For array element assignments, we don't update the length
+    builder.CreateStore(value, target);
+    return target;
   }
 
-  return builder.CreateStore(value, target);
+  // Handle array assignments
+  if (value->getType()->isPointerTy() && !varName.empty())
+  {
+    // Store the array pointer in the variable
+    builder.CreateStore(value, target);
+
+    // Update the length variable if it exists
+    size_t arraySize = 0;
+
+    // If the right-hand side is an ArrayLiteral, get its size
+    if (auto arrayLit = dynamic_cast<ArrayLiteral *>(assign->value))
+    {
+      arraySize = arrayLit->elements.size();
+
+      // Look for a length variable
+      auto lenEntry = findSymbol(varName + "_len");
+      if (lenEntry && lenEntry->llvmValue)
+      {
+        builder.CreateStore(
+            builder.getInt32(arraySize),
+            lenEntry->llvmValue);
+
+        // Also update the symbol table entry
+        auto varEntry = findSymbol(varName);
+        if (varEntry)
+        {
+          // Create a new entry with updated length
+          symbolTable.top()[varName] = {
+              varEntry->llvmType,
+              varEntry->llvmValue,
+              varEntry->baseType,
+              varEntry->dimensions,
+              arraySize,
+              lenEntry->llvmValue};
+        }
+      }
+    }
+    return target;
+  }
+
+  // Scalar assignment
+  builder.CreateStore(value, target);
+  return target;
 }
+
 Value *IRGenerator::codegenIdentifier(Identifier *id)
 {
   auto entryOpt = findSymbol(id->name);
@@ -787,10 +1414,15 @@ Value *IRGenerator::codegenIdentifier(Identifier *id)
     return nullptr;
 
   SymbolEntry entry = *entryOpt;
-  llvm::Value *val = entry.llvmValue;
-  llvm::Type *ty = entry.llvmType;
 
-  return builder.CreateLoad(ty, val, id->name);
+  // Return pointer directly for arrays
+  if (entry.dimensions > 0)
+  {
+    return entry.llvmValue;
+  }
+
+  // Load scalar values
+  return builder.CreateLoad(entry.llvmType, entry.llvmValue, id->name);
 }
 
 Value *IRGenerator::codegenLiteral(Literal *lit)
@@ -1090,6 +1722,7 @@ Value *IRGenerator::codegenMultiplicativeExpr(MultiplicativeExpression *expr)
 
   // Shouldn't reach here, but just in case
   module->getContext().emitError("Unsupported multiplicative operator: " + expr->optr);
+
   return nullptr;
 }
 Value *IRGenerator::codegenUnaryExpr(UnaryExpression *expr)
@@ -1130,17 +1763,61 @@ Value *IRGenerator::codegenUnaryExpr(UnaryExpression *expr)
   }
 
   // 3. Array Size (#)
+
   if (expr->optr == "#")
   {
-    if (!ty->isPointerTy())
+    auto id = dynamic_cast<Identifier *>(expr->operand);
+    if (!id)
     {
-      module->getContext().emitError("# requires array pointer");
+      module->getContext().emitError("# operator requires an array variable");
       return nullptr;
     }
-    Value *sizePtr = builder.CreateStructGEP(nullptr, operand, 0);
-    return builder.CreateLoad(builder.getInt32Ty(), sizePtr, "arraysize");
-  }
 
+    auto entryOpt = findSymbol(id->name);
+    if (!entryOpt)
+    {
+      module->getContext().emitError("Undefined variable: " + id->name);
+      return nullptr;
+    }
+
+    const SymbolEntry &entry = *entryOpt;
+
+    // First check if we have a length variable
+    auto lenEntryOpt = findSymbol(id->name + "_len");
+    if (lenEntryOpt && lenEntryOpt->llvmValue)
+    {
+      // Load the length from the length variable
+      Value *lengthVal = builder.CreateLoad(Type::getInt32Ty(context),
+                                            lenEntryOpt->llvmValue,
+                                            id->name + "_len");
+
+      // Make sure it's an integer type
+      if (!lengthVal->getType()->isIntegerTy(32))
+      {
+        lengthVal = builder.CreateIntCast(lengthVal, Type::getInt32Ty(context), false);
+      }
+
+      return lengthVal;
+    }
+
+    // If no length variable but we have a static length in the symbol table
+    if (entry.arrayLength > 0)
+    {
+      return ConstantInt::get(Type::getInt32Ty(context), entry.arrayLength);
+    }
+
+    // For array types with fixed size in LLVM IR
+    if (entry.llvmType->isArrayTy())
+    {
+      ArrayType *arrTy = cast<ArrayType>(entry.llvmType);
+      uint64_t size = arrTy->getNumElements();
+      return ConstantInt::get(Type::getInt32Ty(context), size);
+    }
+
+    // If we can't determine the size, return 0 with a warning
+    module->getContext().emitError("Cannot determine array size for variable: " + id->name);
+    return ConstantInt::get(Type::getInt32Ty(context), 0);
+  }
   // 4. Increment/Decrement (++/--)
   if (expr->optr == "++" || expr->optr == "--")
   {
@@ -1224,6 +1901,7 @@ Value *IRGenerator::codegenUnaryExpr(UnaryExpression *expr)
   module->getContext().emitError("Unknown unary operator");
   return nullptr;
 }
+
 Value *IRGenerator::codegenCall(CallFunctionExpression *call)
 {
   // 1. Lookup the function in the module
@@ -1304,7 +1982,7 @@ Value *IRGenerator::codegenCall(CallFunctionExpression *call)
       {
         argVal = builder.CreateZExt(argVal, expectedType);
       }
-      // Add more type conversions as needed...
+      
 
       ++paramIt;
     }
@@ -1329,7 +2007,7 @@ Value *IRGenerator::findValue(const std::string &name)
   }
   return nullptr;
 }
-//!! to boolean unary opr
+
 Value *IRGenerator::castToBoolean(Value *value)
 {
   if (value->getType()->isIntegerTy(1))
@@ -1390,7 +2068,6 @@ void IRGenerator::printSymbolTable()
         llvm::errs() << "(null)";
       llvm::errs() << "\n";
     }
-
     tempStack.pop();
   }
 
@@ -1410,4 +2087,86 @@ optional<SymbolEntry> IRGenerator::findSymbol(const std::string &name)
     tempStack.pop();
   }
   return std::nullopt;
+}
+
+Value *IRGenerator::codegenLValue(Expression *expr)
+{
+  if (auto id = dynamic_cast<Identifier *>(expr))
+  {
+    auto entry = findSymbol(id->name);
+    if (!entry)
+      return nullptr;
+    return entry->llvmValue;
+  }
+  if (auto index = dynamic_cast<IndexExpression *>(expr))
+  {
+    Type *dummy;
+    return codegenIndexExpression(index, &dummy);
+  }
+  return nullptr;
+}
+
+Value *IRGenerator::createJaggedArrayHelper(ArrayLiteral *lit, Function *mallocFn,
+                                            int remainingDims, Type *elementType)
+{
+  DataLayout dl = module->getDataLayout();
+
+  // Handle 1D arrays as contiguous memory blocks
+  if (remainingDims == 1)
+  {
+    size_t elementCount = lit->elements.size();
+    Value *allocSize = ConstantInt::get(Type::getInt64Ty(context),
+                                        dl.getTypeAllocSize(elementType) * elementCount);
+
+    // Allocate contiguous memory
+    Value *buffer = builder.CreateCall(mallocFn, {allocSize}, "contiguous.array");
+    buffer = builder.CreateBitCast(buffer, PointerType::getUnqual(elementType));
+
+    // Store elements directly
+    for (size_t i = 0; i < elementCount; ++i)
+    {
+      Value *elementPtr = builder.CreateInBoundsGEP(elementType, buffer,
+                                                    ConstantInt::get(Type::getInt32Ty(context), i));
+      Value *val = codegen(lit->elements[i]);
+      builder.CreateStore(val, elementPtr);
+    }
+    return buffer;
+  }
+
+  // Original jagged array handling for multi-dimensional arrays
+  const size_t ptrSize = dl.getPointerSize();
+  Value *allocSize = ConstantInt::get(Type::getInt64Ty(context),
+                                      lit->elements.size() * ptrSize);
+
+  Value *rawMem = builder.CreateCall(mallocFn, {allocSize}, "malloc.array");
+  Value *ptrArray = builder.CreateBitCast(rawMem,
+                                          PointerType::getUnqual(PointerType::getUnqual(elementType)),
+                                          "ptr.array");
+
+  for (size_t i = 0; i < lit->elements.size(); ++i)
+  {
+    Value *elementPtr = builder.CreateInBoundsGEP(
+        PointerType::getUnqual(elementType),
+        ptrArray,
+        ConstantInt::get(Type::getInt32Ty(context), i),
+        "element.ptr");
+
+    auto subLit = dynamic_cast<ArrayLiteral *>(lit->elements[i]);
+    if (!subLit)
+    {
+      module->getContext().emitError("Invalid jagged array structure");
+      return nullptr;
+    }
+
+    Value *subArray = createJaggedArrayHelper(subLit, mallocFn,
+                                              remainingDims - 1, elementType);
+    builder.CreateStore(subArray, elementPtr);
+  }
+  return ptrArray;
+}
+
+bool IRGenerator::isSingleDimensionArray(const SymbolEntry &entry)
+{
+  return entry.dimensions == 1 &&
+         entry.baseType != SymbolType::String;
 }

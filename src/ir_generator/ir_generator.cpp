@@ -1115,11 +1115,6 @@ Value *IRGenerator::codegenIdentifier(Identifier *id)
 
   SymbolEntry entry = *entryOpt;
 
-  // Return pointer directly for arrays
-  if (entry.dimensions > 0)
-  {
-    return entry.llvmValue;
-  }
 
   // Load scalar values
   return builder.CreateLoad(entry.llvmType, entry.llvmValue, id->name);
@@ -1300,6 +1295,61 @@ Value *IRGenerator::codegenAdditiveExpr(AdditiveExpression *expr)
   if (!L || !R)
     return nullptr;
 
+     
+  Type *i8Ty = Type::getInt8Ty(context);
+  PointerType *i8PtrTy = PointerType::getUnqual(context);
+
+  // Check if both operands are strings
+  bool bothStrings = L->getType() == i8PtrTy && R->getType() == i8PtrTy;
+
+  if (bothStrings && expr->optr == "+") {
+    // Declare needed runtime functions
+    FunctionType *strlenTy = FunctionType::get(
+        Type::getInt64Ty(context), {i8PtrTy}, false);
+    FunctionCallee strlenFunc = module->getOrInsertFunction("strlen", strlenTy);
+
+    FunctionType *memcpyTy = FunctionType::get(
+        Type::getVoidTy(context), {i8PtrTy, i8PtrTy, Type::getInt64Ty(context), Type::getInt1Ty(context)}, false);
+    FunctionCallee memcpyFunc = module->getOrInsertFunction("llvm.memcpy.p0.p0.i64", memcpyTy);
+
+    // Get string lengths
+    Value *len1 = builder.CreateCall(strlenFunc, {L}, "strlen1");
+    Value *len2 = builder.CreateCall(strlenFunc, {R}, "strlen2");
+
+    // Calculate total size + null terminator
+    Value *totalLen = builder.CreateAdd(len1, len2, "concat_len");
+    Value *totalLenWithNull = builder.CreateAdd(totalLen, 
+        ConstantInt::get(Type::getInt64Ty(context), 1), "total_with_null");
+
+    // Allocate memory using malloc
+    Function *mallocFunc = declareMalloc();
+    Value *buffer = builder.CreateCall(mallocFunc, {totalLen}, "concat_buf");
+    buffer = builder.CreateBitCast(buffer, i8PtrTy);
+
+    // Copy first string (without its null terminator)
+    builder.CreateCall(memcpyFunc, {
+      buffer, 
+      L, 
+      len1,  // Only copy actual characters
+      ConstantInt::get(Type::getInt1Ty(context), 0)
+  });
+
+  // Copy second string with offset (without its null terminator)
+  Value *destPtr = builder.CreateGEP(i8Ty, buffer, {len1}, "dest_ptr");
+  builder.CreateCall(memcpyFunc, {
+      destPtr,
+      R,
+      len2,  // Only copy actual characters
+      ConstantInt::get(Type::getInt1Ty(context), 0)
+  });
+
+  // Add explicit null terminator at the end
+  Value *totalLenBytes = builder.CreateAdd(len1, len2, "total_len_bytes");
+  Value *nullTermPtr = builder.CreateGEP(i8Ty, buffer, {totalLenBytes});
+  builder.CreateStore(ConstantInt::get(i8Ty, 0), nullTermPtr);
+
+  return buffer;
+}
   // Check types to determine which operation to use
   if (L->getType()->isIntOrPtrTy() && R->getType()->isIntOrPtrTy())
   {

@@ -52,12 +52,12 @@ private:
   Value *generate_program(ProgramDefinition *program);
   Value *generate_function(FunctionDefinition *func);
 
-  // def
+  // definition
   void generate_global_variable(VariableDefinition *dif);
   Value *generate_variable_definition(VariableDefinition *def);
   Value *generate_variable_declaration(VariableDeclaration *decl);
   Value *generate_variable_initialization(VariableInitialization *init);
-  // expr
+  // expression
   Value *generate_expression(Expression *expr);
   Value *generate_assignment(AssignmentExpression *assign);
   Value *generate_identifier(Identifier *id);
@@ -71,7 +71,7 @@ private:
   Value *generate_unary_expr(UnaryExpression *expr);
   Value *generate_call(CallFunctionExpression *call);
   Value *generate_index_expression(IndexExpression *expr, Type **outElementType = nullptr);
-  // state
+  // statements
   Value *generate_statement(Statement *stmt);
   Value *generate_while_loop(WhileLoop *loop);
   Value *generate_for_loop(ForLoop *forLoop);
@@ -89,10 +89,8 @@ private:
   Value *castToBoolean(Value *value);
   Value *findValue(const string &name);
   Value *generate_identifier_address(Identifier *id);
- 
-
   optional<SymbolEntry> findSymbol(const std::string &name);
-
+  //array helpers
   bool isUniformArray(ArrayLiteral *lit);
   Type *getElementType(ArrayLiteral *lit, int *outDim);
   Value *createJaggedArray(ArrayLiteral *lit, Function *mallocFn,
@@ -104,6 +102,5 @@ private:
   Value *generate_l_value(Expression *expr);
   Value *createJaggedArrayHelper(ArrayLiteral *lit, Function *mallocFn,
                                  int remainingDims, Type *elementType);
-
   bool isSingleDimensionArray(const SymbolEntry &entry);
 };

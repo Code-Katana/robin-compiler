@@ -48,38 +48,39 @@ private:
   std::unordered_map<std::string, FunctionDefinition *> functionTable;
 
   Type *getLLVMType(SymbolType type, int dim = 0);
-  Value *codegen(AstNode *node);
-  Value *codegenProgram(ProgramDefinition *program);
-  Value *codegenFunction(FunctionDefinition *func);
+  Value *generate_node(AstNode *node);
+  Value *generate_program(ProgramDefinition *program);
+  Value *generate_function(FunctionDefinition *func);
 
   // def
-  void codegenGlobalVariable(VariableDefinition *dif);
-  Value *codegenVariableDefinition(VariableDefinition *def);
-  Value *codegenVariableDeclaration(VariableDeclaration *decl);
-  Value *codegenVariableInitialization(VariableInitialization *init);
+  void generate_global_variable(VariableDefinition *dif);
+  Value *generate_variable_definition(VariableDefinition *def);
+  Value *generate_variable_declaration(VariableDeclaration *decl);
+  Value *generate_variable_initialization(VariableInitialization *init);
   // expr
-  Value *codegenExpression(Expression *expr);
-  Value *codegenIdentifier(Identifier *id);
-  Value *codegenLiteral(Literal *lit);
-  Value *codegenOrExpr(OrExpression *expr);
-  Value *codegenAndExpr(AndExpression *expr);
-  Value *codegenRelationalExpr(RelationalExpression *expr);
-  Value *codegenEqualityExpr(EqualityExpression *expr);
-  Value *codegenAdditiveExpr(AdditiveExpression *expr);
-  Value *codegenMultiplicativeExpr(MultiplicativeExpression *expr);
-  Value *codegenUnaryExpr(UnaryExpression *expr);
-  // stat
-  Value *codegenStatement(Statement *stmt);
-  Value *codegenAssignment(AssignmentExpression *assign);
-  Value *codegenCall(CallFunctionExpression *call);
-  Value *codegenWhileLoop(WhileLoop *loop);
-  Value *codegenForLoop(ForLoop *forLoop);
-  Value *codegenIfStatement(IfStatement *ifStmt);
-  Value *codegenReturnStatement(ReturnStatement *retStmt);
-  Value *codegenWriteStatement(WriteStatement *write);
-  Value *codegenReadStatement(ReadStatement *read);
-  Value *codegenStopStatement(StopStatement *stmt);
-  Value *codegenSkipStatement(SkipStatement *stmt);
+  Value *generate_expression(Expression *expr);
+  Value *generate_assignment(AssignmentExpression *assign);
+  Value *generate_identifier(Identifier *id);
+  Value *generate_literal(Literal *lit);
+  Value *generate_or_expr(OrExpression *expr);
+  Value *generate_and_expr(AndExpression *expr);
+  Value *generate_relational_expr(RelationalExpression *expr);
+  Value *generate_equality_expr(EqualityExpression *expr);
+  Value *generate_additive_expr(AdditiveExpression *expr);
+  Value *generate_multiplicative_expr(MultiplicativeExpression *expr);
+  Value *generate_unary_expr(UnaryExpression *expr);
+  Value *generate_call(CallFunctionExpression *call);
+  Value *generate_index_expression(IndexExpression *expr, Type **outElementType = nullptr);
+  // state
+  Value *generate_statement(Statement *stmt);
+  Value *generate_while_loop(WhileLoop *loop);
+  Value *generate_for_loop(ForLoop *forLoop);
+  Value *generate_if_statement(IfStatement *ifStmt);
+  Value *generate_return_statement(ReturnStatement *retStmt);
+  Value *generate_write_statement(WriteStatement *write);
+  Value *generate_read_statement(ReadStatement *read);
+  Value *generate_stop_statement(StopStatement *stmt);
+  Value *generate_skip_statement(SkipStatement *stmt);
   // helpers
   void pushScope() { symbolTable.push({}); }
   void popScope() { symbolTable.pop(); }
@@ -87,8 +88,8 @@ private:
 
   Value *castToBoolean(Value *value);
   Value *findValue(const string &name);
-  Value *codegenIdentifierAddress(Identifier *id);
-  Value *codegenLvalue(AssignableExpression *expr);
+  Value *generate_identifier_address(Identifier *id);
+ 
 
   optional<SymbolEntry> findSymbol(const std::string &name);
 
@@ -98,11 +99,9 @@ private:
                            SymbolType *outBaseType, int *outDimensions);
   Constant *createNestedArray(ArrayLiteral *lit, ArrayType *arrType);
   ArrayType *inferArrayType(ArrayLiteral *lit);
-  Value *codegenIndexExpression(IndexExpression *expr, Type **outElementType = nullptr);
   Function *declareMalloc();
   Value *createArrayAllocation(Type *elementType, Value *size);
-  // void printArrayLiteral(ArrayLiteral* lit, int depth = 0);
-  Value *codegenLValue(Expression *expr);
+  Value *generate_l_value(Expression *expr);
   Value *createJaggedArrayHelper(ArrayLiteral *lit, Function *mallocFn,
                                  int remainingDims, Type *elementType);
 

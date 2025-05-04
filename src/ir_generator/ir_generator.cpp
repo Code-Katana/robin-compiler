@@ -47,10 +47,10 @@ void IRGenerator::generate(const string &filename)
   for (auto func : source->functions)
   {
     functionTable[func->funcname->name] = func;
-    codegenFunction(func);
+    generate_function(func);
   }
   // Generate code for program (main function)
-  codegenProgram(source->program);
+  generate_program(source->program);
 
   // Generate code for all functions
 
@@ -70,18 +70,18 @@ void IRGenerator::generate(const string &filename)
   IRGenerator::printSymbolTable();
 }
 
-Value *IRGenerator::codegen(AstNode *node)
+Value *IRGenerator::generate_node(AstNode *node)
 {
   if (auto decl = dynamic_cast<VariableDefinition *>(node))
-    return codegenVariableDefinition(decl);
+    return generate_variable_definition(decl);
   if (auto expr = dynamic_cast<Expression *>(node))
-    return codegenExpression(expr);
+    return generate_expression(expr);
   if (auto stmt = dynamic_cast<Statement *>(node))
-    return codegenStatement(stmt);
+    return generate_statement(stmt);
   return nullptr;
 }
 
-Value *IRGenerator::codegenProgram(ProgramDefinition *program)
+Value *IRGenerator::generate_program(ProgramDefinition *program)
 {
 
   // Create main function
@@ -97,7 +97,7 @@ Value *IRGenerator::codegenProgram(ProgramDefinition *program)
   for (auto global : program->globals)
   {
 
-    codegenGlobalVariable(global);
+    generate_global_variable(global);
   }
   pushScope();
 
@@ -116,7 +116,7 @@ Value *IRGenerator::codegenProgram(ProgramDefinition *program)
         // Get the target variable
         if (auto id = dynamic_cast<Identifier *>(assign->assignee))
         {
-          Value *target = codegenIdentifierAddress(id);
+          Value *target = generate_identifier_address(id);
           builder.CreateStore(array, target);
 
           // Update symbol table with array type information
@@ -148,13 +148,13 @@ Value *IRGenerator::codegenProgram(ProgramDefinition *program)
         else
         {
           // Handle other assignee types (like array elements)
-          Value *target = codegenLValue(assign->assignee);
+          Value *target = generate_l_value(assign->assignee);
           builder.CreateStore(array, target);
         }
         continue;
       }
     }
-    codegen(stmt);
+    generate_node(stmt);
   }
 
   builder.CreateCall(pauseFunc);
@@ -164,7 +164,7 @@ Value *IRGenerator::codegenProgram(ProgramDefinition *program)
   return mainFunc;
 }
 
-Value *IRGenerator::codegenFunction(FunctionDefinition *func)
+Value *IRGenerator::generate_function(FunctionDefinition *func)
 {
   // 1. Collect parameter types
   std::vector<llvm::Type *> paramTypes;
@@ -282,7 +282,7 @@ Value *IRGenerator::codegenFunction(FunctionDefinition *func)
   // 5. Process function body
   for (auto stmt : func->body)
   {
-    codegen(stmt);
+    generate_node(stmt);
   }
 
   // 6. If function has no explicit return, add return void
@@ -295,40 +295,40 @@ Value *IRGenerator::codegenFunction(FunctionDefinition *func)
   return llvmFunc;
 }
 
-Value *IRGenerator::codegenStatement(Statement *stmt)
+Value *IRGenerator::generate_statement(Statement *stmt)
 {
   if (auto decl = dynamic_cast<VariableDefinition *>(stmt))
-    return codegenVariableDefinition(decl);
+    return generate_variable_definition(decl);
   if (auto assign = dynamic_cast<AssignmentExpression *>(stmt))
-    return codegenAssignment(assign);
+    return generate_assignment(assign);
   if (auto ifStmt = dynamic_cast<IfStatement *>(stmt))
-    return codegenIfStatement(ifStmt);
+    return generate_if_statement(ifStmt);
   if (auto whileLoop = dynamic_cast<WhileLoop *>(stmt))
-    return codegenWhileLoop(whileLoop);
+    return generate_while_loop(whileLoop);
   if (auto forLoop = dynamic_cast<ForLoop *>(stmt))
-    return codegenForLoop(forLoop);
+    return generate_for_loop(forLoop);
   if (auto writeStmt = dynamic_cast<WriteStatement *>(stmt))
-    return codegenWriteStatement(writeStmt);
+    return generate_write_statement(writeStmt);
   if (auto readStmt = dynamic_cast<ReadStatement *>(stmt))
-    return codegenReadStatement(readStmt);
+    return generate_read_statement(readStmt);
   if (auto retStmt = dynamic_cast<ReturnStatement *>(stmt))
-    return codegenReturnStatement(retStmt);
+    return generate_return_statement(retStmt);
   if (auto skip = dynamic_cast<SkipStatement *>(stmt))
-    return codegenSkipStatement(skip);
+    return generate_skip_statement(skip);
   if (auto stop = dynamic_cast<StopStatement *>(stmt))
-    return codegenStopStatement(stop);
+    return generate_stop_statement(stop);
 
   // Fallback
-  return codegenExpression(dynamic_cast<Expression *>(stmt));
+  return generate_expression(dynamic_cast<Expression *>(stmt));
 }
 
-Value *IRGenerator::codegenSkipStatement(SkipStatement *stmt)
+Value *IRGenerator::generate_skip_statement(SkipStatement *stmt)
 {
   // No operation
   return nullptr;
 }
 
-Value *IRGenerator::codegenStopStatement(StopStatement *stmt)
+Value *IRGenerator::generate_stop_statement(StopStatement *stmt)
 {
   // Call exit(0)
   llvm::Function *exitFunc = module->getFunction("exit");
@@ -349,9 +349,9 @@ Value *IRGenerator::codegenStopStatement(StopStatement *stmt)
   return nullptr;
 }
 
-Value *IRGenerator::codegenIfStatement(IfStatement *ifStmt)
+Value *IRGenerator::generate_if_statement(IfStatement *ifStmt)
 {
-  Value *condVal = castToBoolean(codegenExpression(ifStmt->condition));
+  Value *condVal = castToBoolean(generate_expression(ifStmt->condition));
   Function *func = builder.GetInsertBlock()->getParent();
 
   BasicBlock *thenBB = BasicBlock::Create(context, "if.then", func);
@@ -365,7 +365,7 @@ Value *IRGenerator::codegenIfStatement(IfStatement *ifStmt)
   builder.SetInsertPoint(thenBB);
   pushScope();
   for (Statement *stmt : ifStmt->consequent)
-    codegen(stmt);
+    generate_node(stmt);
   popScope();
   builder.CreateBr(mergeBB);
 
@@ -376,7 +376,7 @@ Value *IRGenerator::codegenIfStatement(IfStatement *ifStmt)
     builder.SetInsertPoint(elseBB);
     pushScope();
     for (Statement *stmt : ifStmt->alternate)
-      codegen(stmt);
+      generate_node(stmt);
     popScope();
     builder.CreateBr(mergeBB);
   }
@@ -388,7 +388,7 @@ Value *IRGenerator::codegenIfStatement(IfStatement *ifStmt)
   return mergeBB;
 }
 
-Value *IRGenerator::codegenWhileLoop(WhileLoop *loop)
+Value *IRGenerator::generate_while_loop(WhileLoop *loop)
 {
   Function *func = builder.GetInsertBlock()->getParent();
 
@@ -401,7 +401,7 @@ Value *IRGenerator::codegenWhileLoop(WhileLoop *loop)
 
   // Condition block
   builder.SetInsertPoint(condBB);
-  Value *condVal = castToBoolean(codegenExpression(loop->condition));
+  Value *condVal = castToBoolean(generate_expression(loop->condition));
   builder.CreateCondBr(condVal, bodyBB, exitBB);
 
   // Body block
@@ -409,7 +409,7 @@ Value *IRGenerator::codegenWhileLoop(WhileLoop *loop)
   builder.SetInsertPoint(bodyBB);
   pushScope();
   for (Statement *stmt : loop->body)
-    codegen(stmt);
+    generate_node(stmt);
   popScope();
   builder.CreateBr(condBB); // Loop back
 
@@ -420,7 +420,7 @@ Value *IRGenerator::codegenWhileLoop(WhileLoop *loop)
   return exitBB;
 }
 
-Value *IRGenerator::codegenForLoop(ForLoop *forLoop)
+Value *IRGenerator::generate_for_loop(ForLoop *forLoop)
 {
   pushScope(); // New scope for loop variables
 
@@ -433,7 +433,7 @@ Value *IRGenerator::codegenForLoop(ForLoop *forLoop)
       if (!findSymbol(id->name))
       {
         // Create implicit declaration
-        Value *initVal = codegenExpression(assign->value);
+        Value *initVal = generate_expression(assign->value);
         llvm::Type *varType = initVal->getType();
 
         llvm::AllocaInst *alloca = builder.CreateAlloca(varType, nullptr, id->name);
@@ -445,13 +445,13 @@ Value *IRGenerator::codegenForLoop(ForLoop *forLoop)
       else
       {
         // Variable already exists, just assign
-        codegenAssignment(assign);
+        generate_assignment(assign);
       }
     }
     else
     {
       // Not an identifier? Just generate the assignment normally
-      codegenAssignment(assign);
+      generate_assignment(assign);
     }
   }
 
@@ -468,7 +468,7 @@ Value *IRGenerator::codegenForLoop(ForLoop *forLoop)
 
   // Condition block
   builder.SetInsertPoint(condBB);
-  Value *condVal = castToBoolean(codegenExpression(forLoop->condition));
+  Value *condVal = castToBoolean(generate_expression(forLoop->condition));
   builder.CreateCondBr(condVal, bodyBB, exitBB);
 
   // Body block
@@ -476,7 +476,7 @@ Value *IRGenerator::codegenForLoop(ForLoop *forLoop)
   builder.SetInsertPoint(bodyBB);
   pushScope(); // New scope inside body
   for (Statement *stmt : forLoop->body)
-    codegen(stmt);
+    generate_node(stmt);
   popScope();
   builder.CreateBr(updateBB);
 
@@ -484,7 +484,7 @@ Value *IRGenerator::codegenForLoop(ForLoop *forLoop)
   updateBB->insertInto(func);
   builder.SetInsertPoint(updateBB);
   if (forLoop->update)
-    codegenExpression(forLoop->update);
+    generate_expression(forLoop->update);
   builder.CreateBr(condBB);
 
   // Exit block
@@ -495,17 +495,17 @@ Value *IRGenerator::codegenForLoop(ForLoop *forLoop)
   return exitBB;
 }
 
-Value *IRGenerator::codegenReturnStatement(ReturnStatement *retStmt)
+Value *IRGenerator::generate_return_statement(ReturnStatement *retStmt)
 {
   if (retStmt->returnValue)
   {
-    Value *retVal = codegenExpression(retStmt->returnValue);
+    Value *retVal = generate_expression(retStmt->returnValue);
     return builder.CreateRet(retVal);
   }
   return builder.CreateRetVoid();
 }
 
-Value *IRGenerator::codegenWriteStatement(WriteStatement *write)
+Value *IRGenerator::generate_write_statement(WriteStatement *write)
 {
   // Check if printf is already declared
   Function *printfFunc = module->getFunction("printf");
@@ -528,7 +528,7 @@ Value *IRGenerator::codegenWriteStatement(WriteStatement *write)
 
   for (auto expr : write->args)
   {
-    Value *val = codegenExpression(expr);
+    Value *val = generate_expression(expr);
     if (!val)
       return nullptr;
 
@@ -632,7 +632,7 @@ Value *IRGenerator::codegenWriteStatement(WriteStatement *write)
   return builder.CreateCall(printfFunc, args);
 }
 
-Value *IRGenerator::codegenReadStatement(ReadStatement *read)
+Value *IRGenerator::generate_read_statement(ReadStatement *read)
 {
   Function *scanfFunc = module->getFunction("scanf");
   if (!scanfFunc)
@@ -657,7 +657,7 @@ Value *IRGenerator::codegenReadStatement(ReadStatement *read)
   {
     Type *baseType;
     // Get address of the variable
-    Value *addr = codegenIdentifierAddress(dynamic_cast<Identifier *>(var));
+    Value *addr = generate_identifier_address(dynamic_cast<Identifier *>(var));
     if (!addr)
     {
       module->getContext().emitError("Invalid variable in read statement");
@@ -734,16 +734,16 @@ Value *IRGenerator::codegenReadStatement(ReadStatement *read)
   return builder.CreateCall(scanfFunc, args);
 }
 
-Value *IRGenerator::codegenVariableDefinition(VariableDefinition *def)
+Value *IRGenerator::generate_variable_definition(VariableDefinition *def)
 {
   if (auto decl = dynamic_cast<VariableDeclaration *>(def->def))
-    return codegenVariableDeclaration(decl);
+    return generate_variable_declaration(decl);
   if (auto init = dynamic_cast<VariableInitialization *>(def->def))
-    return codegenVariableInitialization(init);
+    return generate_variable_initialization(init);
   return nullptr;
 }
 
-void IRGenerator::codegenGlobalVariable(VariableDefinition *dif)
+void IRGenerator::generate_global_variable(VariableDefinition *dif)
 {
   // Handle VariableDeclaration (multiple variables without initializers)
   if (auto varDecl = dynamic_cast<VariableDeclaration *>(dif->def))
@@ -819,7 +819,7 @@ void IRGenerator::codegenGlobalVariable(VariableDefinition *dif)
 
         for (auto elem : arrayLit->elements)
         {
-          elements.push_back(cast<Constant>(codegen(elem)));
+          elements.push_back(cast<Constant>(generate_node(elem)));
         }
 
         ArrayType *arrType = ArrayType::get(elementType, elements.size());
@@ -838,7 +838,7 @@ void IRGenerator::codegenGlobalVariable(VariableDefinition *dif)
     }
     else
     {
-      Value *initVal = codegenExpression(varInit->initializer);
+      Value *initVal = generate_expression(varInit->initializer);
       init = dyn_cast<Constant>(initVal);
       if (!init)
       {
@@ -886,7 +886,7 @@ void IRGenerator::codegenGlobalVariable(VariableDefinition *dif)
   }
 }
 
-Value *IRGenerator::codegenVariableInitialization(VariableInitialization *init)
+Value *IRGenerator::generate_variable_initialization(VariableInitialization *init)
 {
   SymbolType baseType = Symbol::get_datatype(init->datatype);
   int dimensions = Symbol::get_dimension(init->datatype);
@@ -937,7 +937,7 @@ Value *IRGenerator::codegenVariableInitialization(VariableInitialization *init)
   }
   else if (init->initializer)
   {
-    Value *initVal = codegen(init->initializer);
+    Value *initVal = generate_node(init->initializer);
     builder.CreateStore(initVal, alloca);
 
     // Initialize length to 0 for empty arrays
@@ -976,7 +976,7 @@ Value *IRGenerator::codegenVariableInitialization(VariableInitialization *init)
   return alloca;
 }
 
-Value *IRGenerator::codegenVariableDeclaration(VariableDeclaration *decl)
+Value *IRGenerator::generate_variable_declaration(VariableDeclaration *decl)
 {
   SymbolType baseType = Symbol::get_datatype(decl->datatype);
   int dimensions = Symbol::get_dimension(decl->datatype);
@@ -991,60 +991,60 @@ Value *IRGenerator::codegenVariableDeclaration(VariableDeclaration *decl)
   return nullptr;
 }
 
-Value *IRGenerator::codegenExpression(Expression *expr)
+Value *IRGenerator::generate_expression(Expression *expr)
 {
   // Handle index expressions first with type tracking
   if (auto index = dynamic_cast<IndexExpression *>(expr))
   {
     Type *elementType = nullptr;
-    Value *gep = codegenIndexExpression(index, &elementType);
+    Value *gep = generate_index_expression(index, &elementType);
     return builder.CreateLoad(elementType, gep, "loadidx");
   }
 
   // Existing other cases with adjustments for opaque pointers
   if (auto decl = dynamic_cast<VariableDefinition *>(expr))
-    return codegenVariableDefinition(decl);
+    return generate_variable_definition(decl);
 
   if (auto lit = dynamic_cast<Literal *>(expr))
-    return codegenLiteral(lit);
+    return generate_literal(lit);
 
   if (auto id = dynamic_cast<Identifier *>(expr))
   {
-    return codegenIdentifier(id);
+    return generate_identifier(id);
   }
 
   if (auto call = dynamic_cast<CallFunctionExpression *>(expr))
-    return codegenCall(call);
+    return generate_call(call);
 
   // Binary operations (unchanged but included for completeness)
   if (auto add = dynamic_cast<AdditiveExpression *>(expr))
-    return codegenAdditiveExpr(add);
+    return generate_additive_expr(add);
   if (auto mult = dynamic_cast<MultiplicativeExpression *>(expr))
-    return codegenMultiplicativeExpr(mult);
+    return generate_multiplicative_expr(mult);
   if (auto assign = dynamic_cast<AssignmentExpression *>(expr))
-    return codegenAssignment(assign);
+    return generate_assignment(assign);
 
   // Unary operations
   if (auto unary = dynamic_cast<UnaryExpression *>(expr))
-    return codegenUnaryExpr(unary);
+    return generate_unary_expr(unary);
 
   // Boolean operations
   if (auto OR = dynamic_cast<OrExpression *>(expr))
-    return codegenOrExpr(OR);
+    return generate_or_expr(OR);
   if (auto AND = dynamic_cast<AndExpression *>(expr))
-    return codegenAndExpr(AND);
+    return generate_and_expr(AND);
   if (auto eq = dynamic_cast<EqualityExpression *>(expr))
-    return codegenEqualityExpr(eq);
+    return generate_equality_expr(eq);
   if (auto re = dynamic_cast<RelationalExpression *>(expr))
-    return codegenRelationalExpr(re);
+    return generate_relational_expr(re);
 
   return nullptr;
 }
 
-Value *IRGenerator::codegenAssignment(AssignmentExpression *assign)
+Value *IRGenerator::generate_assignment(AssignmentExpression *assign)
 {
-  Value *target = codegenLValue(assign->assignee);
-  Value *value = codegenExpression(assign->value);
+  Value *target = generate_l_value(assign->assignee);
+  Value *value = generate_expression(assign->value);
 
   if (!target || !value)
     return nullptr;
@@ -1107,7 +1107,7 @@ Value *IRGenerator::codegenAssignment(AssignmentExpression *assign)
   return target;
 }
 
-Value *IRGenerator::codegenIdentifier(Identifier *id)
+Value *IRGenerator::generate_identifier(Identifier *id)
 {
   auto entryOpt = findSymbol(id->name);
   if (!entryOpt)
@@ -1115,12 +1115,11 @@ Value *IRGenerator::codegenIdentifier(Identifier *id)
 
   SymbolEntry entry = *entryOpt;
 
-
   // Load scalar values
   return builder.CreateLoad(entry.llvmType, entry.llvmValue, id->name);
 }
 
-Value *IRGenerator::codegenLiteral(Literal *lit)
+Value *IRGenerator::generate_literal(Literal *lit)
 {
   if (auto intLit = dynamic_cast<IntegerLiteral *>(lit))
   {
@@ -1162,28 +1161,28 @@ Value *IRGenerator::codegenLiteral(Literal *lit)
   return nullptr;
 }
 
-Value *IRGenerator::codegenOrExpr(OrExpression *expr)
+Value *IRGenerator::generate_or_expr(OrExpression *expr)
 {
-  Value *L = codegen(expr->left);
-  Value *R = codegen(expr->right);
+  Value *L = generate_node(expr->left);
+  Value *R = generate_node(expr->right);
   if (!L || !R)
     return nullptr;
   return builder.CreateOr(L, R, "ortmp");
 }
 
-Value *IRGenerator::codegenAndExpr(AndExpression *expr)
+Value *IRGenerator::generate_and_expr(AndExpression *expr)
 {
-  Value *L = codegen(expr->left);
-  Value *R = codegen(expr->right);
+  Value *L = generate_node(expr->left);
+  Value *R = generate_node(expr->right);
   if (!L || !R)
     return nullptr;
   return builder.CreateAnd(L, R, "andtmp");
 }
 
-Value *IRGenerator::codegenRelationalExpr(RelationalExpression *expr)
+Value *IRGenerator::generate_relational_expr(RelationalExpression *expr)
 {
-  Value *L = codegenExpression(expr->left);
-  Value *R = codegenExpression(expr->right);
+  Value *L = generate_expression(expr->left);
+  Value *R = generate_expression(expr->right);
 
   if (!L || !R)
     return nullptr;
@@ -1238,10 +1237,10 @@ Value *IRGenerator::codegenRelationalExpr(RelationalExpression *expr)
   return nullptr;
 }
 
-Value *IRGenerator::codegenEqualityExpr(EqualityExpression *expr)
+Value *IRGenerator::generate_equality_expr(EqualityExpression *expr)
 {
-  Value *L = codegen(expr->left);
-  Value *R = codegen(expr->right);
+  Value *L = generate_node(expr->left);
+  Value *R = generate_node(expr->right);
   if (!L || !R)
     return nullptr;
 
@@ -1283,10 +1282,10 @@ Value *IRGenerator::codegenEqualityExpr(EqualityExpression *expr)
   }
 }
 
-Value *IRGenerator::codegenAdditiveExpr(AdditiveExpression *expr)
+Value *IRGenerator::generate_additive_expr(AdditiveExpression *expr)
 {
-  Value *L = codegenExpression(expr->left);
-  Value *R = codegenExpression(expr->right);
+  Value *L = generate_expression(expr->left);
+  Value *R = generate_expression(expr->right);
 
   L->getType()->print(llvm::errs());
   errs() << "\n";
@@ -1295,14 +1294,14 @@ Value *IRGenerator::codegenAdditiveExpr(AdditiveExpression *expr)
   if (!L || !R)
     return nullptr;
 
-     
   Type *i8Ty = Type::getInt8Ty(context);
   PointerType *i8PtrTy = PointerType::getUnqual(context);
 
   // Check if both operands are strings
   bool bothStrings = L->getType() == i8PtrTy && R->getType() == i8PtrTy;
 
-  if (bothStrings && expr->optr == "+") {
+  if (bothStrings && expr->optr == "+")
+  {
     // Declare needed runtime functions
     FunctionType *strlenTy = FunctionType::get(
         Type::getInt64Ty(context), {i8PtrTy}, false);
@@ -1318,8 +1317,8 @@ Value *IRGenerator::codegenAdditiveExpr(AdditiveExpression *expr)
 
     // Calculate total size + null terminator
     Value *totalLen = builder.CreateAdd(len1, len2, "concat_len");
-    Value *totalLenWithNull = builder.CreateAdd(totalLen, 
-        ConstantInt::get(Type::getInt64Ty(context), 1), "total_with_null");
+    Value *totalLenWithNull = builder.CreateAdd(totalLen,
+                                                ConstantInt::get(Type::getInt64Ty(context), 1), "total_with_null");
 
     // Allocate memory using malloc
     Function *mallocFunc = declareMalloc();
@@ -1327,29 +1326,27 @@ Value *IRGenerator::codegenAdditiveExpr(AdditiveExpression *expr)
     buffer = builder.CreateBitCast(buffer, i8PtrTy);
 
     // Copy first string (without its null terminator)
-    builder.CreateCall(memcpyFunc, {
-      buffer, 
-      L, 
-      len1,  // Only copy actual characters
-      ConstantInt::get(Type::getInt1Ty(context), 0)
-  });
+    builder.CreateCall(memcpyFunc,
+                       {buffer,
+                        L,
+                        len1, // Only copy actual characters
+                        ConstantInt::get(Type::getInt1Ty(context), 0)});
 
-  // Copy second string with offset (without its null terminator)
-  Value *destPtr = builder.CreateGEP(i8Ty, buffer, {len1}, "dest_ptr");
-  builder.CreateCall(memcpyFunc, {
-      destPtr,
-      R,
-      len2,  // Only copy actual characters
-      ConstantInt::get(Type::getInt1Ty(context), 0)
-  });
+    // Copy second string with offset (without its null terminator)
+    Value *destPtr = builder.CreateGEP(i8Ty, buffer, {len1}, "dest_ptr");
+    builder.CreateCall(memcpyFunc,
+                       {destPtr,
+                        R,
+                        len2, // Only copy actual characters
+                        ConstantInt::get(Type::getInt1Ty(context), 0)});
 
-  // Add explicit null terminator at the end
-  Value *totalLenBytes = builder.CreateAdd(len1, len2, "total_len_bytes");
-  Value *nullTermPtr = builder.CreateGEP(i8Ty, buffer, {totalLenBytes});
-  builder.CreateStore(ConstantInt::get(i8Ty, 0), nullTermPtr);
+    // Add explicit null terminator at the end
+    Value *totalLenBytes = builder.CreateAdd(len1, len2, "total_len_bytes");
+    Value *nullTermPtr = builder.CreateGEP(i8Ty, buffer, {totalLenBytes});
+    builder.CreateStore(ConstantInt::get(i8Ty, 0), nullTermPtr);
 
-  return buffer;
-}
+    return buffer;
+  }
   // Check types to determine which operation to use
   if (L->getType()->isIntOrPtrTy() && R->getType()->isIntOrPtrTy())
   {
@@ -1399,10 +1396,10 @@ Value *IRGenerator::codegenAdditiveExpr(AdditiveExpression *expr)
   }
 }
 
-Value *IRGenerator::codegenMultiplicativeExpr(MultiplicativeExpression *expr)
+Value *IRGenerator::generate_multiplicative_expr(MultiplicativeExpression *expr)
 {
-  Value *L = codegenExpression(expr->left);
-  Value *R = codegenExpression(expr->right);
+  Value *L = generate_expression(expr->left);
+  Value *R = generate_expression(expr->right);
   L->getType()->print(llvm::errs());
   errs() << "\n";
   R->getType()->print(llvm::errs());
@@ -1477,9 +1474,9 @@ Value *IRGenerator::codegenMultiplicativeExpr(MultiplicativeExpression *expr)
   return nullptr;
 }
 
-Value *IRGenerator::codegenUnaryExpr(UnaryExpression *expr)
+Value *IRGenerator::generate_unary_expr(UnaryExpression *expr)
 {
-  Value *operand = codegenExpression(expr->operand);
+  Value *operand = generate_expression(expr->operand);
   if (!operand)
     return nullptr;
 
@@ -1518,6 +1515,7 @@ Value *IRGenerator::codegenUnaryExpr(UnaryExpression *expr)
 
   if (expr->optr == "#")
   {
+
     auto id = dynamic_cast<Identifier *>(expr->operand);
     if (!id)
     {
@@ -1573,11 +1571,12 @@ Value *IRGenerator::codegenUnaryExpr(UnaryExpression *expr)
   // 4. Increment/Decrement (++/--)
   if (expr->optr == "++" || expr->optr == "--")
   {
-    Value *addr = codegenIdentifierAddress(dynamic_cast<Identifier *>(expr->operand));
+    auto id = dynamic_cast<Identifier *>(expr->operand);
+    Value *addr = generate_identifier_address(id);
     if (!addr)
       return nullptr;
 
-    Value *current = builder.CreateLoad(ty, addr);
+    Value *current = builder.CreateLoad(ty, addr, id->name);
     Value *one = ty->isIntegerTy() ? ConstantInt::get(ty, 1) : ConstantFP::get(ty, 1.0);
     Value *result = (expr->optr == "++") ? (ty->isIntegerTy() ? builder.CreateAdd(current, one) : builder.CreateFAdd(current, one)) : (ty->isIntegerTy() ? builder.CreateSub(current, one) : builder.CreateFSub(current, one));
     builder.CreateStore(result, addr);
@@ -1654,7 +1653,7 @@ Value *IRGenerator::codegenUnaryExpr(UnaryExpression *expr)
   return nullptr;
 }
 
-Value *IRGenerator::codegenCall(CallFunctionExpression *call)
+Value *IRGenerator::generate_call(CallFunctionExpression *call)
 {
   // 1. Lookup the function in the module
   llvm::Function *callee = module->getFunction(call->function->name);
@@ -1696,7 +1695,7 @@ Value *IRGenerator::codegenCall(CallFunctionExpression *call)
     if (i < numArgs)
     {
       // User provided this argument
-      argVal = codegenExpression(call->arguments[i]);
+      argVal = generate_expression(call->arguments[i]);
     }
     else
     {
@@ -1704,7 +1703,7 @@ Value *IRGenerator::codegenCall(CallFunctionExpression *call)
       auto paramDef = funcDef->parameters[i]->def;
       if (auto init = dynamic_cast<VariableInitialization *>(paramDef))
       {
-        argVal = codegenExpression(init->initializer);
+        argVal = generate_expression(init->initializer);
       }
       else
       {
@@ -1745,140 +1744,7 @@ Value *IRGenerator::codegenCall(CallFunctionExpression *call)
   return builder.CreateCall(callee, args, "calltmp");
 }
 
-bool IRGenerator::isUniformArray(ArrayLiteral *lit)
-{
-
-  if (lit->elements.empty())
-    return true;
-
-  bool isNested = dynamic_cast<ArrayLiteral *>(lit->elements[0]) != nullptr;
-  size_t expectedSize = isNested ? dynamic_cast<ArrayLiteral *>(lit->elements[0])->elements.size() : 0;
-  Type *expectedType = codegen(lit->elements[0])->getType();
-
-  for (auto elem : lit->elements)
-  {
-    auto sub = dynamic_cast<ArrayLiteral *>(elem);
-    if ((sub != nullptr) != isNested)
-      return false;
-
-    if (isNested && sub)
-    {
-      if (sub->elements.size() != expectedSize)
-        return false;
-      if (!isUniformArray(sub))
-        return false;
-    }
-
-    if (!isNested && codegen(elem)->getType() != expectedType)
-      return false;
-  }
-
-  return true;
-}
-
-Type *IRGenerator::getElementType(ArrayLiteral *lit, int *outDim)
-{
-  int dimensions = 0;
-  ArrayLiteral *current = lit;
-
-  // Calculate dimensions and find base type
-  while (true)
-  {
-    dimensions++;
-    if (current->elements.empty())
-    {
-      *outDim = dimensions;
-      return Type::getInt32Ty(context); // Default to integer if empty
-    }
-
-    auto first = current->elements[0];
-    if (auto sub = dynamic_cast<ArrayLiteral *>(first))
-    {
-      current = sub;
-    }
-    else
-    {
-      *outDim = dimensions;
-      return codegen(first)->getType();
-    }
-  }
-}
-
-Value *IRGenerator::createJaggedArray(ArrayLiteral *lit, Function *mallocFn,
-                                      SymbolType *outBaseType, int *outDimensions)
-{
-  // Determine array structure
-  int totalDimensions = 0;
-  Type *elementType = getElementType(lit, &totalDimensions);
-  SymbolType baseType;
-
-  // Map LLVM type to our symbol type
-  if (elementType->isIntegerTy(32))
-    baseType = SymbolType::Integer;
-  else if (elementType->isFloatTy())
-    baseType = SymbolType::Float;
-  else if (elementType->isIntegerTy(1))
-    baseType = SymbolType::Boolean;
-  else
-    baseType = SymbolType::Integer; // Default
-
-  // Set output parameters
-  if (outBaseType)
-    *outBaseType = baseType;
-  if (outDimensions)
-    *outDimensions = totalDimensions;
-
-  // Create nested allocations
-  return createJaggedArrayHelper(lit, mallocFn, totalDimensions, elementType);
-}
-Constant *IRGenerator::createNestedArray(ArrayLiteral *lit, ArrayType *arrType)
-{
-  std::vector<Constant *> elements;
-  if (!arrType)
-    arrType = inferArrayType(lit);
-
-  Type *elementType = arrType->getElementType();
-
-  for (auto elem : lit->elements)
-  {
-    if (auto sub = dynamic_cast<ArrayLiteral *>(elem))
-    {
-      ArrayType *subArrType = cast<ArrayType>(elementType);
-      elements.push_back(createNestedArray(sub, subArrType));
-    }
-    else
-    {
-      Constant *c = cast<Constant>(codegen(elem));
-      elements.push_back(c);
-    }
-  }
-
-  return ConstantArray::get(arrType, elements);
-}
-
-ArrayType *IRGenerator::inferArrayType(ArrayLiteral *lit)
-{
-  std::vector<uint64_t> dims;
-  ArrayLiteral *current = lit;
-  while (dynamic_cast<ArrayLiteral *>(current->elements[0]))
-  {
-    dims.push_back(current->elements.size());
-    current = dynamic_cast<ArrayLiteral *>(current->elements[0]);
-  }
-  dims.push_back(current->elements.size());
-
-  Type *elementType = codegen(current->elements[0])->getType();
-  ArrayType *arrType = ArrayType::get(elementType, dims.back());
-
-  for (int i = dims.size() - 2; i >= 0; i--)
-  {
-    arrType = ArrayType::get(arrType, dims[i]);
-  }
-
-  return arrType;
-}
-
-Value *IRGenerator::codegenIndexExpression(IndexExpression *expr, Type **outElementType)
+Value *IRGenerator::generate_index_expression(IndexExpression *expr, Type **outElementType)
 {
   std::vector<Value *> indices;
   const Identifier *rootId = nullptr;
@@ -1896,7 +1762,7 @@ Value *IRGenerator::codegenIndexExpression(IndexExpression *expr, Type **outElem
     }
     else if (auto innerExpr = dynamic_cast<IndexExpression *>(current->base))
     {
-      indices.push_back(codegen(current->index));
+      indices.push_back(generate_node(current->index));
       current = innerExpr;
     }
     else
@@ -1915,7 +1781,7 @@ Value *IRGenerator::codegenIndexExpression(IndexExpression *expr, Type **outElem
   // Collect remaining indices from the root's IndexExpressions
   while (current)
   {
-    indices.push_back(codegen(current->index));
+    indices.push_back(generate_node(current->index));
     current = dynamic_cast<IndexExpression *>(current->base);
   }
   std::reverse(indices.begin(), indices.end());
@@ -2008,6 +1874,139 @@ Value *IRGenerator::codegenIndexExpression(IndexExpression *expr, Type **outElem
   return currentPtr;
 }
 
+bool IRGenerator::isUniformArray(ArrayLiteral *lit)
+{
+
+  if (lit->elements.empty())
+    return true;
+
+  bool isNested = dynamic_cast<ArrayLiteral *>(lit->elements[0]) != nullptr;
+  size_t expectedSize = isNested ? dynamic_cast<ArrayLiteral *>(lit->elements[0])->elements.size() : 0;
+  Type *expectedType = generate_node(lit->elements[0])->getType();
+
+  for (auto elem : lit->elements)
+  {
+    auto sub = dynamic_cast<ArrayLiteral *>(elem);
+    if ((sub != nullptr) != isNested)
+      return false;
+
+    if (isNested && sub)
+    {
+      if (sub->elements.size() != expectedSize)
+        return false;
+      if (!isUniformArray(sub))
+        return false;
+    }
+
+    if (!isNested && generate_node(elem)->getType() != expectedType)
+      return false;
+  }
+
+  return true;
+}
+
+Type *IRGenerator::getElementType(ArrayLiteral *lit, int *outDim)
+{
+  int dimensions = 0;
+  ArrayLiteral *current = lit;
+
+  // Calculate dimensions and find base type
+  while (true)
+  {
+    dimensions++;
+    if (current->elements.empty())
+    {
+      *outDim = dimensions;
+      return Type::getInt32Ty(context); // Default to integer if empty
+    }
+
+    auto first = current->elements[0];
+    if (auto sub = dynamic_cast<ArrayLiteral *>(first))
+    {
+      current = sub;
+    }
+    else
+    {
+      *outDim = dimensions;
+      return generate_node(first)->getType();
+    }
+  }
+}
+
+Value *IRGenerator::createJaggedArray(ArrayLiteral *lit, Function *mallocFn,
+                                      SymbolType *outBaseType, int *outDimensions)
+{
+  // Determine array structure
+  int totalDimensions = 0;
+  Type *elementType = getElementType(lit, &totalDimensions);
+  SymbolType baseType;
+
+  // Map LLVM type to our symbol type
+  if (elementType->isIntegerTy(32))
+    baseType = SymbolType::Integer;
+  else if (elementType->isFloatTy())
+    baseType = SymbolType::Float;
+  else if (elementType->isIntegerTy(1))
+    baseType = SymbolType::Boolean;
+  else
+    baseType = SymbolType::Integer; // Default
+
+  // Set output parameters
+  if (outBaseType)
+    *outBaseType = baseType;
+  if (outDimensions)
+    *outDimensions = totalDimensions;
+
+  // Create nested allocations
+  return createJaggedArrayHelper(lit, mallocFn, totalDimensions, elementType);
+}
+Constant *IRGenerator::createNestedArray(ArrayLiteral *lit, ArrayType *arrType)
+{
+  std::vector<Constant *> elements;
+  if (!arrType)
+    arrType = inferArrayType(lit);
+
+  Type *elementType = arrType->getElementType();
+
+  for (auto elem : lit->elements)
+  {
+    if (auto sub = dynamic_cast<ArrayLiteral *>(elem))
+    {
+      ArrayType *subArrType = cast<ArrayType>(elementType);
+      elements.push_back(createNestedArray(sub, subArrType));
+    }
+    else
+    {
+      Constant *c = cast<Constant>(generate_node(elem));
+      elements.push_back(c);
+    }
+  }
+
+  return ConstantArray::get(arrType, elements);
+}
+
+ArrayType *IRGenerator::inferArrayType(ArrayLiteral *lit)
+{
+  std::vector<uint64_t> dims;
+  ArrayLiteral *current = lit;
+  while (dynamic_cast<ArrayLiteral *>(current->elements[0]))
+  {
+    dims.push_back(current->elements.size());
+    current = dynamic_cast<ArrayLiteral *>(current->elements[0]);
+  }
+  dims.push_back(current->elements.size());
+
+  Type *elementType = generate_node(current->elements[0])->getType();
+  ArrayType *arrType = ArrayType::get(elementType, dims.back());
+
+  for (int i = dims.size() - 2; i >= 0; i--)
+  {
+    arrType = ArrayType::get(arrType, dims[i]);
+  }
+
+  return arrType;
+}
+
 Function *IRGenerator::declareMalloc()
 {
   Function *mallocFn = module->getFunction("malloc");
@@ -2069,7 +2068,8 @@ Value *IRGenerator::castToBoolean(Value *value)
       ConstantInt::get(value->getType(), 0),
       "castbool");
 }
-Value *IRGenerator::codegenIdentifierAddress(Identifier *id)
+
+Value *IRGenerator::generate_identifier_address(Identifier *id)
 {
   // Directly return the pointer (for assignments/scanf)
   Value *addr = findValue(id->name);
@@ -2088,6 +2088,7 @@ Value *IRGenerator::codegenIdentifierAddress(Identifier *id)
 
   return addr;
 }
+
 void IRGenerator::printSymbolTable()
 {
   llvm::errs() << "=== Symbol Table ===\n";
@@ -2123,6 +2124,7 @@ void IRGenerator::printSymbolTable()
 
   llvm::errs() << "====================\n";
 }
+
 optional<SymbolEntry> IRGenerator::findSymbol(const std::string &name)
 {
   auto tempStack = symbolTable;
@@ -2139,7 +2141,7 @@ optional<SymbolEntry> IRGenerator::findSymbol(const std::string &name)
   return std::nullopt;
 }
 
-Value *IRGenerator::codegenLValue(Expression *expr)
+Value *IRGenerator::generate_l_value(Expression *expr)
 {
   if (auto id = dynamic_cast<Identifier *>(expr))
   {
@@ -2151,7 +2153,7 @@ Value *IRGenerator::codegenLValue(Expression *expr)
   if (auto index = dynamic_cast<IndexExpression *>(expr))
   {
     Type *dummy;
-    return codegenIndexExpression(index, &dummy);
+    return generate_index_expression(index, &dummy);
   }
   return nullptr;
 }
@@ -2177,7 +2179,7 @@ Value *IRGenerator::createJaggedArrayHelper(ArrayLiteral *lit, Function *mallocF
     {
       Value *elementPtr = builder.CreateInBoundsGEP(elementType, buffer,
                                                     ConstantInt::get(Type::getInt32Ty(context), i));
-      Value *val = codegen(lit->elements[i]);
+      Value *val = generate_node(lit->elements[i]);
       builder.CreateStore(val, elementPtr);
     }
     return buffer;

@@ -29,7 +29,7 @@ int Debugger::run()
   string input_file = DEBUGGING_FOLDER + "/" + PROGRAM_FILE;
   string output_file = DEBUGGING_FOLDER + "/" + PROGRAM_FILE + ".ll";
   string program = read_program(input_file);
-  CompilerOptions *options = new CompilerOptions(program);
+  CompilerOptions *options = new CompilerOptions(program ,OptLevel::O3);
 
   RobinCompiler *rc = new RobinCompiler(options);
 

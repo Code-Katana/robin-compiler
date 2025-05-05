@@ -19,6 +19,9 @@ RobinCompiler::RobinCompiler(CompilerOptions *options)
   case ParserOptions::RecursiveDecent:
     parser = new RecursiveDecentParser(scanner);
     break;
+  case ParserOptions::LL1:
+    parser = new LL1Parser(scanner);
+    break;
   }
   semantic = new SemanticAnalyzer(parser);
 }

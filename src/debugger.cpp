@@ -27,7 +27,7 @@ string read_program(string path)
 int Debugger::run()
 {
   string program = read_program(DEBUGGING_FOLDER + "/" + PROGRAM_FILE);
-  CompilerOptions *options = new CompilerOptions(program);
+  CompilerOptions *options = new CompilerOptions(program, ParserOptions::LL1);
 
   RobinCompiler *rc = new RobinCompiler(options);
   vector<Token> tokens = rc->tokenize();
@@ -40,8 +40,7 @@ int Debugger::run()
   {
     JSON::debug_file(Debugger::DEBUGGING_FOLDER + "/tokens.json", JSON::stringify_tokens_stream(tokens));
     JSON::debug_file(Debugger::DEBUGGING_FOLDER + "/tree.json", JSON::stringify_node(tree));
-
-    rc->typecheck();
   }
+  system("pause");
   return 0;
 }

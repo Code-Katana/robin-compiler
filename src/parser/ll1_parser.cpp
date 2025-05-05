@@ -5,17 +5,24 @@
 LL1Parser::LL1Parser(ScannerBase *sc) : ParserBase(sc)
 {
   fill_table();
-  get_token();
+  has_peeked = false;
+
+  currentFunctionList.clear();
+  currentDeclarationSeq.clear();
+  currentCommandSeq.clear();
 }
+
+AstNode *LL1Parser::END_OF_LIST_MARKER = reinterpret_cast<AstNode *>(-1);
+Statement *LL1Parser::END_OF_LIST_ELSE = reinterpret_cast<Statement *>(-1);
 
 AstNode *LL1Parser::parse_ast()
 {
-  st.push(Symbol(TokenType::END_OF_FILE));
-  st.push(Symbol(NonTerminal::Source_NT));
+  st.push(SymbolLL1(TokenType::END_OF_FILE));
+  st.push(SymbolLL1(NonTerminal::Source_NT));
 
   while (!st.empty())
   {
-    Symbol top = st.top();
+    SymbolLL1 top = st.top();
     if (top.reduceRule > 0)
     {
       st.pop();
@@ -23,22 +30,29 @@ AstNode *LL1Parser::parse_ast()
     }
     else if (!top.isTerm)
     {
-      int rule = parseTable[(int)top.nt][(int)current_token.type];
-      // if(rule == 73 && current_token.type == TokenType::ID_SY)
-      // {
-      //   get_token();
-      //   if(current_token.type == TokenType::EQUAL_OP)
-      //   {
-      //     rule = 72;
-      //   }
-      //   else
-      //   {
-
-      //   }
-      // }
+      int x = (int)top.nt;
+      int y = (int)current_token.type;
+      int rule = parseTable[x][y];
+      if (rule == 73 && current_token.type == TokenType::ID_SY)
+      {
+        Token nextToken = peek_token();
+        if (nextToken.type == TokenType::EQUAL_OP)
+        {
+          rule = 72;
+        }
+      }
+      if (rule == 138 && current_token.type == TokenType::ELSE_KW)
+      {
+        Token nextToken = peek_token();
+        if (nextToken.type == TokenType::IF_KW)
+        {
+          rule = 66;
+        }
+      }
       if (rule == 0)
       {
         syntax_error("Unexpected token in prediction");
+        return nullptr;
       }
       st.pop();
       push_rule(rule);
@@ -46,57 +60,100 @@ AstNode *LL1Parser::parse_ast()
     else
     {
       st.pop();
-      match(top.term);
+      if (!match(top.term))
+      {
+        return nullptr;
+      }
     }
+  }
+  if (nodes.empty())
+  {
+    syntax_error("Parsing failed: no AST generated");
+    return nullptr;
   }
   return dynamic_cast<AstNode *>(nodes.back());
 }
 
-void LL1Parser::get_token()
+Token LL1Parser::peek_token()
 {
-  current_token = sc->get_token();
+  if (!has_peeked)
+  {
+    peeked_token = sc->get_token();
+    has_peeked = true;
+  }
+  return peeked_token;
 }
 
-void LL1Parser::match(TokenType t)
+void LL1Parser::get_token()
+{
+  if (has_peeked)
+  {
+    current_token = peeked_token;
+    has_peeked = false;
+  }
+  else
+  {
+    current_token = sc->get_token();
+  }
+}
+
+bool LL1Parser::match(TokenType t)
 {
   if (current_token.type != t)
   {
-    syntax_error("Token mismatch in match");
+    syntax_error("Token mismatch in match: expected " + Token::get_token_name(t) + ", got " + Token::get_token_name(current_token.type));
+    return false;
   }
+
+  previous_token = current_token;
 
   AstNode *leaf = nullptr;
   switch (t)
   {
   case TokenType::ID_SY:
-    leaf = new Identifier(current_token.value,
-                          current_token.line, current_token.line,
-                          current_token.start, current_token.end);
+    leaf = new Identifier(current_token.value, current_token.line, previous_token.line, current_token.start, previous_token.end);
     break;
   case TokenType::INTEGER_NUM:
-    leaf = new IntegerLiteral(std::stoi(current_token.value),
-                              current_token.line, current_token.line,
-                              current_token.start, current_token.end);
+    leaf = new IntegerLiteral(std::stoi(current_token.value), current_token.line, previous_token.line, current_token.start, previous_token.end);
     break;
   case TokenType::FLOAT_NUM:
-    leaf = new FloatLiteral(std::stof(current_token.value),
-                            current_token.line, current_token.line,
-                            current_token.start, current_token.end);
+    leaf = new FloatLiteral(std::stof(current_token.value), current_token.line, previous_token.line, current_token.start, previous_token.end);
     break;
   case TokenType::STRING_SY:
-    leaf = new StringLiteral(current_token.value,
-                             current_token.line, current_token.line,
-                             current_token.start, current_token.end);
+    leaf = new StringLiteral(current_token.value, current_token.line, previous_token.line, current_token.start, previous_token.end);
     break;
   case TokenType::TRUE_KW:
-    leaf = new BooleanLiteral(true,
-                              current_token.line, current_token.line,
-                              current_token.start, current_token.end);
+    leaf = new BooleanLiteral(true, current_token.line, previous_token.line, current_token.start, previous_token.end);
     break;
   case TokenType::FALSE_KW:
-    leaf = new BooleanLiteral(false,
-                              current_token.line, current_token.line,
-                              current_token.start, current_token.end);
+    leaf = new BooleanLiteral(false, current_token.line, previous_token.line, current_token.start, previous_token.end);
     break;
+  case TokenType::INTEGER_TY:
+  case TokenType::BOOLEAN_TY:
+  case TokenType::STRING_TY:
+  case TokenType::FLOAT_TY:
+  case TokenType::VOID_TY:
+    leaf = new PrimitiveType(current_token.value, current_token.line, previous_token.line, current_token.start, previous_token.end);
+    break;
+  case TokenType::PLUS_OP:
+  case TokenType::MINUS_OP:
+  case TokenType::MULT_OP:
+  case TokenType::DIVIDE_OP:
+  case TokenType::MOD_OP:
+  case TokenType::LESS_EQUAL_OP:
+  case TokenType::IS_EQUAL_OP:
+  case TokenType::NOT_EQUAL_OP:
+  case TokenType::LESS_THAN_OP:
+  case TokenType::GREATER_THAN_OP:
+  case TokenType::GREATER_EQUAL_OP:
+  case TokenType::NOT_KW:
+  case TokenType::INCREMENT_OP:
+  case TokenType::DECREMENT_OP:
+  case TokenType::STRINGIFY_OP:
+  case TokenType::BOOLEAN_OP:
+  case TokenType::ROUND_OP:
+  case TokenType::LENGTH_OP:
+    leaf = new Identifier(current_token.value, current_token.line, previous_token.line, current_token.start, previous_token.end);
   }
   if (leaf)
   {
@@ -104,6 +161,7 @@ void LL1Parser::match(TokenType t)
   }
 
   get_token();
+  return true;
 }
 
 void LL1Parser::fill_table()
@@ -306,7 +364,7 @@ void LL1Parser::fill_table()
 
   parseTable[(int)NonTerminal::Write_Statement_NT][(int)TokenType::WRITE_KW] = 52;
 
-  parseTable[(int)NonTerminal::Variable_List_NT][(int)TokenType::ID_SY] = 53;
+  parseTable[(int)NonTerminal::Variable_List_read_NT][(int)TokenType::ID_SY] = 53;
 
   parseTable[(int)NonTerminal::More_Variables_read_NT][(int)TokenType::SEMI_COLON_SY] = 54;
   parseTable[(int)NonTerminal::More_Variables_read_NT][(int)TokenType::COMMA_SY] = 55;
@@ -335,12 +393,14 @@ void LL1Parser::fill_table()
 
   parseTable[(int)NonTerminal::For_Loop_NT][(int)TokenType::FOR_KW] = 61;
 
-  parseTable[(int)NonTerminal::While_Loop_NT][(int)TokenType::WHILE_KW] = 62;
+  parseTable[(int)NonTerminal::Integer_Assign_NT][(int)TokenType::ID_SY] = 62;
 
-  parseTable[(int)NonTerminal::IF_Statement_NT][(int)TokenType::IF_KW] = 63;
+  parseTable[(int)NonTerminal::While_Loop_NT][(int)TokenType::WHILE_KW] = 63;
+
+  parseTable[(int)NonTerminal::IF_Statement_NT][(int)TokenType::IF_KW] = 64;
 
   parseTable[(int)NonTerminal::Else_Part_NT][(int)TokenType::END_KW] = 65;
-  parseTable[(int)NonTerminal::Else_Part_NT][(int)TokenType::ELSE_KW] = 66;
+  parseTable[(int)NonTerminal::Else_Part_NT][(int)TokenType::ELSE_KW] = 138;
 
   parseTable[(int)NonTerminal::Return_NT][(int)TokenType::RETURN_KW] = 67;
 
@@ -378,8 +438,21 @@ void LL1Parser::fill_table()
   parseTable[(int)NonTerminal::Expr_Statement_NT][(int)TokenType::STRING_SY] = 70;
 
   parseTable[(int)NonTerminal::Expr_NT][(int)TokenType::ID_SY] = 71;
+  parseTable[(int)NonTerminal::Expr_NT][(int)TokenType::TRUE_KW] = 71;
+  parseTable[(int)NonTerminal::Expr_NT][(int)TokenType::FALSE_KW] = 71;
+  parseTable[(int)NonTerminal::Expr_NT][(int)TokenType::NOT_KW] = 71;
+  parseTable[(int)NonTerminal::Expr_NT][(int)TokenType::INTEGER_NUM] = 71;
+  parseTable[(int)NonTerminal::Expr_NT][(int)TokenType::FLOAT_NUM] = 71;
+  parseTable[(int)NonTerminal::Expr_NT][(int)TokenType::MINUS_OP] = 71;
+  parseTable[(int)NonTerminal::Expr_NT][(int)TokenType::INCREMENT_OP] = 71;
+  parseTable[(int)NonTerminal::Expr_NT][(int)TokenType::DECREMENT_OP] = 71;
+  parseTable[(int)NonTerminal::Expr_NT][(int)TokenType::STRINGIFY_OP] = 71;
+  parseTable[(int)NonTerminal::Expr_NT][(int)TokenType::BOOLEAN_OP] = 71;
+  parseTable[(int)NonTerminal::Expr_NT][(int)TokenType::ROUND_OP] = 71;
+  parseTable[(int)NonTerminal::Expr_NT][(int)TokenType::LENGTH_OP] = 71;
+  parseTable[(int)NonTerminal::Expr_NT][(int)TokenType::LEFT_PR] = 71;
+  parseTable[(int)NonTerminal::Expr_NT][(int)TokenType::STRING_SY] = 71;
 
-  // parseTable[(int)NonTerminal::Assign_Expr_NT][(int)TokenType::ID_SY] = 72;
   parseTable[(int)NonTerminal::Assign_Expr_NT][(int)TokenType::TRUE_KW] = 73;
   parseTable[(int)NonTerminal::Assign_Expr_NT][(int)TokenType::FALSE_KW] = 73;
   parseTable[(int)NonTerminal::Assign_Expr_NT][(int)TokenType::NOT_KW] = 73;
@@ -435,6 +508,8 @@ void LL1Parser::fill_table()
   parseTable[(int)NonTerminal::Or_Tail_NT][(int)TokenType::COMMA_SY] = 78;
   parseTable[(int)NonTerminal::Or_Tail_NT][(int)TokenType::RIGHT_CURLY_PR] = 78;
   parseTable[(int)NonTerminal::Or_Tail_NT][(int)TokenType::DO_KW] = 78;
+  parseTable[(int)NonTerminal::Or_Tail_NT][(int)TokenType::THEN_KW] = 78;
+  parseTable[(int)NonTerminal::Or_Tail_NT][(int)TokenType::RIGHT_PR] = 78;
   parseTable[(int)NonTerminal::Or_Tail_NT][(int)TokenType::OR_KW] = 79;
 
   parseTable[(int)NonTerminal::And_Expr_NT][(int)TokenType::TRUE_KW] = 80;
@@ -458,6 +533,8 @@ void LL1Parser::fill_table()
   parseTable[(int)NonTerminal::And_Tail_NT][(int)TokenType::RIGHT_CURLY_PR] = 81;
   parseTable[(int)NonTerminal::And_Tail_NT][(int)TokenType::DO_KW] = 81;
   parseTable[(int)NonTerminal::And_Tail_NT][(int)TokenType::OR_KW] = 81;
+  parseTable[(int)NonTerminal::And_Tail_NT][(int)TokenType::THEN_KW] = 81;
+  parseTable[(int)NonTerminal::And_Tail_NT][(int)TokenType::RIGHT_PR] = 81;
   parseTable[(int)NonTerminal::And_Tail_NT][(int)TokenType::AND_KW] = 82;
 
   parseTable[(int)NonTerminal::Equality_Expr_NT][(int)TokenType::TRUE_KW] = 83;
@@ -482,6 +559,8 @@ void LL1Parser::fill_table()
   parseTable[(int)NonTerminal::Equality_Tail_NT][(int)TokenType::DO_KW] = 84;
   parseTable[(int)NonTerminal::Equality_Tail_NT][(int)TokenType::OR_KW] = 84;
   parseTable[(int)NonTerminal::Equality_Tail_NT][(int)TokenType::AND_KW] = 84;
+  parseTable[(int)NonTerminal::Equality_Tail_NT][(int)TokenType::THEN_KW] = 84;
+  parseTable[(int)NonTerminal::Equality_Tail_NT][(int)TokenType::RIGHT_PR] = 84;
   parseTable[(int)NonTerminal::Equality_Tail_NT][(int)TokenType::IS_EQUAL_OP] = 85;
   parseTable[(int)NonTerminal::Equality_Tail_NT][(int)TokenType::NOT_EQUAL_OP] = 85;
 
@@ -512,6 +591,8 @@ void LL1Parser::fill_table()
   parseTable[(int)NonTerminal::Relational_Tail_NT][(int)TokenType::AND_KW] = 89;
   parseTable[(int)NonTerminal::Relational_Tail_NT][(int)TokenType::IS_EQUAL_OP] = 89;
   parseTable[(int)NonTerminal::Relational_Tail_NT][(int)TokenType::NOT_EQUAL_OP] = 89;
+  parseTable[(int)NonTerminal::Relational_Tail_NT][(int)TokenType::THEN_KW] = 89;
+  parseTable[(int)NonTerminal::Relational_Tail_NT][(int)TokenType::RIGHT_PR] = 89;
   parseTable[(int)NonTerminal::Relational_Tail_NT][(int)TokenType::LESS_EQUAL_OP] = 90;
   parseTable[(int)NonTerminal::Relational_Tail_NT][(int)TokenType::LESS_THAN_OP] = 90;
   parseTable[(int)NonTerminal::Relational_Tail_NT][(int)TokenType::GREATER_THAN_OP] = 90;
@@ -542,6 +623,8 @@ void LL1Parser::fill_table()
   parseTable[(int)NonTerminal::Additive_Tail_NT][(int)TokenType::COMMA_SY] = 96;
   parseTable[(int)NonTerminal::Additive_Tail_NT][(int)TokenType::RIGHT_CURLY_PR] = 96;
   parseTable[(int)NonTerminal::Additive_Tail_NT][(int)TokenType::DO_KW] = 96;
+  parseTable[(int)NonTerminal::Additive_Tail_NT][(int)TokenType::THEN_KW] = 96;
+  parseTable[(int)NonTerminal::Additive_Tail_NT][(int)TokenType::RIGHT_PR] = 96;
   parseTable[(int)NonTerminal::Additive_Tail_NT][(int)TokenType::OR_KW] = 96;
   parseTable[(int)NonTerminal::Additive_Tail_NT][(int)TokenType::AND_KW] = 96;
   parseTable[(int)NonTerminal::Additive_Tail_NT][(int)TokenType::IS_EQUAL_OP] = 96;
@@ -576,6 +659,8 @@ void LL1Parser::fill_table()
   parseTable[(int)NonTerminal::Multiplicative_Tail_NT][(int)TokenType::COMMA_SY] = 101;
   parseTable[(int)NonTerminal::Multiplicative_Tail_NT][(int)TokenType::RIGHT_CURLY_PR] = 101;
   parseTable[(int)NonTerminal::Multiplicative_Tail_NT][(int)TokenType::DO_KW] = 101;
+  parseTable[(int)NonTerminal::Multiplicative_Tail_NT][(int)TokenType::THEN_KW] = 101;
+  parseTable[(int)NonTerminal::Multiplicative_Tail_NT][(int)TokenType::RIGHT_PR] = 101;
   parseTable[(int)NonTerminal::Multiplicative_Tail_NT][(int)TokenType::OR_KW] = 101;
   parseTable[(int)NonTerminal::Multiplicative_Tail_NT][(int)TokenType::AND_KW] = 101;
   parseTable[(int)NonTerminal::Multiplicative_Tail_NT][(int)TokenType::IS_EQUAL_OP] = 101;
@@ -617,6 +702,8 @@ void LL1Parser::fill_table()
   parseTable[(int)NonTerminal::maybe_Postfix_NT][(int)TokenType::COMMA_SY] = 116;
   parseTable[(int)NonTerminal::maybe_Postfix_NT][(int)TokenType::RIGHT_CURLY_PR] = 116;
   parseTable[(int)NonTerminal::maybe_Postfix_NT][(int)TokenType::DO_KW] = 116;
+  parseTable[(int)NonTerminal::maybe_Postfix_NT][(int)TokenType::THEN_KW] = 116;
+  parseTable[(int)NonTerminal::maybe_Postfix_NT][(int)TokenType::RIGHT_PR] = 116;
   parseTable[(int)NonTerminal::maybe_Postfix_NT][(int)TokenType::OR_KW] = 116;
   parseTable[(int)NonTerminal::maybe_Postfix_NT][(int)TokenType::AND_KW] = 116;
   parseTable[(int)NonTerminal::maybe_Postfix_NT][(int)TokenType::IS_EQUAL_OP] = 116;
@@ -645,6 +732,8 @@ void LL1Parser::fill_table()
   parseTable[(int)NonTerminal::Index_Chain_NT][(int)TokenType::COMMA_SY] = 121;
   parseTable[(int)NonTerminal::Index_Chain_NT][(int)TokenType::RIGHT_CURLY_PR] = 121;
   parseTable[(int)NonTerminal::Index_Chain_NT][(int)TokenType::DO_KW] = 121;
+  parseTable[(int)NonTerminal::Index_Chain_NT][(int)TokenType::THEN_KW] = 121;
+  parseTable[(int)NonTerminal::Index_Chain_NT][(int)TokenType::RIGHT_PR] = 121;
   parseTable[(int)NonTerminal::Index_Chain_NT][(int)TokenType::OR_KW] = 121;
   parseTable[(int)NonTerminal::Index_Chain_NT][(int)TokenType::AND_KW] = 121;
   parseTable[(int)NonTerminal::Index_Chain_NT][(int)TokenType::IS_EQUAL_OP] = 121;
@@ -680,6 +769,8 @@ void LL1Parser::fill_table()
   parseTable[(int)NonTerminal::MaybeCall_NT][(int)TokenType::COMMA_SY] = 131;
   parseTable[(int)NonTerminal::MaybeCall_NT][(int)TokenType::RIGHT_CURLY_PR] = 131;
   parseTable[(int)NonTerminal::MaybeCall_NT][(int)TokenType::DO_KW] = 131;
+  parseTable[(int)NonTerminal::MaybeCall_NT][(int)TokenType::THEN_KW] = 131;
+  parseTable[(int)NonTerminal::MaybeCall_NT][(int)TokenType::RIGHT_PR] = 131;
   parseTable[(int)NonTerminal::MaybeCall_NT][(int)TokenType::OR_KW] = 131;
   parseTable[(int)NonTerminal::MaybeCall_NT][(int)TokenType::AND_KW] = 131;
   parseTable[(int)NonTerminal::MaybeCall_NT][(int)TokenType::IS_EQUAL_OP] = 131;
@@ -701,6 +792,23 @@ void LL1Parser::fill_table()
 
   parseTable[(int)NonTerminal::Call_Expr_Tail_NT][(int)TokenType::RIGHT_PR] = 134;
   parseTable[(int)NonTerminal::Call_Expr_Tail_NT][(int)TokenType::COMMA_SY] = 135;
+
+  parseTable[(int)NonTerminal::May_be_Arg_NT][(int)TokenType::TRUE_KW] = 136;
+  parseTable[(int)NonTerminal::May_be_Arg_NT][(int)TokenType::FALSE_KW] = 136;
+  parseTable[(int)NonTerminal::May_be_Arg_NT][(int)TokenType::NOT_KW] = 136;
+  parseTable[(int)NonTerminal::May_be_Arg_NT][(int)TokenType::INTEGER_NUM] = 136;
+  parseTable[(int)NonTerminal::May_be_Arg_NT][(int)TokenType::FLOAT_NUM] = 136;
+  parseTable[(int)NonTerminal::May_be_Arg_NT][(int)TokenType::MINUS_OP] = 136;
+  parseTable[(int)NonTerminal::May_be_Arg_NT][(int)TokenType::INCREMENT_OP] = 136;
+  parseTable[(int)NonTerminal::May_be_Arg_NT][(int)TokenType::DECREMENT_OP] = 136;
+  parseTable[(int)NonTerminal::May_be_Arg_NT][(int)TokenType::STRINGIFY_OP] = 136;
+  parseTable[(int)NonTerminal::May_be_Arg_NT][(int)TokenType::BOOLEAN_OP] = 136;
+  parseTable[(int)NonTerminal::May_be_Arg_NT][(int)TokenType::ROUND_OP] = 136;
+  parseTable[(int)NonTerminal::May_be_Arg_NT][(int)TokenType::LENGTH_OP] = 136;
+  parseTable[(int)NonTerminal::May_be_Arg_NT][(int)TokenType::LEFT_PR] = 136;
+  parseTable[(int)NonTerminal::May_be_Arg_NT][(int)TokenType::ID_SY] = 136;
+  parseTable[(int)NonTerminal::May_be_Arg_NT][(int)TokenType::STRING_SY] = 136;
+  parseTable[(int)NonTerminal::May_be_Arg_NT][(int)TokenType::RIGHT_PR] = 137;
 }
 
 void LL1Parser::push_rule(int rule)
@@ -708,643 +816,1733 @@ void LL1Parser::push_rule(int rule)
   switch (rule)
   {
   case 1:
-    st.push(Symbol(1));
-    st.push(Symbol(TokenType::END_OF_FILE));
-    st.push(Symbol(NonTerminal::Program_NT));
-    st.push(Symbol(NonTerminal::Function_List_NT));
+    st.push(SymbolLL1(1));
+    st.push(SymbolLL1(NonTerminal::Program_NT));
+    st.push(SymbolLL1(NonTerminal::Function_List_NT));
     break;
   case 2:
-    st.push(Symbol(2));
+    st.push(SymbolLL1(2));
     break;
   case 3:
-    st.push(Symbol(3));
-    st.push(Symbol(NonTerminal::Function_List_NT));
-    st.push(Symbol(NonTerminal::Function_NT));
+    st.push(SymbolLL1(3));
+    st.push(SymbolLL1(NonTerminal::Function_List_NT));
+    st.push(SymbolLL1(NonTerminal::Function_NT));
     break;
   case 4:
-    st.push(Symbol(4));
-    st.push(Symbol(TokenType::FUNC_KW));
-    st.push(Symbol(TokenType::END_KW));
-    st.push(Symbol(NonTerminal::Command_Seq_NT));
-    st.push(Symbol(TokenType::BEGIN_KW));
-    st.push(Symbol(NonTerminal::Declaration_Seq_NT));
-    st.push(Symbol(TokenType::HAS_KW));
-    st.push(Symbol(TokenType::ID_SY));
-    st.push(Symbol(NonTerminal::Function_Type_NT));
-    st.push(Symbol(TokenType::FUNC_KW));
+    st.push(SymbolLL1(4));
+    st.push(SymbolLL1(TokenType::FUNC_KW));
+    st.push(SymbolLL1(TokenType::END_KW));
+    st.push(SymbolLL1(NonTerminal::Command_Seq_NT));
+    st.push(SymbolLL1(TokenType::BEGIN_KW));
+    st.push(SymbolLL1(NonTerminal::Declaration_Seq_NT));
+    st.push(SymbolLL1(TokenType::HAS_KW));
+    st.push(SymbolLL1(TokenType::ID_SY));
+    st.push(SymbolLL1(NonTerminal::Function_Type_NT));
+    st.push(SymbolLL1(TokenType::FUNC_KW));
     break;
   case 5:
-    st.push(Symbol(5));
-    st.push(Symbol(NonTerminal::Type_NT));
+    st.push(SymbolLL1(5));
+    st.push(SymbolLL1(NonTerminal::Type_NT));
     break;
   case 6:
-    st.push(Symbol(6));
-    st.push(Symbol(TokenType::VOID_TY));
+    st.push(SymbolLL1(6));
+    st.push(SymbolLL1(TokenType::VOID_TY));
     break;
   case 7:
-    st.push(Symbol(7));
-    st.push(Symbol(NonTerminal::Array_Type_NT));
+    st.push(SymbolLL1(7));
+    st.push(SymbolLL1(NonTerminal::Array_Type_NT));
 
     break;
   case 8:
-    st.push(Symbol(8));
-    st.push(Symbol(NonTerminal::Primitive_NT));
+    st.push(SymbolLL1(NonTerminal::Primitive_NT));
     break;
   case 9:
-    st.push(Symbol(9));
-    st.push(Symbol(NonTerminal::Array_Type_Tail_NT));
-    st.push(Symbol(TokenType::LEFT_SQUARE_PR));
+    st.push(SymbolLL1(NonTerminal::Array_Type_Tail_NT));
+    st.push(SymbolLL1(TokenType::LEFT_SQUARE_PR));
     break;
   case 10:
-    st.push(Symbol(10));
-    st.push(Symbol(TokenType::RIGHT_SQUARE_PR));
-    st.push(Symbol(NonTerminal::Primitive_NT));
+    st.push(SymbolLL1(TokenType::RIGHT_SQUARE_PR));
+    st.push(SymbolLL1(NonTerminal::Primitive_NT));
     break;
   case 11:
-    st.push(Symbol(11));
-    st.push(Symbol(TokenType::RIGHT_SQUARE_PR));
-    st.push(Symbol(NonTerminal::Array_Type_NT));
+    st.push(SymbolLL1(TokenType::RIGHT_SQUARE_PR));
+    st.push(SymbolLL1(NonTerminal::Array_Type_NT));
     break;
   case 12:
-    st.push(Symbol(12));
-    st.push(Symbol(TokenType::INTEGER_TY));
+    st.push(SymbolLL1(12));
+    st.push(SymbolLL1(TokenType::INTEGER_TY));
     break;
   case 13:
-    st.push(Symbol(13));
-    st.push(Symbol(TokenType::BOOLEAN_TY));
+    st.push(SymbolLL1(13));
+    st.push(SymbolLL1(TokenType::BOOLEAN_TY));
     break;
   case 14:
-    st.push(Symbol(14));
-    st.push(Symbol(TokenType::STRING_TY));
+    st.push(SymbolLL1(14));
+    st.push(SymbolLL1(TokenType::STRING_TY));
     break;
   case 15:
-    st.push(Symbol(15));
-    st.push(Symbol(TokenType::FLOAT_TY));
+    st.push(SymbolLL1(15));
+    st.push(SymbolLL1(TokenType::FLOAT_TY));
     break;
   case 16:
-    st.push(Symbol(16));
-    st.push(Symbol(NonTerminal::Block_NT));
-    st.push(Symbol(TokenType::IS_KW));
-    st.push(Symbol(TokenType::ID_SY));
-    st.push(Symbol(TokenType::PROGRAM_KW));
+    st.push(SymbolLL1(16));
+    st.push(SymbolLL1(NonTerminal::Block_NT));
+    st.push(SymbolLL1(TokenType::IS_KW));
+    st.push(SymbolLL1(TokenType::ID_SY));
+    st.push(SymbolLL1(TokenType::PROGRAM_KW));
     break;
   case 17:
-    st.push(Symbol(17));
-    st.push(Symbol(TokenType::END_KW));
-    st.push(Symbol(NonTerminal::Command_Seq_NT));
-    st.push(Symbol(TokenType::BEGIN_KW));
-    st.push(Symbol(NonTerminal::Declaration_Seq_NT));
+    st.push(SymbolLL1(TokenType::END_KW));
+    st.push(SymbolLL1(NonTerminal::Command_Seq_NT));
+    st.push(SymbolLL1(TokenType::BEGIN_KW));
+    st.push(SymbolLL1(NonTerminal::Declaration_Seq_NT));
     break;
   case 18:
-    st.push(Symbol(18));
     break;
   case 19:
-    st.push(Symbol(19));
-    st.push(Symbol(NonTerminal::Declaration_Seq_NT));
-    st.push(Symbol(NonTerminal::Declaration_NT));
+    st.push(SymbolLL1(19));
+    st.push(SymbolLL1(NonTerminal::Declaration_Seq_NT));
+    st.push(SymbolLL1(NonTerminal::Declaration_NT));
     break;
   case 20:
-    st.push(Symbol(20));
-    st.push(Symbol(NonTerminal::Decl_Tail_NT));
-    st.push(Symbol(TokenType::VAR_KW));
+    st.push(SymbolLL1(20));
+    st.push(SymbolLL1(NonTerminal::Decl_Tail_NT));
+    nodes.push_back(END_OF_LIST_MARKER);
+    st.push(SymbolLL1(TokenType::VAR_KW));
     break;
   case 21:
-    st.push(Symbol(21));
-    st.push(Symbol(NonTerminal::Decl_Tail_Right_NT));
-    st.push(Symbol(NonTerminal::Type_NT));
-    st.push(Symbol(TokenType::COLON_SY));
-    st.push(Symbol(NonTerminal::Variable_List_NT));
+    st.push(SymbolLL1(21));
+    st.push(SymbolLL1(NonTerminal::Decl_Tail_Right_NT));
+    st.push(SymbolLL1(NonTerminal::Type_NT));
+    st.push(SymbolLL1(TokenType::COLON_SY));
+    st.push(SymbolLL1(NonTerminal::Variable_List_NT));
     break;
   case 22:
-    st.push(Symbol(22));
-    st.push(Symbol(TokenType::SEMI_COLON_SY));
+    st.push(SymbolLL1(TokenType::SEMI_COLON_SY));
     break;
   case 23:
-    st.push(Symbol(23));
-    st.push(Symbol(TokenType::SEMI_COLON_SY));
-    st.push(Symbol(NonTerminal::Decl_Init_NT));
-    st.push(Symbol(TokenType::EQUAL_OP));
+    st.push(SymbolLL1(23));
+    st.push(SymbolLL1(TokenType::SEMI_COLON_SY));
+    st.push(SymbolLL1(NonTerminal::Decl_Init_NT));
+    st.push(SymbolLL1(TokenType::EQUAL_OP));
     break;
   case 24:
-    st.push(Symbol(24));
-    st.push(Symbol(NonTerminal::Or_Expr_NT));
+    st.push(SymbolLL1(NonTerminal::Or_Expr_NT));
     break;
   case 25:
-    st.push(Symbol(25));
-    st.push(Symbol(TokenType::RIGHT_CURLY_PR));
-    st.push(Symbol(NonTerminal::Array_Value_NT));
-    st.push(Symbol(TokenType::LEFT_CURLY_PR));
+    st.push(SymbolLL1(25));
+    st.push(SymbolLL1(TokenType::RIGHT_CURLY_PR));
+    st.push(SymbolLL1(NonTerminal::Array_Value_NT));
+    st.push(SymbolLL1(TokenType::LEFT_CURLY_PR));
     break;
   case 26:
-    st.push(Symbol(26));
     break;
   case 27:
-    st.push(Symbol(27));
-    st.push(Symbol(NonTerminal::Value_List_NT));
+    st.push(SymbolLL1(NonTerminal::Value_List_NT));
     break;
   case 28:
-    st.push(Symbol(28));
-    st.push(Symbol(NonTerminal::Array_Nested_Value_NT));
+    st.push(SymbolLL1(NonTerminal::Array_Nested_Value_NT));
     break;
   case 29:
-    st.push(Symbol(29));
-    st.push(Symbol(NonTerminal::More_Nested_NT));
-    st.push(Symbol(TokenType::RIGHT_CURLY_PR));
-    st.push(Symbol(NonTerminal::Value_List_NT));
-    st.push(Symbol(TokenType::LEFT_CURLY_PR));
+    st.push(SymbolLL1(NonTerminal::More_Nested_NT));
+    st.push(SymbolLL1(TokenType::RIGHT_CURLY_PR));
+    st.push(SymbolLL1(NonTerminal::Value_List_NT));
+    st.push(SymbolLL1(TokenType::LEFT_CURLY_PR));
     break;
   case 30:
-    st.push(Symbol(30));
     break;
   case 31:
-    st.push(Symbol(31));
-    st.push(Symbol(NonTerminal::Array_Nested_Value_NT));
-    st.push(Symbol(TokenType::COMMA_SY));
+    st.push(SymbolLL1(NonTerminal::Array_Nested_Value_NT));
+    st.push(SymbolLL1(TokenType::COMMA_SY));
     break;
   case 32:
-    st.push(Symbol(32));
-    st.push(Symbol(NonTerminal::More_Values_NT));
-    st.push(Symbol(NonTerminal::Or_Expr_NT));
+    st.push(SymbolLL1(NonTerminal::More_Values_NT));
+    st.push(SymbolLL1(NonTerminal::Or_Expr_NT));
     break;
   case 33:
-    st.push(Symbol(33));
     break;
   case 34:
-    st.push(Symbol(34));
-    st.push(Symbol(NonTerminal::Value_List_NT));
-    st.push(Symbol(TokenType::COMMA_SY));
+    st.push(SymbolLL1(NonTerminal::Value_List_NT));
+    st.push(SymbolLL1(TokenType::COMMA_SY));
     break;
   case 35:
-    st.push(Symbol(35));
-    st.push(Symbol(NonTerminal::More_Variables_NT));
-    st.push(Symbol(TokenType::ID_SY));
+    st.push(SymbolLL1(NonTerminal::More_Variables_NT));
+    st.push(SymbolLL1(TokenType::ID_SY));
 
     break;
   case 36:
-    st.push(Symbol(36));
     break;
   case 37:
-    st.push(Symbol(37));
-    st.push(Symbol(NonTerminal::Variable_List_NT));
-    st.push(Symbol(TokenType::COMMA_SY));
+    st.push(SymbolLL1(NonTerminal::Variable_List_NT));
+    st.push(SymbolLL1(TokenType::COMMA_SY));
     break;
   case 38:
-    st.push(Symbol(38));
-    st.push(Symbol(NonTerminal::Command_Seq_Tail_NT));
-    st.push(Symbol(NonTerminal::Command_NT));
+    st.push(SymbolLL1(38));
+    st.push(SymbolLL1(NonTerminal::Command_Seq_Tail_NT));
+    st.push(SymbolLL1(NonTerminal::Command_NT));
     break;
   case 39:
-    st.push(Symbol(39));
     break;
   case 40:
-    st.push(Symbol(40));
-    st.push(Symbol(NonTerminal::Command_Seq_Tail_NT));
-    st.push(Symbol(NonTerminal::Command_NT));
+    st.push(SymbolLL1(40));
+    st.push(SymbolLL1(NonTerminal::Command_Seq_Tail_NT));
+    st.push(SymbolLL1(NonTerminal::Command_NT));
     break;
   case 41:
-    st.push(Symbol(41));
     break;
   case 42:
-    st.push(Symbol(42));
-    st.push(Symbol(TokenType::SEMI_COLON_SY));
-    st.push(Symbol(TokenType::SKIP_KW));
+    st.push(SymbolLL1(42));
+    st.push(SymbolLL1(TokenType::SEMI_COLON_SY));
+    st.push(SymbolLL1(TokenType::SKIP_KW));
     break;
   case 43:
-    st.push(Symbol(43));
-    st.push(Symbol(TokenType::SEMI_COLON_SY));
-    st.push(Symbol(TokenType::STOP_KW));
+    st.push(SymbolLL1(43));
+    st.push(SymbolLL1(TokenType::SEMI_COLON_SY));
+    st.push(SymbolLL1(TokenType::STOP_KW));
     break;
   case 44:
-    st.push(Symbol(44));
-    st.push(Symbol(NonTerminal::Read_Statement_NT));
+    st.push(SymbolLL1(44));
+    st.push(SymbolLL1(NonTerminal::Read_Statement_NT));
     break;
   case 45:
-    st.push(Symbol(45));
-    st.push(Symbol(NonTerminal::Write_Statement_NT));
+    st.push(SymbolLL1(45));
+    st.push(SymbolLL1(NonTerminal::Write_Statement_NT));
     break;
   case 46:
-    st.push(Symbol(46));
-    st.push(Symbol(NonTerminal::Loops_NT));
+    st.push(SymbolLL1(NonTerminal::Loops_NT));
     break;
   case 47:
-    st.push(Symbol(47));
-    st.push(Symbol(NonTerminal::IF_Statement_NT));
+    st.push(SymbolLL1(47));
+    st.push(SymbolLL1(NonTerminal::IF_Statement_NT));
     break;
   case 48:
-    st.push(Symbol(48));
-    st.push(Symbol(NonTerminal::Return_NT));
+    st.push(SymbolLL1(48));
+    st.push(SymbolLL1(NonTerminal::Return_NT));
     break;
   case 49:
-    st.push(Symbol(49));
-    st.push(Symbol(NonTerminal::Expr_Statement_NT));
+    st.push(SymbolLL1(NonTerminal::Expr_Statement_NT));
     break;
   case 50:
-    st.push(Symbol(50));
-    st.push(Symbol(NonTerminal::Declaration_NT));
+    st.push(SymbolLL1(NonTerminal::Declaration_NT));
     break;
   case 51:
-    st.push(Symbol(51));
-    st.push(Symbol(TokenType::SEMI_COLON_SY));
-    st.push(Symbol(NonTerminal::Variable_List_read_NT));
-    st.push(Symbol(TokenType::READ_KW));
+    st.push(SymbolLL1(TokenType::SEMI_COLON_SY));
+    st.push(SymbolLL1(NonTerminal::Variable_List_read_NT));
+    nodes.push_back(END_OF_LIST_MARKER);
+    st.push(SymbolLL1(TokenType::READ_KW));
     break;
   case 52:
-    st.push(Symbol(52));
-    st.push(Symbol(TokenType::SEMI_COLON_SY));
-    st.push(Symbol(NonTerminal::Expr_List_NT));
-    st.push(Symbol(TokenType::WRITE_KW));
+    st.push(SymbolLL1(TokenType::SEMI_COLON_SY));
+    st.push(SymbolLL1(NonTerminal::Expr_List_NT));
+    nodes.push_back(END_OF_LIST_MARKER);
+    st.push(SymbolLL1(TokenType::WRITE_KW));
     break;
   case 53:
-    st.push(Symbol(53));
-    st.push(Symbol(NonTerminal::More_Variables_read_NT));
-    st.push(Symbol(NonTerminal::Index_Chain_NT));
-    st.push(Symbol(TokenType::ID_SY));
+    st.push(SymbolLL1(NonTerminal::More_Variables_read_NT));
+    st.push(SymbolLL1(NonTerminal::Index_Chain_NT));
+    st.push(SymbolLL1(TokenType::ID_SY));
     break;
   case 54:
-    st.push(Symbol(54));
     break;
   case 55:
-    st.push(Symbol(55));
-    st.push(Symbol(NonTerminal::Variable_List_read_NT));
-    st.push(Symbol(TokenType::COMMA_SY));
+    st.push(SymbolLL1(NonTerminal::Variable_List_read_NT));
+    st.push(SymbolLL1(TokenType::COMMA_SY));
     break;
   case 56:
-    st.push(Symbol(56));
-    st.push(Symbol(NonTerminal::More_Exprs_NT));
-    st.push(Symbol(NonTerminal::Expr_NT));
+    st.push(SymbolLL1(NonTerminal::More_Exprs_NT));
+    st.push(SymbolLL1(NonTerminal::Expr_NT));
     break;
   case 57:
-    st.push(Symbol(57));
     break;
   case 58:
-    st.push(Symbol(58));
-    st.push(Symbol(NonTerminal::Expr_List_NT));
-    st.push(Symbol(TokenType::COMMA_SY));
+    st.push(SymbolLL1(NonTerminal::Expr_List_NT));
+    st.push(SymbolLL1(TokenType::COMMA_SY));
     break;
   case 59:
-    st.push(Symbol(59));
-    st.push(Symbol(NonTerminal::For_Loop_NT));
+    st.push(SymbolLL1(NonTerminal::For_Loop_NT));
     break;
   case 60:
-    st.push(Symbol(60));
-    st.push(Symbol(NonTerminal::While_Loop_NT));
+    st.push(SymbolLL1(NonTerminal::While_Loop_NT));
     break;
   case 61:
-    st.push(Symbol(61));
-    st.push(Symbol(TokenType::FOR_KW));
-    st.push(Symbol(TokenType::END_KW));
-    st.push(Symbol(NonTerminal::Command_Seq_NT));
-    st.push(Symbol(TokenType::DO_KW));
-    st.push(Symbol(NonTerminal::Expr_NT));
-    st.push(Symbol(TokenType::SEMI_COLON_SY));
-    st.push(Symbol(NonTerminal::Or_Expr_NT));
-    st.push(Symbol(TokenType::SEMI_COLON_SY));
-    st.push(Symbol(NonTerminal::Integer_Assign_NT));
-    st.push(Symbol(TokenType::FOR_KW));
+    st.push(SymbolLL1(61));
+    st.push(SymbolLL1(TokenType::FOR_KW));
+    st.push(SymbolLL1(TokenType::END_KW));
+    st.push(SymbolLL1(NonTerminal::Command_Seq_NT));
+    st.push(SymbolLL1(TokenType::DO_KW));
+    st.push(SymbolLL1(NonTerminal::Expr_NT));
+    st.push(SymbolLL1(TokenType::SEMI_COLON_SY));
+    st.push(SymbolLL1(NonTerminal::Or_Expr_NT));
+    st.push(SymbolLL1(TokenType::SEMI_COLON_SY));
+    st.push(SymbolLL1(NonTerminal::Integer_Assign_NT));
+    st.push(SymbolLL1(TokenType::FOR_KW));
     break;
   case 62:
-    st.push(Symbol(62));
-    st.push(Symbol(NonTerminal::Expr_NT));
-    st.push(Symbol(TokenType::EQUAL_OP));
-    st.push(Symbol(TokenType::ID_SY));
+    st.push(SymbolLL1(62));
+    st.push(SymbolLL1(NonTerminal::Expr_NT));
+    st.push(SymbolLL1(TokenType::EQUAL_OP));
+    st.push(SymbolLL1(TokenType::ID_SY));
     break;
   case 63:
-    st.push(Symbol(63));
-    st.push(Symbol(TokenType::WHILE_KW));
-    st.push(Symbol(TokenType::END_KW));
-    st.push(Symbol(NonTerminal::Command_Seq_NT));
-    st.push(Symbol(TokenType::DO_KW));
-    st.push(Symbol(NonTerminal::Or_Expr_NT));
-    st.push(Symbol(TokenType::WHILE_KW));
+    st.push(SymbolLL1(63));
+    st.push(SymbolLL1(TokenType::WHILE_KW));
+    st.push(SymbolLL1(TokenType::END_KW));
+    st.push(SymbolLL1(NonTerminal::Command_Seq_NT));
+    st.push(SymbolLL1(TokenType::DO_KW));
+    st.push(SymbolLL1(NonTerminal::Or_Expr_NT));
+    st.push(SymbolLL1(TokenType::WHILE_KW));
     break;
   case 64:
-    st.push(Symbol(64));
-    st.push(Symbol(TokenType::IF_KW));
-    st.push(Symbol(TokenType::END_KW));
-    st.push(Symbol(NonTerminal::Else_Part_NT));
-    st.push(Symbol(NonTerminal::Command_Seq_NT));
-    st.push(Symbol(TokenType::THEN_KW));
-    st.push(Symbol(NonTerminal::Expr_NT));
-    st.push(Symbol(TokenType::IF_KW));
+    st.push(SymbolLL1(TokenType::IF_KW));
+    st.push(SymbolLL1(TokenType::END_KW));
+    st.push(SymbolLL1(NonTerminal::Else_Part_NT));
+    st.push(SymbolLL1(NonTerminal::Command_Seq_NT));
+    st.push(SymbolLL1(TokenType::THEN_KW));
+    st.push(SymbolLL1(NonTerminal::Expr_NT));
+    st.push(SymbolLL1(TokenType::IF_KW));
     break;
   case 65:
-    st.push(Symbol(65));
     break;
   case 66:
-    st.push(Symbol(66));
-    st.push(Symbol(NonTerminal::Command_Seq_NT));
-    st.push(Symbol(TokenType::ELSE_KW));
+    st.push(SymbolLL1(47));
+    st.push(SymbolLL1(NonTerminal::Else_Part_NT));
+    st.push(SymbolLL1(NonTerminal::Command_Seq_NT));
+    st.push(SymbolLL1(TokenType::THEN_KW));
+    st.push(SymbolLL1(NonTerminal::Or_Expr_NT));
+    st.push(SymbolLL1(TokenType::IF_KW));
+    st.push(SymbolLL1(TokenType::ELSE_KW));
+    currentCommandSeq.insert(currentCommandSeq.begin(), END_OF_LIST_ELSE);
     break;
   case 67:
-    st.push(Symbol(67));
-    st.push(Symbol(TokenType::SEMI_COLON_SY));
-    st.push(Symbol(NonTerminal::Return_Value_NT));
-    st.push(Symbol(TokenType::RETURN_KW));
+    st.push(SymbolLL1(TokenType::SEMI_COLON_SY));
+    st.push(SymbolLL1(NonTerminal::Return_Value_NT));
+    st.push(SymbolLL1(TokenType::RETURN_KW));
     break;
   case 68:
-    st.push(Symbol(68));
+    nodes.push_back(nullptr);
     break;
   case 69:
-    st.push(Symbol(69));
-    st.push(Symbol(NonTerminal::Or_Expr_NT));
+    st.push(SymbolLL1(NonTerminal::Or_Expr_NT));
     break;
   case 70:
-    st.push(Symbol(70));
-    st.push(Symbol(TokenType::SEMI_COLON_SY));
-    st.push(Symbol(NonTerminal::Expr_NT));
+    st.push(SymbolLL1(TokenType::SEMI_COLON_SY));
+    st.push(SymbolLL1(NonTerminal::Expr_NT));
     break;
   case 71:
-    st.push(Symbol(71));
-    st.push(Symbol(NonTerminal::Assign_Expr_NT));
+    st.push(SymbolLL1(NonTerminal::Assign_Expr_NT));
     break;
   case 72:
-    st.push(Symbol(72));
-    st.push(Symbol(NonTerminal::Assign_Expr_Value_NT));
-    st.push(Symbol(TokenType::EQUAL_OP));
-    st.push(Symbol(NonTerminal::Assignable_Expr_NT));
+    st.push(SymbolLL1(72));
+    st.push(SymbolLL1(NonTerminal::Assign_Expr_Value_NT));
+    st.push(SymbolLL1(TokenType::EQUAL_OP));
+    st.push(SymbolLL1(NonTerminal::Assignable_Expr_NT));
     break;
   case 73:
-    st.push(Symbol(73));
-    st.push(Symbol(NonTerminal::Or_Expr_NT));
+    st.push(SymbolLL1(NonTerminal::Or_Expr_NT));
     break;
   case 74:
-    st.push(Symbol(74));
-    st.push(Symbol(NonTerminal::Expr_NT));
+    st.push(SymbolLL1(NonTerminal::Expr_NT));
     break;
   case 75:
-    st.push(Symbol(75));
-    st.push(Symbol(TokenType::RIGHT_CURLY_PR));
-    st.push(Symbol(NonTerminal::Array_Value_NT));
-    st.push(Symbol(TokenType::LEFT_CURLY_PR));
+    st.push(SymbolLL1(75));
+    st.push(SymbolLL1(TokenType::RIGHT_CURLY_PR));
+    st.push(SymbolLL1(NonTerminal::Array_Value_NT));
+    st.push(SymbolLL1(TokenType::LEFT_CURLY_PR));
     break;
   case 76:
-    st.push(Symbol(76));
-    st.push(Symbol(NonTerminal::Index_Chain_NT));
-    st.push(Symbol(TokenType::ID_SY));
+    st.push(SymbolLL1(NonTerminal::Index_Chain_NT));
+    st.push(SymbolLL1(TokenType::ID_SY));
     break;
   case 77:
-    st.push(Symbol(77));
-    st.push(Symbol(NonTerminal::Or_Tail_NT));
-    st.push(Symbol(NonTerminal::And_Expr_NT));
+    st.push(SymbolLL1(NonTerminal::Or_Tail_NT));
+    st.push(SymbolLL1(NonTerminal::And_Expr_NT));
     break;
   case 78:
-    st.push(Symbol(78));
     break;
   case 79:
-    st.push(Symbol(79));
-    st.push(Symbol(NonTerminal::Or_Tail_NT));
-    st.push(Symbol(NonTerminal::And_Expr_NT));
-    st.push(Symbol(TokenType::OR_KW));
+    st.push(SymbolLL1(79));
+    st.push(SymbolLL1(NonTerminal::Or_Tail_NT));
+    st.push(SymbolLL1(NonTerminal::And_Expr_NT));
+    st.push(SymbolLL1(TokenType::OR_KW));
     break;
   case 80:
-    st.push(Symbol(80));
-    st.push(Symbol(NonTerminal::And_Tail_NT));
-    st.push(Symbol(NonTerminal::Equality_Expr_NT));
+    st.push(SymbolLL1(NonTerminal::And_Tail_NT));
+    st.push(SymbolLL1(NonTerminal::Equality_Expr_NT));
     break;
   case 81:
-    st.push(Symbol(81));
     break;
   case 82:
-    st.push(Symbol(82));
-    st.push(Symbol(NonTerminal::And_Tail_NT));
-    st.push(Symbol(NonTerminal::Equality_Expr_NT));
-    st.push(Symbol(TokenType::AND_KW));
+    st.push(SymbolLL1(82));
+    st.push(SymbolLL1(NonTerminal::And_Tail_NT));
+    st.push(SymbolLL1(NonTerminal::Equality_Expr_NT));
+    st.push(SymbolLL1(TokenType::AND_KW));
     break;
   case 83:
-    st.push(Symbol(83));
-    st.push(Symbol(NonTerminal::Equality_Tail_NT));
-    st.push(Symbol(NonTerminal::Relational_Expr_NT));
+    st.push(SymbolLL1(NonTerminal::Equality_Tail_NT));
+    st.push(SymbolLL1(NonTerminal::Relational_Expr_NT));
     break;
   case 84:
-    st.push(Symbol(84));
     break;
   case 85:
-    st.push(Symbol(85));
-    st.push(Symbol(NonTerminal::Equality_Tail_NT));
-    st.push(Symbol(NonTerminal::Relational_Expr_NT));
-    st.push(Symbol(NonTerminal::OP_Equal_NT));
+    st.push(SymbolLL1(85));
+    st.push(SymbolLL1(NonTerminal::Equality_Tail_NT));
+    st.push(SymbolLL1(NonTerminal::Relational_Expr_NT));
+    st.push(SymbolLL1(NonTerminal::OP_Equal_NT));
     break;
   case 86:
-    st.push(Symbol(86));
-    st.push(Symbol(TokenType::IS_EQUAL_OP));
+    st.push(SymbolLL1(TokenType::IS_EQUAL_OP));
     break;
   case 87:
-    st.push(Symbol(87));
-    st.push(Symbol(TokenType::NOT_EQUAL_OP));
+    st.push(SymbolLL1(TokenType::NOT_EQUAL_OP));
     break;
   case 88:
-    st.push(Symbol(88));
-    st.push(Symbol(NonTerminal::Relational_Tail_NT));
-    st.push(Symbol(NonTerminal::Additive_Expr_NT));
+    st.push(SymbolLL1(NonTerminal::Relational_Tail_NT));
+    st.push(SymbolLL1(NonTerminal::Additive_Expr_NT));
     break;
   case 89:
-    st.push(Symbol(89));
     break;
   case 90:
-    st.push(Symbol(90));
-    st.push(Symbol(NonTerminal::Relational_Tail_NT));
-    st.push(Symbol(NonTerminal::Additive_Expr_NT));
-    st.push(Symbol(NonTerminal::Relation_NT));
+    st.push(SymbolLL1(90));
+    st.push(SymbolLL1(NonTerminal::Relational_Tail_NT));
+    st.push(SymbolLL1(NonTerminal::Additive_Expr_NT));
+    st.push(SymbolLL1(NonTerminal::Relation_NT));
     break;
   case 91:
-    st.push(Symbol(91));
-    st.push(Symbol(TokenType::LESS_EQUAL_OP));
+    st.push(SymbolLL1(TokenType::LESS_EQUAL_OP));
     break;
   case 92:
-    st.push(Symbol(92));
-    st.push(Symbol(TokenType::LESS_THAN_OP));
+    st.push(SymbolLL1(TokenType::LESS_THAN_OP));
     break;
   case 93:
-    st.push(Symbol(93));
-    st.push(Symbol(TokenType::GREATER_THAN_OP));
+    st.push(SymbolLL1(TokenType::GREATER_THAN_OP));
     break;
   case 94:
-    st.push(Symbol(94));
-    st.push(Symbol(TokenType::GREATER_EQUAL_OP));
+    st.push(SymbolLL1(TokenType::GREATER_EQUAL_OP));
     break;
   case 95:
-    st.push(Symbol(95));
-    st.push(Symbol(NonTerminal::Additive_Tail_NT));
-    st.push(Symbol(NonTerminal::Multiplicative_Expr_NT));
+    st.push(SymbolLL1(NonTerminal::Additive_Tail_NT));
+    st.push(SymbolLL1(NonTerminal::Multiplicative_Expr_NT));
     break;
   case 96:
-    st.push(Symbol(96));
     break;
   case 97:
-    st.push(Symbol(97));
-    st.push(Symbol(NonTerminal::Additive_Tail_NT));
-    st.push(Symbol(NonTerminal::Multiplicative_Expr_NT));
-    st.push(Symbol(NonTerminal::Weak_OP_NT));
+    st.push(SymbolLL1(97));
+    st.push(SymbolLL1(NonTerminal::Additive_Tail_NT));
+    st.push(SymbolLL1(NonTerminal::Multiplicative_Expr_NT));
+    st.push(SymbolLL1(NonTerminal::Weak_OP_NT));
     break;
   case 98:
-    st.push(Symbol(98));
-    st.push(Symbol(TokenType::PLUS_OP));
+    st.push(SymbolLL1(TokenType::PLUS_OP));
     break;
   case 99:
-    st.push(Symbol(99));
-    st.push(Symbol(TokenType::MINUS_OP));
+    st.push(SymbolLL1(TokenType::MINUS_OP));
     break;
   case 100:
-    st.push(Symbol(100));
-    st.push(Symbol(NonTerminal::Multiplicative_Tail_NT));
-    st.push(Symbol(NonTerminal::Unary_Expr_NT));
+    st.push(SymbolLL1(NonTerminal::Multiplicative_Tail_NT));
+    st.push(SymbolLL1(NonTerminal::Unary_Expr_NT));
     break;
   case 101:
-    st.push(Symbol(101));
     break;
   case 102:
-    st.push(Symbol(102));
-    st.push(Symbol(NonTerminal::Multiplicative_Tail_NT));
-    st.push(Symbol(NonTerminal::Unary_Expr_NT));
-    st.push(Symbol(NonTerminal::Strong_OP_NT));
+    st.push(SymbolLL1(102));
+    st.push(SymbolLL1(NonTerminal::Multiplicative_Tail_NT));
+    st.push(SymbolLL1(NonTerminal::Unary_Expr_NT));
+    st.push(SymbolLL1(NonTerminal::Strong_OP_NT));
     break;
   case 103:
-    st.push(Symbol(103));
-    st.push(Symbol(TokenType::MULT_OP));
+    st.push(SymbolLL1(TokenType::MULT_OP));
     break;
   case 104:
-    st.push(Symbol(104));
-    st.push(Symbol(TokenType::DIVIDE_OP));
+    st.push(SymbolLL1(TokenType::DIVIDE_OP));
     break;
   case 105:
-    st.push(Symbol(105));
-    st.push(Symbol(TokenType::MOD_OP));
+    st.push(SymbolLL1(TokenType::MOD_OP));
     break;
   case 106:
-    st.push(Symbol(106));
-    st.push(Symbol(NonTerminal::Expr_NT));
-    st.push(Symbol(TokenType::MINUS_OP));
+    st.push(SymbolLL1(106));
+    st.push(SymbolLL1(NonTerminal::Index_Expr_NT));
+    st.push(SymbolLL1(TokenType::MINUS_OP));
     break;
   case 107:
-    st.push(Symbol(107));
-    st.push(Symbol(NonTerminal::Expr_NT));
-    st.push(Symbol(TokenType::STRINGIFY_OP));
+    st.push(SymbolLL1(107));
+    st.push(SymbolLL1(NonTerminal::Index_Expr_NT));
+    st.push(SymbolLL1(TokenType::STRINGIFY_OP));
     break;
   case 108:
-    st.push(Symbol(108));
-    st.push(Symbol(NonTerminal::Expr_NT));
-    st.push(Symbol(TokenType::BOOLEAN_OP));
+    st.push(SymbolLL1(108));
+    st.push(SymbolLL1(NonTerminal::Index_Expr_NT));
+    st.push(SymbolLL1(TokenType::BOOLEAN_OP));
     break;
   case 109:
-    st.push(Symbol(109));
-    st.push(Symbol(NonTerminal::Expr_NT));
-    st.push(Symbol(TokenType::ROUND_OP));
+    st.push(SymbolLL1(109));
+    st.push(SymbolLL1(NonTerminal::Index_Expr_NT));
+    st.push(SymbolLL1(TokenType::ROUND_OP));
     break;
   case 110:
-    st.push(Symbol(110));
-    st.push(Symbol(NonTerminal::Expr_NT));
-    st.push(Symbol(TokenType::LENGTH_OP));
+    st.push(SymbolLL1(110));
+    st.push(SymbolLL1(NonTerminal::Index_Expr_NT));
+    st.push(SymbolLL1(TokenType::LENGTH_OP));
     break;
   case 111:
-    st.push(Symbol(111));
-    st.push(Symbol(NonTerminal::Assignable_Expr_NT));
-    st.push(Symbol(NonTerminal::Prefix_NT));
+    st.push(SymbolLL1(111));
+    st.push(SymbolLL1(NonTerminal::Assignable_Expr_NT));
+    st.push(SymbolLL1(NonTerminal::Prefix_NT));
     break;
   case 112:
-    st.push(Symbol(112));
-    st.push(Symbol(NonTerminal::Index_Expr_NT));
-    st.push(Symbol(TokenType::NOT_KW));
+    st.push(SymbolLL1(112));
+    st.push(SymbolLL1(NonTerminal::Index_Expr_NT));
+    st.push(SymbolLL1(TokenType::NOT_KW));
     break;
   case 113:
-    st.push(Symbol(113));
-    st.push(Symbol(NonTerminal::maybe_Postfix_NT));
-    st.push(Symbol(NonTerminal::Index_Expr_NT));
+    st.push(SymbolLL1(NonTerminal::maybe_Postfix_NT));
+    st.push(SymbolLL1(NonTerminal::Index_Expr_NT));
     break;
   case 114:
-    st.push(Symbol(114));
-    st.push(Symbol(TokenType::INCREMENT_OP));
+    st.push(SymbolLL1(TokenType::INCREMENT_OP));
     break;
   case 115:
-    st.push(Symbol(115));
-    st.push(Symbol(TokenType::DECREMENT_OP));
+    st.push(SymbolLL1(TokenType::DECREMENT_OP));
     break;
   case 116:
-    st.push(Symbol(116));
     break;
   case 117:
-    st.push(Symbol(117));
-    st.push(Symbol(TokenType::INCREMENT_OP));
+    st.push(SymbolLL1(117));
+    st.push(SymbolLL1(TokenType::INCREMENT_OP));
     break;
   case 118:
-    st.push(Symbol(118));
-    st.push(Symbol(TokenType::DECREMENT_OP));
+    st.push(SymbolLL1(118));
+    st.push(SymbolLL1(TokenType::DECREMENT_OP));
     break;
   case 119:
-    st.push(Symbol(119));
-    st.push(Symbol(NonTerminal::Index_Chain_NT));
-    st.push(Symbol(NonTerminal::CallOrVariable_NT));
+    st.push(SymbolLL1(NonTerminal::Index_Chain_NT));
+    st.push(SymbolLL1(NonTerminal::CallOrVariable_NT));
     break;
   case 120:
-    st.push(Symbol(120));
-    st.push(Symbol(NonTerminal::Primary_Expr_NT));
+    st.push(SymbolLL1(NonTerminal::Primary_Expr_NT));
     break;
   case 121:
-    st.push(Symbol(121));
     break;
   case 122:
-    st.push(Symbol(122));
-    st.push(Symbol(NonTerminal::Index_Chain_NT));
-    st.push(Symbol(TokenType::RIGHT_CURLY_PR));
-    st.push(Symbol(NonTerminal::Expr_NT));
-    st.push(Symbol(TokenType::LEFT_CURLY_PR));
+    st.push(SymbolLL1(122));
+    st.push(SymbolLL1(NonTerminal::Index_Chain_NT));
+    st.push(SymbolLL1(TokenType::RIGHT_CURLY_PR));
+    st.push(SymbolLL1(NonTerminal::Expr_NT));
+    st.push(SymbolLL1(TokenType::LEFT_CURLY_PR));
     break;
   case 123:
-    st.push(Symbol(123));
-    st.push(Symbol(TokenType::RIGHT_PR));
-    st.push(Symbol(NonTerminal::Expr_NT));
-    st.push(Symbol(TokenType::LEFT_PR));
+    st.push(SymbolLL1(TokenType::RIGHT_PR));
+    st.push(SymbolLL1(NonTerminal::Expr_NT));
+    st.push(SymbolLL1(TokenType::LEFT_PR));
     break;
   case 124:
-    st.push(Symbol(124));
-    st.push(Symbol(NonTerminal::Literal_NT));
+    st.push(SymbolLL1(NonTerminal::Literal_NT));
     break;
   case 125:
-    st.push(Symbol(125));
-    st.push(Symbol(TokenType::INTEGER_NUM));
+    st.push(SymbolLL1(125));
+    st.push(SymbolLL1(TokenType::INTEGER_NUM));
     break;
   case 126:
-    st.push(Symbol(126));
-    st.push(Symbol(TokenType::FLOAT_NUM));
+    st.push(SymbolLL1(126));
+    st.push(SymbolLL1(TokenType::FLOAT_NUM));
     break;
   case 127:
-    st.push(Symbol(127));
-    st.push(Symbol(TokenType::STRING_SY));
+    st.push(SymbolLL1(127));
+    st.push(SymbolLL1(TokenType::STRING_SY));
     break;
   case 128:
-    st.push(Symbol(128));
-    st.push(Symbol(TokenType::TRUE_KW));
+    st.push(SymbolLL1(128));
+    st.push(SymbolLL1(TokenType::TRUE_KW));
     break;
   case 129:
-    st.push(Symbol(129));
-    st.push(Symbol(TokenType::FALSE_KW));
+    st.push(SymbolLL1(129));
+    st.push(SymbolLL1(TokenType::FALSE_KW));
     break;
   case 130:
-    st.push(Symbol(130));
-    st.push(Symbol(NonTerminal::MaybeCall_NT));
-    st.push(Symbol(TokenType::ID_SY));
+    st.push(SymbolLL1(NonTerminal::MaybeCall_NT));
+    st.push(SymbolLL1(TokenType::ID_SY));
     break;
   case 131:
-    st.push(Symbol(131));
     break;
   case 132:
-    st.push(Symbol(132));
-    st.push(Symbol(NonTerminal::Call_Expr_NT));
+    st.push(SymbolLL1(132));
+    st.push(SymbolLL1(NonTerminal::Call_Expr_NT));
     break;
   case 133:
-    st.push(Symbol(133));
-    st.push(Symbol(TokenType::RIGHT_PR));
-    st.push(Symbol(NonTerminal::Call_Expr_Tail_NT));
-    st.push(Symbol(NonTerminal::Expr_NT));
-    st.push(Symbol(TokenType::LEFT_PR));
+    st.push(SymbolLL1(TokenType::RIGHT_PR));
+    st.push(SymbolLL1(NonTerminal::May_be_Arg_NT));
+    st.push(SymbolLL1(TokenType::LEFT_PR));
     break;
   case 134:
-    st.push(Symbol(134));
     break;
   case 135:
-    st.push(Symbol(135));
-    st.push(Symbol(NonTerminal::Call_Expr_Tail_NT));
-    st.push(Symbol(NonTerminal::Expr_NT));
-    st.push(Symbol(TokenType::COMMA_SY));
+    st.push(SymbolLL1(NonTerminal::Call_Expr_Tail_NT));
+    st.push(SymbolLL1(NonTerminal::Or_Expr_NT));
+    st.push(SymbolLL1(TokenType::COMMA_SY));
+    break;
+  case 136:
+    st.push(SymbolLL1(NonTerminal::Call_Expr_Tail_NT));
+    st.push(SymbolLL1(NonTerminal::Or_Expr_NT));
+    break;
+  case 137:
+    break;
+  case 138:
+    st.push(SymbolLL1(NonTerminal::Command_Seq_NT));
+    currentCommandSeq.insert(currentCommandSeq.begin(), nullptr);
+    st.push(SymbolLL1(TokenType::ELSE_KW));
     break;
   }
+}
+
+void LL1Parser::builder(int rule)
+{
+  switch (rule)
+  {
+  case 1:
+    build_source();
+    break;
+  case 2:
+    currentFunctionList.clear();
+    break;
+  case 3:
+    build_function_list();
+    break;
+  case 4:
+    build_function();
+    break;
+  case 5:
+  case 6:
+    build_return_type();
+    break;
+  case 7:
+    build_array_type();
+    break;
+  case 12:
+  case 13:
+  case 14:
+  case 15:
+    build_primitive_type();
+    break;
+  case 16:
+    build_program();
+    break;
+  case 19:
+    build_declaration_seq();
+    break;
+  case 20:
+    build_variable_definition();
+    break;
+  case 21:
+    build_variable_declaration();
+    break;
+  case 23:
+    build_variable_initialization();
+    break;
+  case 25:
+    build_array_literal();
+    break;
+  case 38:
+  case 40:
+    build_command_seq();
+    break;
+  case 42:
+    build_skip_statement();
+    break;
+  case 43:
+    build_stop_statement();
+    break;
+  case 44:
+    build_read_statement();
+    break;
+  case 45:
+    build_write_statement();
+    break;
+  case 47:
+    build_if_statement();
+    break;
+  case 48:
+    build_return_statement();
+    break;
+  case 61:
+    build_for_loop();
+    break;
+  case 62:
+    build_int_assign();
+    break;
+  case 63:
+    build_while_loop();
+    break;
+  case 72:
+    build_assignment_expression();
+    break;
+  case 75:
+    build_array_literal();
+    break;
+  case 79:
+    build_or_expression();
+    break;
+  case 82:
+    build_and_expression();
+    break;
+  case 85:
+    build_equality_expression();
+    break;
+  case 90:
+    build_relational_expression();
+    break;
+  case 97:
+    build_additive_expression();
+    break;
+  case 102:
+    build_multiplicative_expression();
+    break;
+  case 106:
+  case 107:
+  case 108:
+  case 109:
+  case 110:
+  case 111:
+  case 112:
+    build_unary_expression();
+    break;
+  case 117:
+  case 118:
+    build_unary_expression();
+    break;
+  case 122:
+    build_index_expression();
+    break;
+  case 125:
+    build_integer_literal();
+    break;
+  case 126:
+    build_float_literal();
+    break;
+  case 127:
+    build_string_literal();
+    break;
+  case 128:
+  case 129:
+    build_boolean_literal();
+    break;
+  case 132:
+    build_call_function_expression();
+    break;
+  }
+}
+
+void LL1Parser::build_source()
+{
+  AstNode *programNode = nodes.back();
+  nodes.pop_back();
+
+  Program *program = dynamic_cast<Program *>(programNode);
+  if (!program)
+  {
+    syntax_error("Invalid program node");
+    return;
+  }
+
+  int start_line = program->start_line;
+  int end_line = program->end_line;
+  int node_start = program->node_start;
+  int node_end = program->node_end;
+
+  if (!currentFunctionList.empty())
+  {
+    start_line = currentFunctionList.front()->start_line;
+    node_start = currentFunctionList.front()->node_start;
+  }
+
+  Source *sourceNode = new Source(program, currentFunctionList, start_line, end_line, node_start, node_end);
+
+  currentFunctionList.clear();
+
+  nodes.push_back(sourceNode);
+}
+
+void LL1Parser::build_program()
+{
+  AstNode *idNode = nodes.back();
+  nodes.pop_back();
+
+  Identifier *id = dynamic_cast<Identifier *>(idNode);
+  if (!id)
+  {
+    syntax_error("Invalid identifier node");
+    return;
+  }
+
+  int start_line = id->start_line;
+  int end_line = previous_token.line;
+  ;
+  int node_start = id->node_start;
+  int node_end = previous_token.end;
+  ;
+
+  Program *programNode = new Program(id, currentDeclarationSeq, currentCommandSeq, start_line, end_line, node_start, node_end);
+
+  currentDeclarationSeq.clear();
+  currentCommandSeq.clear();
+
+  nodes.push_back(programNode);
+}
+
+void LL1Parser::build_function()
+{
+  AstNode *idNode = nodes.back();
+  nodes.pop_back();
+  AstNode *returnNode = nodes.back();
+  nodes.pop_back();
+
+  Identifier *id = dynamic_cast<Identifier *>(idNode);
+  if (!id)
+  {
+    syntax_error("Error building Function node: invalid Identifier");
+    return;
+  }
+
+  ReturnType *rtn = dynamic_cast<ReturnType *>(returnNode);
+  if (!rtn)
+  {
+    syntax_error("Error building Function node: invalid Return type");
+    return;
+  }
+
+  auto &declSeq = currentDeclarationSeq;
+  auto &commandSeq = currentCommandSeq;
+
+  int start_line = id->start_line;
+  int end_line = commandSeq.empty() ? id->end_line : commandSeq.back()->end_line;
+  int node_start = id->node_start;
+  int node_end = commandSeq.empty() ? id->node_end : commandSeq.back()->node_end;
+
+  Function *funcNode = new Function(id, rtn, declSeq, commandSeq, start_line, end_line, node_start, node_end);
+
+  currentDeclarationSeq.clear();
+  currentCommandSeq.clear();
+
+  nodes.push_back(funcNode);
+}
+
+void LL1Parser::build_variable_definition()
+{
+  AstNode *defNode = nodes.back();
+  nodes.pop_back();
+
+  Statement *defStmt = dynamic_cast<Statement *>(defNode);
+  if (!defStmt)
+  {
+    syntax_error("Error building VariableDefinition node: invalid child node");
+    return;
+  }
+
+  VariableDefinition *varDef = new VariableDefinition(defStmt, defStmt->start_line, defStmt->end_line, defStmt->node_start, defStmt->node_end);
+
+  nodes.push_back(varDef);
+}
+
+void LL1Parser::build_variable_declaration()
+{
+  AstNode *typeNode = nodes.back();
+  if (dynamic_cast<VariableInitialization *>(typeNode))
+  {
+    return;
+  }
+  nodes.pop_back();
+  DataType *dt = dynamic_cast<DataType *>(typeNode);
+
+  vector<Identifier *> varList;
+
+  while (!nodes.empty())
+  {
+    AstNode *node = nodes.back();
+    if (node == END_OF_LIST_MARKER)
+    {
+      nodes.pop_back();
+      break;
+    }
+
+    Identifier *id = dynamic_cast<Identifier *>(node);
+    if (!id)
+    {
+      syntax_error("Error building VariableDeclaration node: invalid child nodes");
+      return;
+    }
+
+    varList.push_back(id);
+    nodes.pop_back();
+  }
+
+  reverse(varList.begin(), varList.end());
+
+  if (varList.empty() || !dt)
+  {
+    syntax_error("Error building VariableDeclaration node: invalid child nodes");
+    return;
+  }
+
+  int start_line = previous_token.line;
+  int end_line = previous_token.line;
+  int node_start = previous_token.start;
+  int node_end = previous_token.end;
+
+  VariableDeclaration *varDecl = new VariableDeclaration(varList, dt, start_line, end_line, node_start, node_end);
+
+  nodes.push_back(varDecl);
+}
+
+void LL1Parser::build_variable_initialization()
+{
+  AstNode *initializerNode = nodes.back();
+  nodes.pop_back();
+  AstNode *datatypeNode = nodes.back();
+  nodes.pop_back();
+  AstNode *idNode = nodes.back();
+  nodes.pop_back();
+  nodes.pop_back();
+
+  Identifier *id = dynamic_cast<Identifier *>(idNode);
+  DataType *dt = dynamic_cast<DataType *>(datatypeNode);
+  Expression *initializer = dynamic_cast<Expression *>(initializerNode);
+
+  if (!id || !dt || !initializer)
+  {
+    syntax_error("Error building VariableInitialization node: invalid child nodes");
+    return;
+  }
+
+  VariableInitialization *varInit = new VariableInitialization(id, dt, initializer, id->start_line, initializer->end_line, id->node_start, initializer->node_end);
+
+  nodes.push_back(varInit);
+}
+
+void LL1Parser::build_return_type()
+{
+  AstNode *typeNode = nodes.back();
+  nodes.pop_back();
+
+  if (auto prim = dynamic_cast<PrimitiveType *>(typeNode))
+  {
+    ReturnType *retType = new ReturnType(prim, prim->start_line, prim->end_line, prim->node_start, prim->node_end);
+    nodes.push_back(retType);
+  }
+  else
+  {
+    syntax_error("Error building ReturnType node: invalid child node");
+  }
+}
+
+void LL1Parser::build_primitive_type()
+{
+  AstNode *tokenNode = nodes.back();
+  nodes.pop_back();
+
+  PrimitiveType *primType = dynamic_cast<PrimitiveType *>(tokenNode);
+  if (!primType)
+  {
+    syntax_error("Error building PrimitiveType node");
+    return;
+  }
+
+  nodes.push_back(primType);
+}
+
+void LL1Parser::build_array_type()
+{
+  AstNode *tailNode = nodes.back();
+  nodes.pop_back();
+
+  if (auto prim = dynamic_cast<PrimitiveType *>(tailNode))
+  {
+    ArrayType *arrType = new ArrayType(prim->datatype, 1, prim->start_line, prim->end_line, prim->node_start, prim->node_end);
+    delete prim;
+    nodes.push_back(arrType);
+  }
+  else if (auto arr = dynamic_cast<ArrayType *>(tailNode))
+  {
+    ArrayType *arrType = new ArrayType(arr->datatype, arr->dimension + 1, arr->start_line, arr->end_line, arr->node_start, arr->node_end);
+    delete arr;
+    nodes.push_back(arrType);
+  }
+  else
+  {
+    syntax_error("Error building ArrayType node: invalid child node");
+  }
+}
+
+void LL1Parser::build_if_statement()
+{
+  AstNode *conditionNode = nodes.back();
+  nodes.pop_back();
+
+  vector<Statement *> *consequent = new vector<Statement *>();
+  vector<Statement *> *alternate = new vector<Statement *>();
+
+  bool in_alternate = true;
+
+  while (!currentCommandSeq.empty())
+  {
+    Statement *stmt = currentCommandSeq.front();
+    currentCommandSeq.erase(currentCommandSeq.begin());
+
+    if (dynamic_cast<IfStatement *>(stmt))
+    {
+      in_alternate = false;
+      alternate->insert(alternate->begin(), stmt);
+      continue;
+    }
+
+    if (stmt == nullptr)
+    {
+      in_alternate = false;
+      continue;
+    }
+
+    if (stmt == END_OF_LIST_ELSE)
+    {
+      Expression *condition = dynamic_cast<Expression *>(conditionNode);
+
+      int start_line = condition->start_line;
+      int end_line = alternate->empty() ? consequent->back()->end_line : alternate->back()->end_line;
+      int node_start = condition->node_start;
+      int node_end = alternate->empty() ? consequent->back()->node_end : alternate->back()->node_end;
+
+      IfStatement *ifStmt = new IfStatement(condition, *consequent, *alternate, start_line, end_line, node_start, node_end);
+
+      delete consequent;
+      delete alternate;
+
+      currentCommandSeq.insert(currentCommandSeq.begin(), ifStmt);
+      return;
+    }
+
+    if (!stmt)
+    {
+      syntax_error("Expected statement inside if/else block");
+      delete consequent;
+      delete alternate;
+      return;
+    }
+
+    if (in_alternate)
+    {
+      alternate->insert(alternate->begin(), stmt);
+    }
+    else
+    {
+      consequent->insert(consequent->begin(), stmt);
+    }
+  }
+
+  Expression *condition = dynamic_cast<Expression *>(conditionNode);
+
+  if (!condition || !consequent)
+  {
+    syntax_error("Error building IfStatement node: invalid child nodes");
+    return;
+  }
+
+  int start_line = condition->start_line;
+  int end_line = alternate->empty() ? consequent->back()->end_line : alternate->back()->end_line;
+  int node_start = condition->node_start;
+  int node_end = alternate->empty() ? consequent->back()->node_end : alternate->back()->node_end;
+
+  IfStatement *ifStmt = new IfStatement(condition, *consequent, *alternate, start_line, end_line, node_start, node_end);
+
+  delete consequent;
+  delete alternate;
+
+  nodes.push_back(ifStmt);
+}
+
+void LL1Parser::build_return_statement()
+{
+  AstNode *returnValueNode = nodes.back();
+  nodes.pop_back();
+
+  Expression *returnValue = dynamic_cast<Expression *>(returnValueNode);
+
+  int start_line = previous_token.line;
+  int end_line = previous_token.line;
+  int node_start = previous_token.start;
+  int node_end = previous_token.end;
+
+  if (returnValue)
+  {
+    end_line = returnValue->end_line;
+    node_end = returnValue->node_end;
+  }
+
+  ReturnStatement *retStmt = new ReturnStatement(returnValue, start_line, end_line, node_start, node_end);
+
+  nodes.push_back(retStmt);
+}
+
+void LL1Parser::build_skip_statement()
+{
+  int start_line = previous_token.line;
+  int end_line = previous_token.line;
+  int node_start = previous_token.start;
+  int node_end = previous_token.end;
+
+  SkipStatement *skipStmt = new SkipStatement(start_line, end_line, node_start, node_end);
+
+  nodes.push_back(skipStmt);
+}
+
+void LL1Parser::build_stop_statement()
+{
+  int start_line = previous_token.line;
+  int end_line = previous_token.line;
+  int node_start = previous_token.start;
+  int node_end = previous_token.end;
+
+  StopStatement *stopStmt = new StopStatement(start_line, end_line, node_start, node_end);
+
+  nodes.push_back(stopStmt);
+}
+
+void LL1Parser::build_read_statement()
+{
+  vector<AssignableExpression *> *variables = new vector<AssignableExpression *>();
+
+  while (!nodes.empty())
+  {
+    AstNode *node = nodes.back();
+    nodes.pop_back();
+
+    if (node == END_OF_LIST_MARKER)
+      break;
+
+    AssignableExpression *var = dynamic_cast<AssignableExpression *>(node);
+    if (!var)
+    {
+      syntax_error("Expected Assignable in Read statement");
+      delete variables;
+      return;
+    }
+
+    variables->insert(variables->begin(), var);
+  }
+
+  int start_line = previous_token.line;
+  int end_line = previous_token.line;
+  int node_start = previous_token.start;
+  int node_end = previous_token.end;
+
+  ReadStatement *readStmt = new ReadStatement(*variables, start_line, end_line, node_start, node_end);
+
+  delete variables;
+
+  nodes.push_back(readStmt);
+}
+
+void LL1Parser::build_write_statement()
+{
+  vector<Expression *> *exprList = new vector<Expression *>();
+  while (!nodes.empty())
+  {
+    AstNode *node = nodes.back();
+    nodes.pop_back();
+
+    if (node == END_OF_LIST_MARKER)
+      break;
+
+    Expression *expr = dynamic_cast<Expression *>(node);
+    if (!expr)
+    {
+      syntax_error("Expected expression in write statement");
+      delete exprList;
+      return;
+    }
+
+    exprList->insert(exprList->begin(), expr);
+  }
+
+  int start_line = previous_token.line;
+  int end_line = previous_token.line;
+  int node_start = previous_token.start;
+  int node_end = previous_token.end;
+
+  WriteStatement *writeStmt = new WriteStatement(*exprList, start_line, end_line, node_start, node_end);
+
+  delete exprList;
+
+  nodes.push_back(writeStmt);
+}
+
+void LL1Parser::build_for_loop()
+{
+  vector<Statement *> *body = new vector<Statement *>();
+  while (!currentCommandSeq.empty())
+  {
+    Statement *stmt = currentCommandSeq.back();
+    currentCommandSeq.pop_back();
+
+    if (!stmt)
+    {
+      syntax_error("Expected statement inside while block");
+      delete body;
+      return;
+    }
+    body->insert(body->begin(), stmt);
+  }
+
+  AstNode *updateExprNode = nodes.back();
+  nodes.pop_back();
+  AstNode *conditionNode = nodes.back();
+  nodes.pop_back();
+  AstNode *initAssignNode = nodes.back();
+  nodes.pop_back();
+
+  AssignmentExpression *init = dynamic_cast<AssignmentExpression *>(initAssignNode);
+  Expression *condition = dynamic_cast<Expression *>(conditionNode);
+  Expression *update = dynamic_cast<Expression *>(updateExprNode);
+
+  if (!init || !condition || !update)
+  {
+    syntax_error("Error building ForLoop node: invalid child nodes");
+    return;
+  }
+
+  int start_line = init->start_line;
+  int end_line = body->empty() ? init->end_line : body->back()->end_line;
+  int node_start = init->node_start;
+  int node_end = body->empty() ? init->node_end : body->back()->node_end;
+
+  ForLoop *forLoop = new ForLoop(init, condition, update, *body, start_line, end_line, node_start, node_end);
+
+  delete body;
+
+  nodes.push_back(forLoop);
+}
+
+void LL1Parser::build_int_assign()
+{
+  AstNode *valueNode = nodes.back();
+  nodes.pop_back();
+  AstNode *idNode = nodes.back();
+  nodes.pop_back();
+
+  Identifier *id = dynamic_cast<Identifier *>(idNode);
+  Expression *value = dynamic_cast<Expression *>(valueNode);
+
+  if (!id || !value)
+  {
+    syntax_error("Error building int Assignment Expression node: invalid child nodes");
+    return;
+  }
+
+  int start_line = id->start_line;
+  int end_line = value->end_line;
+  int node_start = id->node_start;
+  int node_end = value->node_end;
+
+  AssignmentExpression *assignExpr = new AssignmentExpression(id, value, start_line, end_line, node_start, node_end);
+
+  nodes.push_back(assignExpr);
+}
+
+void LL1Parser::build_while_loop()
+{
+  vector<Statement *> *body = new vector<Statement *>();
+  while (!currentCommandSeq.empty())
+  {
+    Statement *stmt = currentCommandSeq.back();
+    currentCommandSeq.pop_back();
+
+    if (!stmt)
+    {
+      syntax_error("Expected statement inside while block");
+      delete body;
+      return;
+    }
+    body->insert(body->begin(), stmt);
+  }
+
+  AstNode *conditionNode = nodes.back();
+  nodes.pop_back();
+
+  Expression *condition = dynamic_cast<Expression *>(conditionNode);
+
+  if (!condition)
+  {
+    syntax_error("Error building WhileLoop node: invalid child nodes");
+    return;
+  }
+
+  int start_line = condition->start_line;
+  int end_line = body->empty() ? condition->end_line : body->back()->end_line;
+  int node_start = condition->node_start;
+  int node_end = body->empty() ? condition->node_end : body->back()->node_end;
+
+  WhileLoop *whileLoop = new WhileLoop(condition, *body, start_line, end_line, node_start, node_end);
+
+  delete body;
+
+  nodes.push_back(whileLoop);
+}
+
+void LL1Parser::build_assignment_expression()
+{
+  AstNode *valueNode = nodes.back();
+  nodes.pop_back();
+  AstNode *assigneeNode = nodes.back();
+  nodes.pop_back();
+
+  AssignableExpression *assignee = dynamic_cast<AssignableExpression *>(assigneeNode);
+  Expression *value = dynamic_cast<Expression *>(valueNode);
+
+  if (!assignee || !value)
+  {
+    syntax_error("Error building AssignmentExpression node: invalid child nodes");
+    return;
+  }
+
+  int start_line = assignee->start_line;
+  int end_line = value->end_line;
+  int node_start = assignee->node_start;
+  int node_end = value->node_end;
+
+  AssignmentExpression *assignExpr = new AssignmentExpression(assignee, value, start_line, end_line, node_start, node_end);
+
+  nodes.push_back(assignExpr);
+}
+
+void LL1Parser::build_or_expression()
+{
+  AstNode *orTailNode = nodes.back();
+  nodes.pop_back();
+  AstNode *andExprNode = nodes.back();
+  nodes.pop_back();
+
+  Expression *left = dynamic_cast<Expression *>(andExprNode);
+  Expression *right = dynamic_cast<Expression *>(orTailNode);
+
+  if (!left || !right)
+  {
+    syntax_error("Error building OrExpression node: invalid left or Right child");
+    return;
+  }
+
+  int start_line = left->start_line;
+  int end_line = right->end_line;
+  int node_start = left->node_start;
+  int node_end = right->node_end;
+
+  OrExpression *orExpr = new OrExpression(left, right, start_line, end_line, node_start, node_end);
+
+  nodes.push_back(orExpr);
+}
+
+void LL1Parser::build_and_expression()
+{
+  AstNode *andTailNode = nodes.back();
+  nodes.pop_back();
+  AstNode *equalityExprNode = nodes.back();
+  nodes.pop_back();
+
+  Expression *left = dynamic_cast<Expression *>(equalityExprNode);
+  Expression *right = dynamic_cast<Expression *>(andTailNode);
+
+  if (!left || !right)
+  {
+    syntax_error("Error building AndExpression node: invalid left or right child");
+    return;
+  }
+
+  int start_line = left->start_line;
+  int end_line = right->end_line;
+  int node_start = left->node_start;
+  int node_end = right->node_end;
+
+  AndExpression *andExpr = new AndExpression(left, right, start_line, end_line, node_start, node_end);
+
+  nodes.push_back(andExpr);
+}
+
+void LL1Parser::build_equality_expression()
+{
+  AstNode *equalityTailNode = nodes.back();
+  nodes.pop_back();
+  AstNode *optNode = nodes.back();
+  nodes.pop_back();
+  AstNode *relationalExprNode = nodes.back();
+  nodes.pop_back();
+
+  Expression *left = dynamic_cast<Expression *>(relationalExprNode);
+  Expression *right = dynamic_cast<Expression *>(equalityTailNode);
+  Identifier *opt = dynamic_cast<Identifier *>(optNode);
+  string op = opt->name;
+
+  if (!left || !right || !opt)
+  {
+    syntax_error("Error building EqualityExpression node: invalid left or right or opreator child");
+    return;
+  }
+
+  int start_line = left->start_line;
+  int end_line = right->end_line;
+  int node_start = left->node_start;
+  int node_end = right->node_end;
+
+  EqualityExpression *eqExpr = new EqualityExpression(left, right, op, start_line, end_line, node_start, node_end);
+
+  nodes.push_back(eqExpr);
+}
+
+void LL1Parser::build_relational_expression()
+{
+  AstNode *relationalTailNode = nodes.back();
+  nodes.pop_back();
+  AstNode *optNode = nodes.back();
+  nodes.pop_back();
+  AstNode *additiveExprNode = nodes.back();
+  nodes.pop_back();
+
+  Expression *left = dynamic_cast<Expression *>(additiveExprNode);
+  Expression *right = dynamic_cast<Expression *>(relationalTailNode);
+  Identifier *opt = dynamic_cast<Identifier *>(optNode);
+  string op = opt->name;
+
+  if (!left || !right || !opt)
+  {
+    syntax_error("Error building RelationalExpression node: invalid left or right or opreator child");
+    return;
+  }
+
+  int start_line = left->start_line;
+  int end_line = right->end_line;
+  int node_start = left->node_start;
+  int node_end = right->node_end;
+
+  RelationalExpression *relExpr = new RelationalExpression(left, right, op, start_line, end_line, node_start, node_end);
+
+  nodes.push_back(relExpr);
+}
+
+void LL1Parser::build_additive_expression()
+{
+  AstNode *additiveTailNode = nodes.back();
+  nodes.pop_back();
+  AstNode *optNode = nodes.back();
+  nodes.pop_back();
+  AstNode *multiplicativeExprNode = nodes.back();
+  nodes.pop_back();
+
+  Expression *left = dynamic_cast<Expression *>(multiplicativeExprNode);
+  Expression *right = dynamic_cast<Expression *>(additiveTailNode);
+  Identifier *opt = dynamic_cast<Identifier *>(optNode);
+  string op = opt->name;
+
+  if (!left || !right || !opt)
+  {
+    syntax_error("Error building AdditiveExpression node: invalid left or right or opreator child");
+    return;
+  }
+
+  if (!right)
+  {
+    nodes.push_back(left);
+    return;
+  }
+
+  int start_line = left->start_line;
+  int end_line = right->end_line;
+  int node_start = left->node_start;
+  int node_end = right->node_end;
+
+  AdditiveExpression *addExpr = new AdditiveExpression(left, right, op, start_line, end_line, node_start, node_end);
+
+  nodes.push_back(addExpr);
+}
+
+void LL1Parser::build_multiplicative_expression()
+{
+  AstNode *multiplicativeTailNode = nodes.back();
+  nodes.pop_back();
+  AstNode *optNode = nodes.back();
+  nodes.pop_back();
+  AstNode *unaryExprNode = nodes.back();
+  nodes.pop_back();
+
+  Expression *left = dynamic_cast<Expression *>(unaryExprNode);
+  Expression *right = dynamic_cast<Expression *>(multiplicativeTailNode);
+  Identifier *opt = dynamic_cast<Identifier *>(optNode);
+  string op = opt->name;
+
+  if (!left || !right || !opt)
+  {
+    syntax_error("Error building MultiplicativeExpression node: invalid left or right or opreator child");
+    return;
+  }
+
+  int start_line = left->start_line;
+  int end_line = right->end_line;
+  int node_start = left->node_start;
+  int node_end = right->node_end;
+
+  MultiplicativeExpression *multExpr = new MultiplicativeExpression(left, right, op, start_line, end_line, node_start, node_end);
+
+  nodes.push_back(multExpr);
+}
+
+void LL1Parser::build_unary_expression()
+{
+  Expression *operand;
+  Identifier *opt;
+  string op;
+  bool postfix = false;
+
+  AstNode *firstNode = nodes.back();
+  nodes.pop_back();
+  AstNode *secondNode;
+
+  if (dynamic_cast<Identifier *>(firstNode))
+  {
+    opt = dynamic_cast<Identifier *>(firstNode);
+    op = opt->name;
+    if (op == "++" || op == "--")
+    {
+      postfix = true;
+      secondNode = nodes.back();
+      nodes.pop_back();
+      operand = dynamic_cast<Expression *>(secondNode);
+      if (!operand)
+      {
+        syntax_error("Error building UnaryExpression: invalid operand");
+        return;
+      }
+    }
+  }
+  operand = dynamic_cast<Expression *>(firstNode);
+  secondNode = nodes.back();
+  nodes.pop_back();
+  opt = dynamic_cast<Identifier *>(secondNode);
+  op = opt->name;
+  if (!operand)
+  {
+    syntax_error("Error building UnaryExpression: invalid operand");
+    return;
+  }
+
+  int start_line = operand->start_line;
+  int end_line = operand->end_line;
+  int node_start = operand->node_start;
+  int node_end = operand->node_end;
+
+  UnaryExpression *unaryExpr = new UnaryExpression(operand, op, postfix, start_line, end_line, node_start, node_end);
+
+  nodes.push_back(unaryExpr);
+}
+
+void LL1Parser::build_call_function_expression()
+{
+  vector<Expression *> *exprList = new vector<Expression *>();
+  while (!nodes.empty())
+  {
+    AstNode *node = nodes.back();
+
+    if (node == dynamic_cast<Identifier *>(node))
+      break;
+    nodes.pop_back();
+
+    Expression *expr = dynamic_cast<Expression *>(node);
+    if (!expr)
+    {
+      syntax_error("Expected expression in write statement");
+      delete exprList;
+      return;
+    }
+
+    exprList->insert(exprList->begin(), expr);
+  }
+
+  AstNode *idNode = nodes.back();
+  nodes.pop_back();
+
+  Identifier *id = dynamic_cast<Identifier *>(idNode);
+
+  if (!id)
+  {
+    syntax_error("Error building CallFunctionExpression: invalid Identifier");
+    return;
+  }
+
+  int start_line = id->start_line;
+  int end_line = exprList->empty() ? id->end_line : exprList->back()->end_line;
+  int node_start = id->node_start;
+  int node_end = exprList->empty() ? id->node_end : exprList->back()->node_end;
+
+  CallFunctionExpression *callFuncExpr = new CallFunctionExpression(id, *exprList, start_line, end_line, node_start, node_end);
+
+  nodes.push_back(callFuncExpr);
+}
+
+void LL1Parser::build_index_expression()
+{
+  AstNode *indexChainNode = nodes.back();
+  nodes.pop_back();
+
+  AstNode *baseNode = nodes.back();
+  nodes.pop_back();
+
+  Expression *base = dynamic_cast<Expression *>(baseNode);
+  auto indexChain = dynamic_cast<vector<Expression *> *>(indexChainNode);
+
+  if (!base || !indexChain)
+  {
+    syntax_error("Error building IndexExpression: invalid child nodes");
+    return;
+  }
+
+  Expression *current = base;
+  for (Expression *idx : *indexChain)
+  {
+    int start_line = current->start_line;
+    int end_line = idx->end_line;
+    int node_start = current->node_start;
+    int node_end = idx->node_end;
+
+    current = new IndexExpression(current, idx, start_line, end_line, node_start, node_end);
+  }
+
+  delete indexChain;
+
+  nodes.push_back(current);
+}
+
+void LL1Parser::build_identifier()
+{
+  AstNode *idNode = nodes.back();
+  nodes.pop_back();
+
+  Identifier *id = dynamic_cast<Identifier *>(idNode);
+  if (!id)
+  {
+    syntax_error("Error building Identifier node");
+    return;
+  }
+
+  nodes.push_back(id);
+}
+
+void LL1Parser::build_integer_literal()
+{
+  AstNode *intNode = nodes.back();
+  nodes.pop_back();
+
+  IntegerLiteral *intLit = dynamic_cast<IntegerLiteral *>(intNode);
+  if (!intLit)
+  {
+    syntax_error("Error building IntegerLiteral node");
+    return;
+  }
+
+  nodes.push_back(intLit);
+}
+
+void LL1Parser::build_float_literal()
+{
+  AstNode *floatNode = nodes.back();
+  nodes.pop_back();
+
+  FloatLiteral *floatLit = dynamic_cast<FloatLiteral *>(floatNode);
+  if (!floatLit)
+  {
+    syntax_error("Error building FloatLiteral node");
+    return;
+  }
+
+  nodes.push_back(floatLit);
+}
+
+void LL1Parser::build_string_literal()
+{
+  AstNode *strNode = nodes.back();
+  nodes.pop_back();
+
+  StringLiteral *strLit = dynamic_cast<StringLiteral *>(strNode);
+  if (!strLit)
+  {
+    syntax_error("Error building StringLiteral node");
+    return;
+  }
+
+  nodes.push_back(strLit);
+}
+
+void LL1Parser::build_boolean_literal()
+{
+  AstNode *boolNode = nodes.back();
+  nodes.pop_back();
+
+  BooleanLiteral *boolLit = dynamic_cast<BooleanLiteral *>(boolNode);
+  if (!boolLit)
+  {
+    syntax_error("Error building BooleanLiteral node");
+    return;
+  }
+
+  nodes.push_back(boolLit);
+}
+
+void LL1Parser::build_array_literal()
+{
+  AstNode *arrayNode = nodes.back();
+  nodes.pop_back();
+
+  ArrayLiteral *arrLit = dynamic_cast<ArrayLiteral *>(arrayNode);
+  if (!arrLit)
+  {
+    syntax_error("Error building ArrayLiteral node");
+    return;
+  }
+
+  nodes.push_back(arrLit);
+}
+
+void LL1Parser::build_function_list()
+{
+  AstNode *funcNode = nodes.back();
+  nodes.pop_back();
+
+  Function *func = dynamic_cast<Function *>(funcNode);
+  if (!func)
+  {
+    syntax_error("Invalid function node");
+    return;
+  }
+
+  currentFunctionList.insert(currentFunctionList.begin(), func);
+}
+
+void LL1Parser::build_declaration_seq()
+{
+  AstNode *declNode = nodes.back();
+  nodes.pop_back();
+
+  VariableDefinition *decl = dynamic_cast<VariableDefinition *>(declNode);
+  if (!decl)
+  {
+    syntax_error("Invalid declaration node");
+    return;
+  }
+
+  currentDeclarationSeq.insert(currentDeclarationSeq.begin(), decl);
+}
+
+void LL1Parser::build_command_seq()
+{
+  AstNode *cmdNode = nodes.back();
+  nodes.pop_back();
+
+  Statement *cmd = dynamic_cast<Statement *>(cmdNode);
+  if (!cmd)
+  {
+    syntax_error("Invalid command node");
+    return;
+  }
+
+  currentCommandSeq.insert(currentCommandSeq.begin(), cmd);
 }

@@ -11,6 +11,7 @@
 
 #include "parser_base.h"
 #include "recursive_decent_parser.h"
+#include "ll1_parser.h"
 
 #include "semantic_analyzer.h"
 

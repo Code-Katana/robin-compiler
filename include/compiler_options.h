@@ -2,6 +2,7 @@
 
 #include <string>
 #include "code_optimization.h"
+
 using namespace std;
 
 enum class ScannerOptions

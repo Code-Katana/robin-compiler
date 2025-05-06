@@ -30,6 +30,7 @@ public:
 private:
   Token peeked_token;
   bool has_peeked;
+  vector<Token> peeked_tokens;
   stack<SymbolLL1> st;
   vector<AstNode *> nodes;
   vector<Function *> currentFunctionList;
@@ -41,6 +42,7 @@ private:
 
   void fill_table();
   Token peek_token();
+  Token peek_token_n(int n);
   void get_token();
   bool match(TokenType t);
   void push_rule(int rule);

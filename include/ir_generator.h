@@ -43,8 +43,7 @@ public:
   Module *getModule() { return module.get(); }
 
   void generate(const string &filename);
-  void set_optimization_level(OptLevel level);
-
+  
 private:
   Source *source;
   static LLVMContext context;

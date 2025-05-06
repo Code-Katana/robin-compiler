@@ -17,7 +17,7 @@ RobinCompiler::RobinCompiler(CompilerOptions *options)
   parser = new RecursiveDecentParser(scanner);
   semantic = new SemanticAnalyzer(parser);
   generator = new IRGenerator(semantic);
-  generator->set_optimization_level(options->get_optimization_option().get_level());
+  optimization = new CodeOptimization(generator->getModule(), options->get_optimization_option());
 }
 
 vector<Token> RobinCompiler::tokenize()
@@ -39,4 +39,9 @@ void RobinCompiler::generate_ir(const string &filename)
 {
 
   generator->generate(filename);
+}
+
+void RobinCompiler::optimize(const string &filename)
+{
+  optimization->optimize_and_write(filename);
 }

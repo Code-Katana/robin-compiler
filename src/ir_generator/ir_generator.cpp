@@ -51,68 +51,6 @@ void IRGenerator::generate(const string &filename)
 
   generate_program(source->program);
 
-  {
-    std::error_code EC1;
-    llvm::raw_fd_ostream beforeOut("debug/before_opt.ll", EC1, llvm::sys::fs::OF_None);
-    if (!EC1)
-    {
-      module->print(beforeOut, nullptr);
-      beforeOut.flush();
-    }
-  }
-
-  llvm::LoopAnalysisManager LAM;
-  llvm::FunctionAnalysisManager FAM;
-  llvm::CGSCCAnalysisManager CGAM;
-  llvm::ModuleAnalysisManager MAM;
-
-  llvm::PassBuilder PB;
-
-  PB.registerModuleAnalyses(MAM);
-  PB.registerCGSCCAnalyses(CGAM);
-  PB.registerFunctionAnalyses(FAM);
-  PB.registerLoopAnalyses(LAM);
-  PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
-
-  llvm::ModulePassManager MPM;
-
-  llvm::OptimizationLevel optLevel = llvm::OptimizationLevel::O0;
-  switch (this->optLevel)
-  {
-  case OptLevel::O0:
-    optLevel = llvm::OptimizationLevel::O0;
-    break;
-  case OptLevel::O1:
-    optLevel = llvm::OptimizationLevel::O1;
-    break;
-  case OptLevel::O2:
-    optLevel = llvm::OptimizationLevel::O2;
-    break;
-  case OptLevel::O3:
-    optLevel = llvm::OptimizationLevel::O3;
-    break;
-  case OptLevel::Os:
-    optLevel = llvm::OptimizationLevel::Os;
-    break;
-  case OptLevel::Oz:
-    optLevel = llvm::OptimizationLevel::Oz;
-    break;
-  default:
-    optLevel = llvm::OptimizationLevel::O0;
-    break;
-  }
-  PB.buildPerModuleDefaultPipeline(optLevel).run(*module, MAM);
-
-  {
-    std::error_code EC2;
-    llvm::raw_fd_ostream afterOut("debug/after_opt.ll", EC2, llvm::sys::fs::OF_None);
-    if (!EC2)
-    {
-      module->print(afterOut, nullptr);
-      afterOut.flush();
-    }
-  }
-
   std::error_code EC;
   raw_fd_ostream outfile(filename, EC, llvm::sys::fs::OF_None);
   if (EC)
@@ -2131,8 +2069,4 @@ bool IRGenerator::isSingleDimensionArray(const SymbolEntry &entry)
 {
   return entry.dimensions == 1 &&
          entry.baseType != SymbolType::String;
-}
-void IRGenerator::set_optimization_level(OptLevel level)
-{
-  optLevel = level;
 }

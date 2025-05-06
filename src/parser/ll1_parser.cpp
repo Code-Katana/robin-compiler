@@ -1126,6 +1126,7 @@ void LL1Parser::push_rule(int rule)
     st.push(SymbolLL1(TokenType::IF_KW));
     break;
   case 65:
+    currentCommandSeq.insert(currentCommandSeq.begin(), nullptr);
     break;
   case 66:
     st.push(SymbolLL1(47));
@@ -1135,6 +1136,7 @@ void LL1Parser::push_rule(int rule)
     st.push(SymbolLL1(NonTerminal::Or_Expr_NT));
     st.push(SymbolLL1(TokenType::IF_KW));
     st.push(SymbolLL1(TokenType::ELSE_KW));
+    currentCommandSeq.insert(currentCommandSeq.begin(), nullptr);
     currentCommandSeq.insert(currentCommandSeq.begin(), END_OF_LIST_ELSE);
     break;
   case 67:
@@ -1809,13 +1811,6 @@ void LL1Parser::build_if_statement()
     Statement *stmt = currentCommandSeq.front();
     currentCommandSeq.erase(currentCommandSeq.begin());
 
-    if (dynamic_cast<IfStatement *>(stmt))
-    {
-      in_alternate = false;
-      alternate->insert(alternate->begin(), stmt);
-      continue;
-    }
-
     if (stmt == nullptr)
     {
       in_alternate = false;
@@ -1830,6 +1825,9 @@ void LL1Parser::build_if_statement()
       int end_line = alternate->empty() ? consequent->back()->end_line : alternate->back()->end_line;
       int node_start = condition->node_start;
       int node_end = alternate->empty() ? consequent->back()->node_end : alternate->back()->node_end;
+
+      reverse(consequent->begin(), consequent->end());
+      reverse(alternate->begin(), alternate->end());
 
       IfStatement *ifStmt = new IfStatement(condition, *consequent, *alternate, start_line, end_line, node_start, node_end);
 
@@ -1870,6 +1868,9 @@ void LL1Parser::build_if_statement()
   int end_line = alternate->empty() ? consequent->back()->end_line : alternate->back()->end_line;
   int node_start = condition->node_start;
   int node_end = alternate->empty() ? consequent->back()->node_end : alternate->back()->node_end;
+
+  reverse(consequent->begin(), consequent->end());
+  reverse(alternate->begin(), alternate->end());
 
   IfStatement *ifStmt = new IfStatement(condition, *consequent, *alternate, start_line, end_line, node_start, node_end);
 

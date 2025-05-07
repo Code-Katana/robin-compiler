@@ -166,6 +166,9 @@ bool LL1Parser::match(TokenType t)
   case TokenType::ROUND_OP:
   case TokenType::LENGTH_OP:
     leaf = new Identifier(current_token.value, current_token.line, previous_token.line, current_token.start, previous_token.end);
+    break;
+  case TokenType::RIGHT_CURLY_PR:
+    leaf = build_array();
   }
   if (leaf)
   {
@@ -889,6 +892,7 @@ void LL1Parser::push_rule(int rule)
     st.push(SymbolLL1(NonTerminal::Primitive_NT));
     break;
   case 11:
+    st.push(SymbolLL1(11));
     st.push(SymbolLL1(TokenType::RIGHT_SQUARE_PR));
     st.push(SymbolLL1(NonTerminal::Array_Type_NT));
     break;
@@ -957,6 +961,7 @@ void LL1Parser::push_rule(int rule)
     st.push(SymbolLL1(25));
     st.push(SymbolLL1(TokenType::RIGHT_CURLY_PR));
     st.push(SymbolLL1(NonTerminal::Array_Value_NT));
+    nodes.push_back(END_OF_LIST_MARKER);
     st.push(SymbolLL1(TokenType::LEFT_CURLY_PR));
     break;
   case 26:
@@ -970,7 +975,8 @@ void LL1Parser::push_rule(int rule)
   case 29:
     st.push(SymbolLL1(NonTerminal::More_Nested_NT));
     st.push(SymbolLL1(TokenType::RIGHT_CURLY_PR));
-    st.push(SymbolLL1(NonTerminal::Value_List_NT));
+    st.push(SymbolLL1(NonTerminal::Array_Value_NT));
+    nodes.push_back(END_OF_LIST_MARKER);
     st.push(SymbolLL1(TokenType::LEFT_CURLY_PR));
     break;
   case 30:
@@ -1173,6 +1179,7 @@ void LL1Parser::push_rule(int rule)
     st.push(SymbolLL1(75));
     st.push(SymbolLL1(TokenType::RIGHT_CURLY_PR));
     st.push(SymbolLL1(NonTerminal::Array_Value_NT));
+    nodes.push_back(END_OF_LIST_MARKER);
     st.push(SymbolLL1(TokenType::LEFT_CURLY_PR));
     break;
   case 76:
@@ -1447,6 +1454,9 @@ void LL1Parser::builder(int rule)
   case 14:
   case 15:
     build_primitive_type();
+    break;
+  case 11:
+    build_array_type();
     break;
   case 16:
     build_program();
@@ -1725,7 +1735,14 @@ void LL1Parser::build_variable_initialization()
   nodes.pop_back();
   AstNode *idNode = nodes.back();
   nodes.pop_back();
+  AstNode *check = nodes.back();
   nodes.pop_back();
+
+  if (check != END_OF_LIST_MARKER)
+  {
+    syntax_error("Error building VariableInitialization node: The Variable must be one");
+    return;
+  }
 
   Identifier *id = dynamic_cast<Identifier *>(idNode);
   DataType *dt = dynamic_cast<DataType *>(datatypeNode);
@@ -2589,4 +2606,59 @@ void LL1Parser::build_command_seq()
   }
 
   currentCommandSeq.insert(currentCommandSeq.begin(), cmd);
+}
+
+ArrayLiteral *LL1Parser::build_array()
+{
+  vector<Expression *> *elements = new vector<Expression *>();
+  while (!nodes.empty())
+  {
+    AstNode *node = nodes.back();
+    nodes.pop_back();
+
+    if (node == END_OF_LIST_MARKER)
+      break;
+
+    Expression *expr = dynamic_cast<Expression *>(node);
+    if (!expr)
+    {
+      syntax_error("Expected expression in array literal");
+      delete elements;
+      return nullptr;
+    }
+    elements->insert(elements->begin(), expr);
+  }
+
+  int start_line = 0;
+  int end_line = 0;
+  int node_start = 0;
+  int node_end = 0;
+
+  if (!elements->empty())
+  {
+    start_line = (*elements)[0]->start_line;
+    end_line = elements->back()->end_line;
+    node_start = (*elements)[0]->node_start;
+    node_end = elements->back()->node_end;
+  }
+  else
+  {
+    if (current_token.type == TokenType::RIGHT_CURLY_PR && previous_token.type == TokenType::LEFT_CURLY_PR)
+    {
+      start_line = previous_token.line;
+      end_line = current_token.line;
+      node_start = previous_token.start;
+      node_end = current_token.end;
+    }
+    else
+    {
+      start_line = end_line = node_start = node_end = 0;
+    }
+  }
+
+  ArrayLiteral *arrLit = new ArrayLiteral(*elements, start_line, end_line, node_start, node_end);
+
+  delete elements;
+
+  return arrLit;
 }

@@ -85,4 +85,7 @@ private:
   void build_function_list();
   void build_declaration_seq();
   void build_command_seq();
+
+  // helpers
+  ArrayLiteral *build_array();
 };

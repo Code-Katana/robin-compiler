@@ -6,7 +6,6 @@ LL1Parser::LL1Parser(ScannerBase *sc) : ParserBase(sc)
 {
   fill_table();
   has_peeked = false;
-
   currentFunctionList.clear();
   currentDeclarationSeq.clear();
   currentCommandSeq.clear();
@@ -123,29 +122,29 @@ bool LL1Parser::match(TokenType t)
   switch (t)
   {
   case TokenType::ID_SY:
-    leaf = new Identifier(current_token.value, current_token.line, previous_token.line, current_token.start, previous_token.end);
+    leaf = new Identifier(current_token.value, current_token.line, current_token.line, current_token.start, current_token.end);
     break;
   case TokenType::INTEGER_NUM:
-    leaf = new IntegerLiteral(std::stoi(current_token.value), current_token.line, previous_token.line, current_token.start, previous_token.end);
+    leaf = new IntegerLiteral(std::stoi(current_token.value), current_token.line, current_token.line, current_token.start, current_token.end);
     break;
   case TokenType::FLOAT_NUM:
-    leaf = new FloatLiteral(std::stof(current_token.value), current_token.line, previous_token.line, current_token.start, previous_token.end);
+    leaf = new FloatLiteral(std::stof(current_token.value), current_token.line, current_token.line, current_token.start, current_token.end);
     break;
   case TokenType::STRING_SY:
-    leaf = new StringLiteral(current_token.value, current_token.line, previous_token.line, current_token.start, previous_token.end);
+    leaf = new StringLiteral(current_token.value, current_token.line, current_token.line, current_token.start, current_token.end);
     break;
   case TokenType::TRUE_KW:
-    leaf = new BooleanLiteral(true, current_token.line, previous_token.line, current_token.start, previous_token.end);
+    leaf = new BooleanLiteral(true, current_token.line, current_token.line, current_token.start, current_token.end);
     break;
   case TokenType::FALSE_KW:
-    leaf = new BooleanLiteral(false, current_token.line, previous_token.line, current_token.start, previous_token.end);
+    leaf = new BooleanLiteral(false, current_token.line, current_token.line, current_token.start, current_token.end);
     break;
   case TokenType::INTEGER_TY:
   case TokenType::BOOLEAN_TY:
   case TokenType::STRING_TY:
   case TokenType::FLOAT_TY:
   case TokenType::VOID_TY:
-    leaf = new PrimitiveType(current_token.value, current_token.line, previous_token.line, current_token.start, previous_token.end);
+    leaf = new PrimitiveType(current_token.value, current_token.line, current_token.line, current_token.start, current_token.end);
     break;
   case TokenType::PLUS_OP:
   case TokenType::MINUS_OP:
@@ -165,10 +164,11 @@ bool LL1Parser::match(TokenType t)
   case TokenType::BOOLEAN_OP:
   case TokenType::ROUND_OP:
   case TokenType::LENGTH_OP:
-    leaf = new Identifier(current_token.value, current_token.line, previous_token.line, current_token.start, previous_token.end);
+    leaf = new Identifier(current_token.value, current_token.line, current_token.line, current_token.start, current_token.end);
     break;
   case TokenType::RIGHT_CURLY_PR:
     leaf = build_array();
+    break;
   }
   if (leaf)
   {
@@ -1587,6 +1587,8 @@ void LL1Parser::build_source()
   {
     start_line = currentFunctionList.front()->start_line;
     node_start = currentFunctionList.front()->node_start;
+    end_line = max(end_line, currentFunctionList.back()->end_line);
+    node_end = max(node_end, currentFunctionList.back()->node_end);
   }
 
   Source *sourceNode = new Source(program, currentFunctionList, start_line, end_line, node_start, node_end);
@@ -1609,11 +1611,15 @@ void LL1Parser::build_program()
   }
 
   int start_line = id->start_line;
-  int end_line = previous_token.line;
-  ;
   int node_start = id->node_start;
-  int node_end = previous_token.end;
-  ;
+  int end_line = currentCommandSeq.empty() ? id->end_line : currentCommandSeq.back()->end_line;
+  int node_end = currentCommandSeq.empty() ? id->node_end : currentCommandSeq.back()->node_end;
+
+  if (previous_token.type == TokenType::END_KW)
+  {
+    end_line = previous_token.line;
+    node_end = previous_token.end;
+  }
 
   Program *programNode = new Program(id, currentDeclarationSeq, currentCommandSeq, start_line, end_line, node_start, node_end);
 
@@ -1648,9 +1654,9 @@ void LL1Parser::build_function()
   auto &commandSeq = currentCommandSeq;
 
   int start_line = id->start_line;
-  int end_line = commandSeq.empty() ? id->end_line : commandSeq.back()->end_line;
+  int end_line = currentCommandSeq.empty() ? id->end_line : currentCommandSeq.back()->end_line;
   int node_start = id->node_start;
-  int node_end = commandSeq.empty() ? id->node_end : commandSeq.back()->node_end;
+  int node_end = currentCommandSeq.empty() ? id->node_end : currentCommandSeq.back()->node_end;
 
   Function *funcNode = new Function(id, rtn, declSeq, commandSeq, start_line, end_line, node_start, node_end);
 
@@ -1673,7 +1679,6 @@ void LL1Parser::build_variable_definition()
   }
 
   VariableDefinition *varDef = new VariableDefinition(defStmt, defStmt->start_line, defStmt->end_line, defStmt->node_start, defStmt->node_end);
-
   nodes.push_back(varDef);
 }
 
@@ -1717,10 +1722,10 @@ void LL1Parser::build_variable_declaration()
     return;
   }
 
-  int start_line = previous_token.line;
-  int end_line = previous_token.line;
-  int node_start = previous_token.start;
-  int node_end = previous_token.end;
+  int start_line = varList.front()->start_line;
+  int end_line = varList.back()->end_line;
+  int node_start = varList.front()->node_start;
+  int node_end = varList.back()->node_end;
 
   VariableDeclaration *varDecl = new VariableDeclaration(varList, dt, start_line, end_line, node_start, node_end);
 
@@ -1754,7 +1759,15 @@ void LL1Parser::build_variable_initialization()
     return;
   }
 
-  VariableInitialization *varInit = new VariableInitialization(id, dt, initializer, id->start_line, initializer->end_line, id->node_start, initializer->node_end);
+  int start_line = id->start_line;
+  int node_start = id->node_start;
+  int end_line = initializer->end_line;
+  int node_end = initializer->node_end;
+
+  start_line = min(start_line, initializer->start_line);
+  node_start = min(node_start, initializer->node_start);
+
+  VariableInitialization *varInit = new VariableInitialization(id, dt, initializer, start_line, end_line, node_start, node_end);
 
   nodes.push_back(varInit);
 }
@@ -1767,6 +1780,11 @@ void LL1Parser::build_return_type()
   if (auto prim = dynamic_cast<PrimitiveType *>(typeNode))
   {
     ReturnType *retType = new ReturnType(prim, prim->start_line, prim->end_line, prim->node_start, prim->node_end);
+    nodes.push_back(retType);
+  }
+  else if (auto arr = dynamic_cast<ArrayType *>(typeNode))
+  {
+    ReturnType *retType = new ReturnType(arr, arr->start_line, arr->end_line, arr->node_start, arr->node_end);
     nodes.push_back(retType);
   }
   else
@@ -1882,9 +1900,9 @@ void LL1Parser::build_if_statement()
   }
 
   int start_line = condition->start_line;
-  int end_line = alternate->empty() ? consequent->back()->end_line : alternate->back()->end_line;
+  int end_line = consequent->back()->end_line;
   int node_start = condition->node_start;
-  int node_end = alternate->empty() ? consequent->back()->node_end : alternate->back()->node_end;
+  int node_end = consequent->back()->node_end;
 
   reverse(consequent->begin(), consequent->end());
   reverse(alternate->begin(), alternate->end());
@@ -1904,15 +1922,22 @@ void LL1Parser::build_return_statement()
 
   Expression *returnValue = dynamic_cast<Expression *>(returnValueNode);
 
-  int start_line = previous_token.line;
-  int end_line = previous_token.line;
-  int node_start = previous_token.start;
-  int node_end = previous_token.end;
+  int start_line, end_line;
+  int node_start, node_end;
 
   if (returnValue)
   {
+    start_line = previous_token.line;
     end_line = returnValue->end_line;
+    node_start = previous_token.start;
     node_end = returnValue->node_end;
+  }
+  else
+  {
+    start_line = previous_token.line;
+    end_line = previous_token.line;
+    node_start = previous_token.start;
+    node_end = previous_token.end;
   }
 
   ReturnStatement *retStmt = new ReturnStatement(returnValue, start_line, end_line, node_start, node_end);
@@ -1923,9 +1948,9 @@ void LL1Parser::build_return_statement()
 void LL1Parser::build_skip_statement()
 {
   int start_line = previous_token.line;
-  int end_line = previous_token.line;
   int node_start = previous_token.start;
-  int node_end = previous_token.end;
+  int end_line = current_token.line;
+  int node_end = current_token.end;
 
   SkipStatement *skipStmt = new SkipStatement(start_line, end_line, node_start, node_end);
 
@@ -1935,9 +1960,9 @@ void LL1Parser::build_skip_statement()
 void LL1Parser::build_stop_statement()
 {
   int start_line = previous_token.line;
-  int end_line = previous_token.line;
   int node_start = previous_token.start;
-  int node_end = previous_token.end;
+  int end_line = current_token.line;
+  int node_end = current_token.end;
 
   StopStatement *stopStmt = new StopStatement(start_line, end_line, node_start, node_end);
 
@@ -1967,10 +1992,10 @@ void LL1Parser::build_read_statement()
     variables->insert(variables->begin(), var);
   }
 
-  int start_line = previous_token.line;
-  int end_line = previous_token.line;
-  int node_start = previous_token.start;
-  int node_end = previous_token.end;
+  int start_line = variables->front()->start_line;
+  int end_line = variables->back()->end_line;
+  int node_start = variables->front()->node_start;
+  int node_end = variables->back()->node_end;
 
   ReadStatement *readStmt = new ReadStatement(*variables, start_line, end_line, node_start, node_end);
 
@@ -2001,10 +2026,10 @@ void LL1Parser::build_write_statement()
     exprList->insert(exprList->begin(), expr);
   }
 
-  int start_line = previous_token.line;
-  int end_line = previous_token.line;
-  int node_start = previous_token.start;
-  int node_end = previous_token.end;
+  int start_line = exprList->front()->start_line;
+  int end_line = exprList->back()->end_line;
+  int node_start = exprList->front()->node_start;
+  int node_end = exprList->back()->node_end;
 
   if (exprList->empty())
   {
@@ -2055,9 +2080,9 @@ void LL1Parser::build_for_loop()
   }
 
   int start_line = init->start_line;
-  int end_line = body->empty() ? init->end_line : body->back()->end_line;
   int node_start = init->node_start;
-  int node_end = body->empty() ? init->node_end : body->back()->node_end;
+  int end_line = body->empty() ? update->end_line : body->back()->end_line;
+  int node_end = body->empty() ? update->node_end : body->back()->node_end;
 
   ForLoop *forLoop = new ForLoop(init, condition, update, *body, start_line, end_line, node_start, node_end);
 
@@ -2121,8 +2146,8 @@ void LL1Parser::build_while_loop()
   }
 
   int start_line = condition->start_line;
-  int end_line = body->empty() ? condition->end_line : body->back()->end_line;
   int node_start = condition->node_start;
+  int end_line = body->empty() ? condition->end_line : body->back()->end_line;
   int node_end = body->empty() ? condition->node_end : body->back()->node_end;
 
   WhileLoop *whileLoop = new WhileLoop(condition, *body, start_line, end_line, node_start, node_end);
@@ -2149,8 +2174,8 @@ void LL1Parser::build_assignment_expression()
   }
 
   int start_line = assignee->start_line;
-  int end_line = value->end_line;
   int node_start = assignee->node_start;
+  int end_line = value->end_line;
   int node_end = value->node_end;
 
   AssignmentExpression *assignExpr = new AssignmentExpression(assignee, value, start_line, end_line, node_start, node_end);
@@ -2367,10 +2392,12 @@ void LL1Parser::build_unary_expression()
         syntax_error("Error building UnaryExpression: invalid operand");
         return;
       }
+
       int start_line = operand->start_line;
-      int end_line = operand->end_line;
+      int end_line = opt->end_line;
       int node_start = operand->node_start;
-      int node_end = operand->node_end;
+      int node_end = opt->node_end;
+
       UnaryExpression *unaryExpr = new UnaryExpression(operand, op, postfix, start_line, end_line, node_start, node_end);
 
       nodes.push_back(unaryExpr);
@@ -2393,9 +2420,9 @@ void LL1Parser::build_unary_expression()
     return;
   }
 
-  int start_line = operand->start_line;
+  int start_line = opt->start_line;
   int end_line = operand->end_line;
-  int node_start = operand->node_start;
+  int node_start = opt->node_start;
   int node_end = operand->node_end;
 
   UnaryExpression *unaryExpr = new UnaryExpression(operand, op, postfix, start_line, end_line, node_start, node_end);
@@ -2437,8 +2464,8 @@ void LL1Parser::build_call_function_expression()
   }
 
   int start_line = id->start_line;
-  int end_line = exprList->empty() ? id->end_line : exprList->back()->end_line;
   int node_start = id->node_start;
+  int end_line = exprList->empty() ? id->end_line : exprList->back()->end_line;
   int node_end = exprList->empty() ? id->node_end : exprList->back()->node_end;
 
   CallFunctionExpression *callFuncExpr = new CallFunctionExpression(id, *exprList, start_line, end_line, node_start, node_end);
@@ -2636,24 +2663,21 @@ ArrayLiteral *LL1Parser::build_array()
 
   if (!elements->empty())
   {
-    start_line = (*elements)[0]->start_line;
+    start_line = elements->front()->start_line;
+    node_start = elements->front()->node_start;
     end_line = elements->back()->end_line;
-    node_start = (*elements)[0]->node_start;
     node_end = elements->back()->node_end;
+  }
+  else if (current_token.type == TokenType::RIGHT_CURLY_PR && previous_token.type == TokenType::LEFT_CURLY_PR)
+  {
+    start_line = previous_token.line;
+    node_start = previous_token.start;
+    end_line = current_token.line;
+    node_end = current_token.end;
   }
   else
   {
-    if (current_token.type == TokenType::RIGHT_CURLY_PR && previous_token.type == TokenType::LEFT_CURLY_PR)
-    {
-      start_line = previous_token.line;
-      end_line = current_token.line;
-      node_start = previous_token.start;
-      node_end = current_token.end;
-    }
-    else
-    {
-      start_line = end_line = node_start = node_end = 0;
-    }
+    start_line = end_line = node_start = node_end = 0;
   }
 
   ArrayLiteral *arrLit = new ArrayLiteral(*elements, start_line, end_line, node_start, node_end);

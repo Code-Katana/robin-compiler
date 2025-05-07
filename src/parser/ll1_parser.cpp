@@ -22,6 +22,10 @@ AstNode *LL1Parser::parse_ast()
   while (!st.empty())
   {
     SymbolLL1 top = st.top();
+    if (has_error)
+    {
+      return error_node;
+    }
     if (top.reduceRule > 0)
     {
       st.pop();
@@ -57,8 +61,7 @@ AstNode *LL1Parser::parse_ast()
       }
       if (rule == 0)
       {
-        syntax_error("Unexpected token in prediction");
-        return nullptr;
+        return syntax_error("Unexpected token in prediction");
       }
       st.pop();
       push_rule(rule);
@@ -68,15 +71,22 @@ AstNode *LL1Parser::parse_ast()
       st.pop();
       if (!match(top.term))
       {
-        return nullptr;
+        return error_node;
       }
     }
   }
+  reset_parser();
+
+  if (has_error)
+  {
+    return error_node;
+  }
+
   if (nodes.empty())
   {
-    syntax_error("Parsing failed: no AST generated");
-    return nullptr;
+    return syntax_error("Parsing failed: no AST generated");
   }
+
   return dynamic_cast<AstNode *>(nodes.back());
 }
 
@@ -112,7 +122,8 @@ bool LL1Parser::match(TokenType t)
 {
   if (current_token.type != t)
   {
-    syntax_error("Token mismatch in match: expected " + Token::get_token_name(t) + ", got " + Token::get_token_name(current_token.type));
+    AstNode *error = syntax_error("Token mismatch in match: expected " + Token::get_token_name(t) + ", got " + Token::get_token_name(current_token.type));
+    nodes.push_back(error);
     return false;
   }
 
@@ -1574,7 +1585,7 @@ void LL1Parser::build_source()
   Program *program = dynamic_cast<Program *>(programNode);
   if (!program)
   {
-    syntax_error("Invalid program node");
+    nodes.push_back(syntax_error("Error building Source node: invalid program node"));
     return;
   }
 
@@ -1606,7 +1617,7 @@ void LL1Parser::build_program()
   Identifier *id = dynamic_cast<Identifier *>(idNode);
   if (!id)
   {
-    syntax_error("Invalid identifier node");
+    nodes.push_back(syntax_error("Invalid identifier node"));
     return;
   }
 
@@ -1639,14 +1650,14 @@ void LL1Parser::build_function()
   Identifier *id = dynamic_cast<Identifier *>(idNode);
   if (!id)
   {
-    syntax_error("Error building Function node: invalid Identifier");
+    nodes.push_back(syntax_error("Error building Function node: invalid Identifier"));
     return;
   }
 
   ReturnType *rtn = dynamic_cast<ReturnType *>(returnNode);
   if (!rtn)
   {
-    syntax_error("Error building Function node: invalid Return type");
+    nodes.push_back(syntax_error("Error building Function node: invalid Return type"));
     return;
   }
 
@@ -1674,7 +1685,7 @@ void LL1Parser::build_variable_definition()
   Statement *defStmt = dynamic_cast<Statement *>(defNode);
   if (!defStmt)
   {
-    syntax_error("Error building VariableDefinition node: invalid child node");
+    nodes.push_back(syntax_error("Error building VariableDefinition node: invalid child node"));
     return;
   }
 
@@ -1706,7 +1717,7 @@ void LL1Parser::build_variable_declaration()
     Identifier *id = dynamic_cast<Identifier *>(node);
     if (!id)
     {
-      syntax_error("Error building VariableDeclaration node: invalid child nodes");
+      nodes.push_back(syntax_error("Error building VariableDeclaration node: invalid child nodes"));
       return;
     }
 
@@ -1718,7 +1729,7 @@ void LL1Parser::build_variable_declaration()
 
   if (varList.empty() || !dt)
   {
-    syntax_error("Error building VariableDeclaration node: invalid child nodes");
+    nodes.push_back(syntax_error("Error building VariableDeclaration node: invalid child nodes"));
     return;
   }
 
@@ -1745,7 +1756,7 @@ void LL1Parser::build_variable_initialization()
 
   if (check != END_OF_LIST_MARKER)
   {
-    syntax_error("Error building VariableInitialization node: The Variable must be one");
+    nodes.push_back(syntax_error("Error building VariableInitialization node: The Variable must be one"));
     return;
   }
 
@@ -1755,7 +1766,7 @@ void LL1Parser::build_variable_initialization()
 
   if (!id || !dt || !initializer)
   {
-    syntax_error("Error building VariableInitialization node: invalid child nodes");
+    nodes.push_back(syntax_error("Error building VariableInitialization node: invalid child nodes"));
     return;
   }
 
@@ -1789,7 +1800,7 @@ void LL1Parser::build_return_type()
   }
   else
   {
-    syntax_error("Error building ReturnType node: invalid child node");
+    nodes.push_back(syntax_error("Error building ReturnType node: invalid child node"));
   }
 }
 
@@ -1801,7 +1812,7 @@ void LL1Parser::build_primitive_type()
   PrimitiveType *primType = dynamic_cast<PrimitiveType *>(tokenNode);
   if (!primType)
   {
-    syntax_error("Error building PrimitiveType node");
+    nodes.push_back(syntax_error("Error building PrimitiveType node"));
     return;
   }
 
@@ -1827,7 +1838,7 @@ void LL1Parser::build_array_type()
   }
   else
   {
-    syntax_error("Error building ArrayType node: invalid child node");
+    nodes.push_back(syntax_error("Error building ArrayType node: invalid child node"));
   }
 }
 
@@ -1875,7 +1886,7 @@ void LL1Parser::build_if_statement()
 
     if (!stmt)
     {
-      syntax_error("Expected statement inside if/else block");
+      nodes.push_back(syntax_error("Expected statement inside if/else block"));
       delete consequent;
       delete alternate;
       return;
@@ -1895,7 +1906,7 @@ void LL1Parser::build_if_statement()
 
   if (!condition || !consequent)
   {
-    syntax_error("Error building IfStatement node: invalid child nodes");
+    nodes.push_back(syntax_error("Error building IfStatement node: invalid child nodes"));
     return;
   }
 
@@ -1984,7 +1995,7 @@ void LL1Parser::build_read_statement()
     AssignableExpression *var = dynamic_cast<AssignableExpression *>(node);
     if (!var)
     {
-      syntax_error("Expected Assignable in Read statement");
+      nodes.push_back(syntax_error("Expected Assignable in Read statement"));
       delete variables;
       return;
     }
@@ -2018,7 +2029,7 @@ void LL1Parser::build_write_statement()
     Expression *expr = dynamic_cast<Expression *>(node);
     if (!expr)
     {
-      syntax_error("Expected expression in write statement");
+      nodes.push_back(syntax_error("Expected expression in write statement"));
       delete exprList;
       return;
     }
@@ -2033,7 +2044,7 @@ void LL1Parser::build_write_statement()
 
   if (exprList->empty())
   {
-    syntax_error("Expected expression in write statement");
+    nodes.push_back(syntax_error("Expected expression in write statement"));
     delete exprList;
     return;
   }
@@ -2055,7 +2066,7 @@ void LL1Parser::build_for_loop()
 
     if (!stmt)
     {
-      syntax_error("Expected statement inside while block");
+      nodes.push_back(syntax_error("Expected statement inside while block"));
       delete body;
       return;
     }
@@ -2075,7 +2086,7 @@ void LL1Parser::build_for_loop()
 
   if (!init || !condition || !update)
   {
-    syntax_error("Error building ForLoop node: invalid child nodes");
+    nodes.push_back(syntax_error("Error building ForLoop node: invalid child nodes"));
     return;
   }
 
@@ -2103,7 +2114,7 @@ void LL1Parser::build_int_assign()
 
   if (!id || !value)
   {
-    syntax_error("Error building int Assignment Expression node: invalid child nodes");
+    nodes.push_back(syntax_error("Error building int Assignment Expression node: invalid child nodes"));
     return;
   }
 
@@ -2127,7 +2138,7 @@ void LL1Parser::build_while_loop()
 
     if (!stmt)
     {
-      syntax_error("Expected statement inside while block");
+      nodes.push_back(syntax_error("Expected statement inside while block"));
       delete body;
       return;
     }
@@ -2141,7 +2152,7 @@ void LL1Parser::build_while_loop()
 
   if (!condition)
   {
-    syntax_error("Error building WhileLoop node: invalid child nodes");
+    nodes.push_back(syntax_error("Error building WhileLoop node: invalid child nodes"));
     return;
   }
 
@@ -2169,7 +2180,7 @@ void LL1Parser::build_assignment_expression()
 
   if (!assignee || !value)
   {
-    syntax_error("Error building AssignmentExpression node: invalid child nodes");
+    nodes.push_back(syntax_error("Error building AssignmentExpression node: invalid child nodes"));
     return;
   }
 
@@ -2195,7 +2206,7 @@ void LL1Parser::build_or_expression()
 
   if (!left || !right)
   {
-    syntax_error("Error building OrExpression node: invalid left or Right child");
+    nodes.push_back(syntax_error("Error building OrExpression node: invalid left or Right child"));
     return;
   }
 
@@ -2221,7 +2232,7 @@ void LL1Parser::build_and_expression()
 
   if (!left || !right)
   {
-    syntax_error("Error building AndExpression node: invalid left or right child");
+    nodes.push_back(syntax_error("Error building AndExpression node: invalid left or right child"));
     return;
   }
 
@@ -2251,7 +2262,7 @@ void LL1Parser::build_equality_expression()
 
   if (!left || !right || !opt)
   {
-    syntax_error("Error building EqualityExpression node: invalid left or right or opreator child");
+    nodes.push_back(syntax_error("Error building EqualityExpression node: invalid left or right or opreator child"));
     return;
   }
 
@@ -2281,7 +2292,7 @@ void LL1Parser::build_relational_expression()
 
   if (!left || !right || !opt)
   {
-    syntax_error("Error building RelationalExpression node: invalid left or right or opreator child");
+    nodes.push_back(syntax_error("Error building RelationalExpression node: invalid left or right or opreator child"));
     return;
   }
 
@@ -2311,7 +2322,7 @@ void LL1Parser::build_additive_expression()
 
   if (!left || !right || !opt)
   {
-    syntax_error("Error building AdditiveExpression node: invalid left or right or opreator child");
+    nodes.push_back(syntax_error("Error building AdditiveExpression node: invalid left or right or opreator child"));
     return;
   }
 
@@ -2347,7 +2358,7 @@ void LL1Parser::build_multiplicative_expression()
 
   if (!left || !right || !opt)
   {
-    syntax_error("Error building MultiplicativeExpression node: invalid left or right or opreator child");
+    nodes.push_back(syntax_error("Error building MultiplicativeExpression node: invalid left or right or opreator child"));
     return;
   }
 
@@ -2384,12 +2395,12 @@ void LL1Parser::build_unary_expression()
       operand = dynamic_cast<Expression *>(secondNode);
       if (!dynamic_cast<AssignableExpression *>(secondNode))
       {
-        syntax_error("Error building UnaryExpression: invalid operand");
+        nodes.push_back(syntax_error("Error building UnaryExpression: invalid operand"));
         return;
       }
       if (!operand)
       {
-        syntax_error("Error building UnaryExpression: invalid operand");
+        nodes.push_back(syntax_error("Error building UnaryExpression: invalid operand"));
         return;
       }
 
@@ -2411,12 +2422,12 @@ void LL1Parser::build_unary_expression()
   op = opt->name;
   if (!dynamic_cast<AssignableExpression *>(firstNode) && (op == "++" || op == "--"))
   {
-    syntax_error("Error building UnaryExpression: invalid operand");
+    nodes.push_back(syntax_error("Error building UnaryExpression: invalid operand"));
     return;
   }
   if (!operand)
   {
-    syntax_error("Error building UnaryExpression: invalid operand");
+    nodes.push_back(syntax_error("Error building UnaryExpression: invalid operand"));
     return;
   }
 
@@ -2444,7 +2455,7 @@ void LL1Parser::build_call_function_expression()
     Expression *expr = dynamic_cast<Expression *>(node);
     if (!expr)
     {
-      syntax_error("Expected expression in write statement");
+      nodes.push_back(syntax_error("Expected expression in write statement"));
       delete exprList;
       return;
     }
@@ -2459,7 +2470,7 @@ void LL1Parser::build_call_function_expression()
 
   if (!id)
   {
-    syntax_error("Error building CallFunctionExpression: invalid Identifier");
+    nodes.push_back(syntax_error("Error building CallFunctionExpression: invalid Identifier"));
     return;
   }
 
@@ -2486,7 +2497,7 @@ void LL1Parser::build_index_expression()
 
   if (!base || !indexChain)
   {
-    syntax_error("Error building IndexExpression: invalid child nodes");
+    nodes.push_back(syntax_error("Error building IndexExpression: invalid child nodes"));
     return;
   }
 
@@ -2508,7 +2519,7 @@ void LL1Parser::build_identifier()
   Identifier *id = dynamic_cast<Identifier *>(idNode);
   if (!id)
   {
-    syntax_error("Error building Identifier node");
+    nodes.push_back(syntax_error("Error building Identifier node"));
     return;
   }
 
@@ -2523,7 +2534,7 @@ void LL1Parser::build_integer_literal()
   IntegerLiteral *intLit = dynamic_cast<IntegerLiteral *>(intNode);
   if (!intLit)
   {
-    syntax_error("Error building IntegerLiteral node");
+    nodes.push_back(syntax_error("Error building IntegerLiteral node"));
     return;
   }
 
@@ -2538,7 +2549,7 @@ void LL1Parser::build_float_literal()
   FloatLiteral *floatLit = dynamic_cast<FloatLiteral *>(floatNode);
   if (!floatLit)
   {
-    syntax_error("Error building FloatLiteral node");
+    nodes.push_back(syntax_error("Error building FloatLiteral node"));
     return;
   }
 
@@ -2553,7 +2564,7 @@ void LL1Parser::build_string_literal()
   StringLiteral *strLit = dynamic_cast<StringLiteral *>(strNode);
   if (!strLit)
   {
-    syntax_error("Error building StringLiteral node");
+    nodes.push_back(syntax_error("Error building StringLiteral node"));
     return;
   }
 
@@ -2568,7 +2579,7 @@ void LL1Parser::build_boolean_literal()
   BooleanLiteral *boolLit = dynamic_cast<BooleanLiteral *>(boolNode);
   if (!boolLit)
   {
-    syntax_error("Error building BooleanLiteral node");
+    nodes.push_back(syntax_error("Error building BooleanLiteral node"));
     return;
   }
 
@@ -2583,7 +2594,7 @@ void LL1Parser::build_array_literal()
   ArrayLiteral *arrLit = dynamic_cast<ArrayLiteral *>(arrayNode);
   if (!arrLit)
   {
-    syntax_error("Error building ArrayLiteral node");
+    nodes.push_back(syntax_error("Error building ArrayLiteral node"));
     return;
   }
 
@@ -2598,7 +2609,7 @@ void LL1Parser::build_function_list()
   Function *func = dynamic_cast<Function *>(funcNode);
   if (!func)
   {
-    syntax_error("Invalid function node");
+    nodes.push_back(syntax_error("Invalid function node"));
     return;
   }
 
@@ -2613,7 +2624,7 @@ void LL1Parser::build_declaration_seq()
   VariableDefinition *decl = dynamic_cast<VariableDefinition *>(declNode);
   if (!decl)
   {
-    syntax_error("Invalid declaration node");
+    nodes.push_back(syntax_error("Invalid declaration node"));
     return;
   }
 
@@ -2628,7 +2639,7 @@ void LL1Parser::build_command_seq()
   Statement *cmd = dynamic_cast<Statement *>(cmdNode);
   if (!cmd)
   {
-    syntax_error("Invalid command node");
+    nodes.push_back(syntax_error("Invalid command node"));
     return;
   }
 
@@ -2649,7 +2660,7 @@ ArrayLiteral *LL1Parser::build_array()
     Expression *expr = dynamic_cast<Expression *>(node);
     if (!expr)
     {
-      syntax_error("Expected expression in array literal");
+      nodes.push_back(syntax_error("Expected expression in array literal"));
       delete elements;
       return nullptr;
     }

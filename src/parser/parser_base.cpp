@@ -22,7 +22,7 @@ ErrorNode *ParserBase::syntax_error(string message)
     has_error = true;
   }
 
-  return nullptr;
+  return error_node;
 }
 
 bool ParserBase::lookahead(TokenType type)

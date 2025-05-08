@@ -1557,7 +1557,7 @@ Value *IRGenerator::generate_unary_expr(UnaryExpression *expr)
 
     Value *current = builder.CreateLoad(ty, addr, id->name);
     Value *one = ty->isIntegerTy() ? ConstantInt::get(ty, 1) : ConstantFP::get(ty, 1.0);
-    Value *result = (expr->optr == "++") ? (ty->isIntegerTy() ? builder.CreateAdd(current, one) : builder.CreateFAdd(current, one)) : (ty->isIntegerTy() ? builder.CreateSub(current, one) : builder.CreateFSub(current, one));
+    Value *result = (expr->optr == "++") ? (ty->isIntegerTy() ? builder.CreateAdd(current, one, "addtmp") : builder.CreateFAdd(current, one, "faddtmp")) : (ty->isIntegerTy() ? builder.CreateSub(current, one, "subtmp") : builder.CreateFSub(current, one, "fsubtmp"));
     builder.CreateStore(result, addr);
     return expr->postfix ? current : result;
   }

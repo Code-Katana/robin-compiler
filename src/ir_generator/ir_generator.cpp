@@ -1,5 +1,8 @@
 #include "ir_generator.h"
 
+#include "llvm/IR/DiagnosticPrinter.h"
+#include "llvm/Support/raw_ostream.h"
+
 LLVMContext IRGenerator::context;
 
 IRGenerator::IRGenerator(SemanticAnalyzer *semantic) : builder(context)
@@ -1397,56 +1400,153 @@ Value *IRGenerator::generate_unary_expr(UnaryExpression *expr)
     return nullptr;
   }
 
-  if (expr->optr == "#")
-  {
-
-    auto id = dynamic_cast<Identifier *>(expr->operand);
-    if (!id)
-    {
-      module->getContext().emitError("# operator requires an array variable");
+  if (expr->optr == "#") {
+    // 1) Figure out how many indices and the root identifier
+    int numIndices = 0;
+    Identifier *rootId = nullptr;
+    Expression *cur = expr->operand;
+    while (auto *ix = dynamic_cast<IndexExpression*>(cur)) {
+      numIndices++;
+      cur = ix->base;
+    }
+    rootId = dynamic_cast<Identifier*>(cur);
+    if (!rootId) {
+      module->getContext().emitError(
+        "# operator requires an identifier or index expression");
       return nullptr;
     }
-
-    auto entryOpt = findSymbol(id->name);
-    if (!entryOpt)
-    {
-      module->getContext().emitError("Undefined variable: " + id->name);
+  
+    // 2) Compute the slot‐address (l‐value)
+    Value *slotAddr = nullptr;
+    Type  *dummyTy = nullptr;
+    if (numIndices > 0) {
+      slotAddr = generate_index_expression(
+                   static_cast<IndexExpression*>(expr->operand),
+                   &dummyTy);
+    } else {
+      auto sym = findSymbol(rootId->name);
+      if (!sym) return nullptr;
+      slotAddr = sym->llvmValue;           // this is a ptr‐to‐pointer or ptr‐to‐data
+    }
+  
+    // 3) Load the _value_ from that slot address:
+    //    now dataPtr is a real "pointer to the first element"
+    //    of either the top‐level array or the nested sub‐array.
+    Value *dataPtr = nullptr;
+    if (numIndices > 0 ||                       // index case
+        dynamic_cast<IndexExpression*>(expr->operand)) {
+      // dummyTy already holds the element type after all indices,
+      // but what we really want is the next‐inner pointer type:
+      // i.e. for sym.dimensions > numIndices:
+      auto sym = *findSymbol(rootId->name);
+      int remDims = sym.dimensions - numIndices;
+      // The type of dataPtr is: getLLVMType(base, remDims)
+      Type *loadTy = getLLVMType(sym.baseType, remDims);
+      dataPtr = builder.CreateLoad(loadTy, slotAddr, "slot.load");
+    }
+    else {
+      // no indexing: slotAddr already was the loadable pointer
+      dataPtr = builder.CreateLoad(
+                  getLLVMType(findSymbol(rootId->name)->baseType,
+                               findSymbol(rootId->name)->dimensions),
+                  slotAddr,
+                  rootId->name + ".load");
+    }
+    if (!dataPtr) return nullptr;
+  
+    // 4) Lookup the original symbol for dimensions and baseType
+    auto sym = *findSymbol(rootId->name);
+    int declaredDims = sym.dimensions;
+    int remDims = declaredDims - numIndices;
+    if (remDims < 1) {
+      module->getContext().emitError(
+        "# applied to a non-array or too many indices");
       return nullptr;
     }
-
-    const SymbolEntry &entry = *entryOpt;
-
-    auto lenEntryOpt = findSymbol(id->name + "_len");
-    if (lenEntryOpt && lenEntryOpt->llvmValue)
-    {
-
-      Value *lengthVal = builder.CreateLoad(Type::getInt32Ty(context),
-                                            lenEntryOpt->llvmValue,
-                                            id->name + "_len");
-
-      if (!lengthVal->getType()->isIntegerTy(32))
-      {
-        lengthVal = builder.CreateIntCast(lengthVal, Type::getInt32Ty(context), false);
-      }
-
-      return lengthVal;
-    }
-
-    if (entry.arrayLength > 0)
-    {
-      return ConstantInt::get(Type::getInt32Ty(context), entry.arrayLength);
-    }
-
-    if (entry.llvmType->isArrayTy())
-    {
-      ArrayType *arrTy = cast<ArrayType>(entry.llvmType);
-      uint64_t size = arrTy->getNumElements();
-      return ConstantInt::get(Type::getInt32Ty(context), size);
-    }
-
-    module->getContext().emitError("Cannot determine array size for variable: " + id->name);
-    return ConstantInt::get(Type::getInt32Ty(context), 0);
+  
+    // 5) Figure out how big one slot was when allocated:
+    Type *slotElemTy = (remDims > 1)
+         ? getLLVMType(sym.baseType, remDims - 1)
+         : getLLVMType(sym.baseType, 0);
+    uint64_t slotSize = module
+        ->getDataLayout()
+        .getTypeAllocSize(slotElemTy);
+  
+    // 6) Back up by slotSize bytes from the actual data‐pointer:
+    auto *i8p = PointerType::getUnqual(Type::getInt8Ty(context));
+    Value *asI8 = builder.CreateBitCast(dataPtr, i8p, "hdr.cast");
+    Value *off   = ConstantInt::get(Type::getInt64Ty(context),
+                                    -int64_t(slotSize));
+    Value *hdr = builder.CreateInBoundsGEP(
+                   Type::getInt8Ty(context),
+                   asI8,
+                   off,
+                   "hdr.ptr");
+  
+    // 7) Cast to i32* and load the length
+    Value *lenPtr = builder.CreateBitCast(
+                       hdr,
+                       PointerType::getUnqual(Type::getInt32Ty(context)),
+                       "len.ptr");
+    return builder.CreateLoad(
+             Type::getInt32Ty(context),
+             lenPtr,
+             "len.load");
   }
+
+
+
+  
+  // if (expr->optr == "#")
+  // {
+
+  //   auto id = dynamic_cast<Identifier *>(expr->operand);
+  //   if (!id)
+  //   {
+  //     module->getContext().emitError("# operator requires an array variable");
+  //     return nullptr;
+  //   }
+
+  //   auto entryOpt = findSymbol(id->name);
+  //   if (!entryOpt)
+  //   {
+  //     module->getContext().emitError("Undefined variable: " + id->name);
+  //     return nullptr;
+  //   }
+
+  //   const SymbolEntry &entry = *entryOpt;
+
+  //   auto lenEntryOpt = findSymbol(id->name + "_len");
+  //   if (lenEntryOpt && lenEntryOpt->llvmValue)
+  //   {
+
+  //     Value *lengthVal = builder.CreateLoad(Type::getInt32Ty(context),
+  //                                           lenEntryOpt->llvmValue,
+  //                                           id->name + "_len");
+
+  //     if (!lengthVal->getType()->isIntegerTy(32))
+  //     {
+  //       lengthVal = builder.CreateIntCast(lengthVal, Type::getInt32Ty(context), false);
+  //     }
+
+  //     return lengthVal;
+  //   }
+
+  //   if (entry.arrayLength > 0)
+  //   {
+  //     return ConstantInt::get(Type::getInt32Ty(context), entry.arrayLength);
+  //   }
+
+  //   if (entry.llvmType->isArrayTy())
+  //   {
+  //     ArrayType *arrTy = cast<ArrayType>(entry.llvmType);
+  //     uint64_t size = arrTy->getNumElements();
+  //     return ConstantInt::get(Type::getInt32Ty(context), size);
+  //   }
+
+  //   module->getContext().emitError("Cannot determine array size for variable: " + id->name);
+  //   return ConstantInt::get(Type::getInt32Ty(context), 0);
+  // }
 
   if (expr->optr == "++" || expr->optr == "--")
   {
@@ -1816,29 +1916,28 @@ Value *IRGenerator::createJaggedArray(ArrayLiteral *lit, Function *mallocFn,
 
   return createJaggedArrayHelper(lit, mallocFn, totalDimensions, elementType);
 }
-Constant *IRGenerator::createNestedArray(ArrayLiteral *lit, ArrayType *arrType)
-{
-  std::vector<Constant *> elements;
-  if (!arrType)
-    arrType = inferArrayType(lit);
+Constant* IRGenerator::createNestedArray(ArrayLiteral *lit,
+  ArrayType     *arrType) {
+std::vector<Constant*> elems;
+if (!arrType)
+arrType = inferArrayType(lit);
 
-  Type *elementType = arrType->getElementType();
-
-  for (auto elem : lit->elements)
-  {
-    if (auto sub = dynamic_cast<ArrayLiteral *>(elem))
-    {
-      ArrayType *subArrType = cast<ArrayType>(elementType);
-      elements.push_back(createNestedArray(sub, subArrType));
-    }
-    else
-    {
-      Constant *c = cast<Constant>(generate_node(elem));
-      elements.push_back(c);
-    }
-  }
-
-  return ConstantArray::get(arrType, elements);
+Type *eltType = arrType->getElementType();
+for (auto *e : lit->elements) {
+if (auto *subLit = dynamic_cast<ArrayLiteral*>(e)) {
+// nested literal → recursive call
+auto *subArrTy = cast<ArrayType>(eltType);
+elems.push_back(createNestedArray(subLit, subArrTy));
+}
+else {
+// leaf literal → must be an LLVM Constant
+auto *val = generate_node(e);
+auto *c   = dyn_cast<Constant>(val);
+assert(c && "expected a Constant for nested array literal");
+elems.push_back(c);
+}
+}
+return ConstantArray::get(arrType, elems);
 }
 
 ArrayType *IRGenerator::inferArrayType(ArrayLiteral *lit)
@@ -2012,59 +2111,82 @@ Value *IRGenerator::generate_l_value(Expression *expr)
   return nullptr;
 }
 
-Value *IRGenerator::createJaggedArrayHelper(ArrayLiteral *lit, Function *mallocFn,
-                                            int remainingDims, Type *elementType)
+Value* IRGenerator::createJaggedArrayHelper(ArrayLiteral *lit,
+  Function    *mallocFn,
+  int          remainingDims,
+  Type        *elementType) {
+// 1) how many elements in this literal
+uint64_t count = lit->elements.size();
+
+// 2) decide each slot’s LLVM type
+//    - if >1 dims remain, each slot holds a pointer to the next level
+//    - else each slot holds a raw elementType
+Type *slotTy = (remainingDims > 1)
+? PointerType::getUnqual(elementType)
+: elementType;
+
+// 3) get slot-size from the module’s layout
+auto &DL = module->getDataLayout();
+uint64_t slotSize = DL.getTypeAllocSize(slotTy);
+
+// 4) malloc (count+1)*slotSize bytes
+Value *allocBytes = ConstantInt::get(
+Type::getInt64Ty(context),
+slotSize * (count + 1));
+Value *raw = builder.CreateCall(mallocFn, {allocBytes}, "raw.mem");
+
+// 5) store the header (the length) into slot[0]
 {
-  DataLayout dl = module->getDataLayout();
+Value *hdrPtr = builder.CreateBitCast(
+raw,
+PointerType::getUnqual(Type::getInt32Ty(context)),
+"hdr.ptr");
+builder.CreateStore(
+ConstantInt::get(Type::getInt32Ty(context), count),
+hdrPtr);
+}
 
-  if (remainingDims == 1)
-  {
-    size_t elementCount = lit->elements.size();
-    Value *allocSize = ConstantInt::get(Type::getInt64Ty(context),
-                                        dl.getTypeAllocSize(elementType) * elementCount);
+// 6) compute dataStart = raw + slotSize
+Value *dataStart = builder.CreateInBoundsGEP(
+Type::getInt8Ty(context),
+builder.CreateBitCast(raw,
+PointerType::getUnqual(Type::getInt8Ty(context)),
+"raw.i8"),
+ConstantInt::get(Type::getInt64Ty(context), slotSize),
+"data.start");
 
-    Value *buffer = builder.CreateCall(mallocFn, {allocSize}, "contiguous.array");
-    buffer = builder.CreateBitCast(buffer, PointerType::getUnqual(elementType));
+// 7) cast dataStart back to slotTy*
+Value *arrayPtr = builder.CreateBitCast(
+dataStart,
+PointerType::getUnqual(slotTy),
+"arr.ptr");
 
-    for (size_t i = 0; i < elementCount; ++i)
-    {
-      Value *elementPtr = builder.CreateInBoundsGEP(elementType, buffer,
-                                                    ConstantInt::get(Type::getInt32Ty(context), i));
-      Value *val = generate_node(lit->elements[i]);
-      builder.CreateStore(val, elementPtr);
-    }
-    return buffer;
-  }
+// 8) fill slots [0..count-1] with either leaf values or sub-arrays
+for (unsigned i = 0; i < count; ++i) {
+// element address = arr.ptr + i
+Value *eltAddr = builder.CreateInBoundsGEP(
+slotTy,
+arrayPtr,
+ConstantInt::get(Type::getInt32Ty(context), i),
+"elt.addr");
 
-  const size_t ptrSize = dl.getPointerSize();
-  Value *allocSize = ConstantInt::get(Type::getInt64Ty(context),
-                                      lit->elements.size() * ptrSize);
+if (remainingDims == 1) {
+// leaf: store the value of the expression
+Value *v = generate_node(lit->elements[i]);
+builder.CreateStore(v, eltAddr);
+} else {
+// nested: recurse one dimension down
+auto *subLit = dynamic_cast<ArrayLiteral*>(lit->elements[i]);
+assert(subLit && "Expected ArrayLiteral here");
+Value *subArr = createJaggedArrayHelper(
+subLit, mallocFn,
+remainingDims - 1,
+elementType);
+builder.CreateStore(subArr, eltAddr);
+}
+}
 
-  Value *rawMem = builder.CreateCall(mallocFn, {allocSize}, "malloc.array");
-  Value *ptrArray = builder.CreateBitCast(rawMem,
-                                          PointerType::getUnqual(PointerType::getUnqual(elementType)),
-                                          "ptr.array");
-
-  for (size_t i = 0; i < lit->elements.size(); ++i)
-  {
-    Value *elementPtr = builder.CreateInBoundsGEP(
-        PointerType::getUnqual(elementType),
-        ptrArray,
-        ConstantInt::get(Type::getInt32Ty(context), i),
-        "element.ptr");
-
-    auto subLit = dynamic_cast<ArrayLiteral *>(lit->elements[i]);
-    if (!subLit)
-    {
-      module->getContext().emitError("Invalid jagged array structure");
-      return nullptr;
-    }
-
-    Value *subArray = createJaggedArrayHelper(subLit, mallocFn,
-                                              remainingDims - 1, elementType);
-    builder.CreateStore(subArray, elementPtr);
-  }
-  return ptrArray;
+return arrayPtr;
 }
 
 bool IRGenerator::isSingleDimensionArray(const SymbolEntry &entry)

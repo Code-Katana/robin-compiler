@@ -48,6 +48,7 @@ int Debugger::run()
     rc->typecheck();
   }
   rc->generate_ir(output_file);
+  
   system("pause");
   return 0;
 }

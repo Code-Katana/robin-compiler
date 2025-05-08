@@ -5,12 +5,13 @@ LLVMContext IRGenerator::context;
 IRGenerator::IRGenerator(SemanticAnalyzer *semantic) : builder(context)
 {
   source = semantic->analyze();
-  module = make_unique<Module>("main_module", context);
+  module = make_unique<Module>(source->program->program_name->name + "_module", context);
   pushScope();
 }
 
 Type *IRGenerator::getLLVMType(SymbolType type, int dim)
 {
+  // 1) map SymbolType to a primitive LLVM type
   Type *baseType = nullptr;
   switch (type)
   {
@@ -34,11 +35,13 @@ Type *IRGenerator::getLLVMType(SymbolType type, int dim)
     break;
   }
 
-  for (int i = 0; i < dim; i++)
-  {
-    baseType = PointerType::getUnqual(baseType);
-  }
-  return baseType;
+  // 2) if no array dimension, just return the primitive
+  if (dim == 0)
+    return baseType;
+
+  // 3) otherwise return a pointer to the N-dimensional array struct
+  StructType *arrStruct = getOrCreateArrayStruct(baseType, dim, "array");
+  return PointerType::getUnqual(arrStruct);
 }
 
 void IRGenerator::generate(const string &filename)
@@ -98,51 +101,6 @@ Value *IRGenerator::generate_program(ProgramDefinition *program)
 
   for (auto stmt : program->body)
   {
-    if (auto assign = dynamic_cast<AssignmentExpression *>(stmt))
-    {
-      if (auto arrayLit = dynamic_cast<ArrayLiteral *>(assign->value))
-      {
-        Function *mallocFn = declareMalloc();
-        SymbolType baseType;
-        int dimensions;
-
-        Value *array = createJaggedArray(arrayLit, mallocFn, &baseType, &dimensions);
-
-        if (auto id = dynamic_cast<Identifier *>(assign->assignee))
-        {
-          Value *target = generate_identifier_address(id);
-          builder.CreateStore(array, target);
-
-          auto entry = findSymbol(id->name);
-          if (entry)
-          {
-            size_t arraySize = arrayLit->elements.size();
-
-            auto lenEntry = findSymbol(id->name + "_len");
-            if (lenEntry && lenEntry->llvmValue)
-            {
-              builder.CreateStore(
-                  builder.getInt32(arraySize),
-                  lenEntry->llvmValue);
-
-              symbolTable.top()[id->name] = {
-                  entry->llvmType,
-                  entry->llvmValue,
-                  baseType,
-                  dimensions,
-                  arraySize,
-                  lenEntry->llvmValue};
-            }
-          }
-        }
-        else
-        {
-          Value *target = generate_l_value(assign->assignee);
-          builder.CreateStore(array, target);
-        }
-        continue;
-      }
-    }
     generate_node(stmt);
   }
 
@@ -675,218 +633,189 @@ Value *IRGenerator::generate_variable_definition(VariableDefinition *def)
   return nullptr;
 }
 
-void IRGenerator::generate_global_variable(VariableDefinition *dif)
+void IRGenerator::generate_global_variable(VariableDefinition *def)
 {
-  if (auto varDecl = dynamic_cast<VariableDeclaration *>(dif->def))
+  if (!def || !def->def)
+  {
+    module->getContext().emitError("Invalid global variable definition");
+    return;
+  }
+
+  // --- Case A: Declaration only ---
+  if (auto *varDecl = dynamic_cast<VariableDeclaration *>(def->def))
   {
     SymbolType baseType = Symbol::get_datatype(varDecl->datatype);
-    int dimensions = Symbol::get_dimension(varDecl->datatype);
-    Type *ty = getLLVMType(baseType, dimensions);
+    int dims = Symbol::get_dimension(varDecl->datatype);
+    Type *llvmType = getLLVMType(baseType, dims);
 
-    Constant *init = Constant::getNullValue(ty);
-
-    for (auto var : varDecl->variables)
+    for (auto *var : varDecl->variables)
     {
-      std::string name = var->name;
+      const std::string &name = var->name;
 
-      GlobalVariable *gVar = new GlobalVariable(
+      if (dims == 0)
+      {
+        // Scalar: zero-initialize with default value
+        Constant *init = Constant::getNullValue(llvmType);
+        auto *gVar = new GlobalVariable(
+            *module,
+            llvmType,
+            /*isConstant=*/false,
+            GlobalValue::ExternalLinkage,
+            init,
+            name);
+
+        symbolTable.top()[name] = {
+            llvmType, gVar, baseType, dims, 0, nullptr};
+      }
+      else
+      {
+        // Array: allocate and zero-init a struct { data, length }
+        Type *elemType = getLLVMType(baseType, 0);
+        StructType *arrayStruct = getOrCreateArrayStruct(elemType, dims, "array");
+        Constant *zeroStruct = Constant::getNullValue(arrayStruct);
+
+        auto *gVar = new GlobalVariable(
+            *module,
+            arrayStruct,
+            /*isConstant=*/false,
+            GlobalValue::ExternalLinkage,
+            zeroStruct,
+            name);
+
+        symbolTable.top()[name] = {
+            PointerType::getUnqual(arrayStruct), gVar, baseType, dims, 0, nullptr};
+      }
+    }
+    return;
+  }
+
+  // --- Case B: Declaration with initializer ---
+  if (auto *varInit = dynamic_cast<VariableInitialization *>(def->def))
+  {
+    SymbolType baseType = Symbol::get_datatype(varInit->datatype);
+    int dims = Symbol::get_dimension(varInit->datatype);
+    const std::string &name = varInit->name->name;
+
+    if (dims == 0)
+    {
+      // Scalar initializer — try to evaluate as constant
+      Type *ty = getLLVMType(baseType, 0);
+      Constant *init = nullptr;
+
+      if (auto *lit = dynamic_cast<Literal *>(varInit->initializer))
+        init = dyn_cast<Constant>(generate_node(lit));
+
+      if (!init)
+        init = Constant::getNullValue(ty); // fallback
+
+      auto *gVar = new GlobalVariable(
           *module,
           ty,
-          false,
+          /*isConstant=*/false,
           GlobalValue::ExternalLinkage,
           init,
           name);
 
-      symbolTable.top()[name] = {
-          ty,
-          gVar,
-          baseType,
-          dimensions,
-          0,
-          nullptr};
-
-      if (dimensions > 0)
-      {
-        GlobalVariable *lengthGlobal = new GlobalVariable(
-            *module,
-            Type::getInt32Ty(context),
-            false,
-            GlobalValue::ExternalLinkage,
-            ConstantInt::get(Type::getInt32Ty(context), 0),
-            name + "_len");
-
-        symbolTable.top()[name + "_len"] = {
-            Type::getInt32Ty(context),
-            lengthGlobal,
-            SymbolType::Integer,
-            0,
-            0,
-            nullptr};
-      }
-    }
-  }
-  else if (auto varInit = dynamic_cast<VariableInitialization *>(dif->def))
-  {
-    SymbolType baseType = Symbol::get_datatype(varInit->datatype);
-    int dimensions = Symbol::get_dimension(varInit->datatype);
-    Type *ty = getLLVMType(baseType, dimensions);
-    std::string name = varInit->name->name;
-
-    Constant *init = nullptr;
-    size_t arrayLength = 0;
-
-    if (auto arrayLit = dynamic_cast<ArrayLiteral *>(varInit->initializer))
-    {
-      if (dimensions == 1 && isUniformArray(arrayLit))
-      {
-        std::vector<Constant *> elements;
-        Type *elementType = getLLVMType(baseType, 0);
-
-        for (auto elem : arrayLit->elements)
-        {
-          elements.push_back(cast<Constant>(generate_node(elem)));
-        }
-
-        ArrayType *arrType = ArrayType::get(elementType, elements.size());
-        init = ConstantArray::get(arrType, elements);
-        ty = arrType;
-        arrayLength = elements.size();
-      }
-      else
-      {
-        ty = getLLVMType(baseType, dimensions);
-        init = ConstantPointerNull::get(cast<PointerType>(ty));
-        arrayLength = arrayLit->elements.size();
-      }
+      symbolTable.top()[name] = {ty, gVar, baseType, 0, 0, nullptr};
     }
     else
     {
-      Value *initVal = generate_expression(varInit->initializer);
-      init = dyn_cast<Constant>(initVal);
-      if (!init)
-      {
-        init = Constant::getNullValue(ty);
-      }
-    }
+      // Arrays: currently always zero-initialized
+      Type *elemType = getLLVMType(baseType, 0);
+      StructType *arrayStruct = getOrCreateArrayStruct(elemType, dims, "array");
+      Constant *zeroStruct = Constant::getNullValue(arrayStruct);
 
-    GlobalVariable *gVar = new GlobalVariable(
-        *module, ty, false, GlobalValue::ExternalLinkage, init, name);
-
-    symbolTable.top()[name] = {
-        ty,
-        gVar,
-        baseType,
-        dimensions,
-        arrayLength,
-        nullptr};
-
-    if (dimensions > 0)
-    {
-      GlobalVariable *lengthGlobal = new GlobalVariable(
+      auto *gVar = new GlobalVariable(
           *module,
-          Type::getInt32Ty(context),
-          false,
+          arrayStruct,
+          /*isConstant=*/false,
           GlobalValue::ExternalLinkage,
-          ConstantInt::get(Type::getInt32Ty(context), arrayLength),
-          name + "_len");
+          zeroStruct,
+          name);
 
-      symbolTable.top()[name + "_len"] = {
-          Type::getInt32Ty(context),
-          lengthGlobal,
-          SymbolType::Integer,
-          0,
-          0,
-          nullptr};
+      symbolTable.top()[name] = {
+          PointerType::getUnqual(arrayStruct), gVar, baseType, dims, 0, nullptr};
     }
+    return;
   }
-  else
-  {
-    module->getContext().emitError("Unknown variable definition type");
-  }
+
+  // --- Fallback: unrecognized global form ---
+  module->getContext().emitError("Unknown global-variable form");
 }
 
 Value *IRGenerator::generate_variable_initialization(VariableInitialization *init)
 {
   SymbolType baseType = Symbol::get_datatype(init->datatype);
   int dimensions = Symbol::get_dimension(init->datatype);
-  Type *ty = getLLVMType(baseType, dimensions);
-  std::string varName = init->name->name;
+  const std::string varName = init->name->name;
 
-  AllocaInst *alloca = builder.CreateAlloca(ty, nullptr, varName);
-  AllocaInst *lengthAlloca = nullptr;
-  size_t arraySize = 0;
-
+  // ARRAY case: build & fill the ArrayN struct via your helper
   if (dimensions > 0)
   {
-    lengthAlloca = builder.CreateAlloca(Type::getInt32Ty(context), nullptr, varName + "_len");
-  }
-
-  if (auto arrayLit = dynamic_cast<ArrayLiteral *>(init->initializer))
-  {
-    SymbolType actualBaseType;
-    int actualDimensions;
-    arraySize = arrayLit->elements.size();
-
-    Value *jagged = createJaggedArray(arrayLit, declareMalloc(), &actualBaseType, &actualDimensions);
-
-    if (actualBaseType != baseType || actualDimensions != dimensions)
+    auto *lit = dynamic_cast<ArrayLiteral *>(init->initializer);
+    if (!lit)
     {
-      module->getContext().emitError("Array literal type doesn't match declaration");
+      module->getContext().emitError(
+          "Array initializer expected for " + varName);
       return nullptr;
     }
 
-    builder.CreateStore(jagged, alloca);
+    SymbolType actualBase;
+    int actualDim;
+    // this returns an AllocaInst* of ArrayN on the stack
+    Value *arrAlloca =
+        createJaggedArrayStruct(lit,
+                                declareMalloc(),
+                                &actualBase,
+                                &actualDim);
 
-    if (lengthAlloca)
+    // sanity check
+    if (!arrAlloca ||
+        actualBase != baseType ||
+        actualDim != dimensions)
     {
-      builder.CreateStore(builder.getInt32(arraySize), lengthAlloca);
+      module->getContext().emitError(
+          "Array literal mismatch for " + varName);
+      return nullptr;
     }
+
+    // register in symbol‐table
+    StructType *arrStruct =
+        getOrCreateArrayStruct(getLLVMType(baseType, 0),
+                               dimensions,
+                               "array");
+    PointerType *arrPtrTy = PointerType::getUnqual(arrStruct);
 
     symbolTable.top()[varName] = {
-        ty, alloca, baseType, dimensions, arraySize, lengthAlloca};
-
-    if (lengthAlloca)
-    {
-      symbolTable.top()[varName + "_len"] = {
-          Type::getInt32Ty(context), lengthAlloca, SymbolType::Integer, 0, 0, nullptr};
-    }
+        /* llvmType    */ arrPtrTy,
+        /* llvmValue   */ arrAlloca,
+        /* baseType    */ baseType,
+        /* dimensions  */ dimensions,
+        /* arrayLength */ lit->elements.size(),
+        /* lengthAlloca*/ nullptr};
+    return arrAlloca;
   }
-  else if (init->initializer)
+
+  // SCALAR case: same as before
+  Type *ty = getLLVMType(baseType, dimensions);
+  AllocaInst *alloca =
+      builder.CreateAlloca(ty, nullptr, varName);
+
+  if (init->initializer)
   {
-    Value *initVal = generate_node(init->initializer);
-    builder.CreateStore(initVal, alloca);
-
-    if (lengthAlloca)
-    {
-      builder.CreateStore(builder.getInt32(0), lengthAlloca);
-    }
-
-    symbolTable.top()[varName] = {
-        ty, alloca, baseType, dimensions, arraySize, lengthAlloca};
-
-    if (lengthAlloca)
-    {
-      symbolTable.top()[varName + "_len"] = {
-          Type::getInt32Ty(context), lengthAlloca, SymbolType::Integer, 0, 0, nullptr};
-    }
+    Value *val = generate_node(init->initializer);
+    builder.CreateStore(val, alloca);
   }
   else
   {
-    if (lengthAlloca)
-    {
-      builder.CreateStore(builder.getInt32(0), lengthAlloca);
-    }
-
-    symbolTable.top()[varName] = {
-        ty, alloca, baseType, dimensions, arraySize, lengthAlloca};
-
-    if (lengthAlloca)
-    {
-      symbolTable.top()[varName + "_len"] = {
-          Type::getInt32Ty(context), lengthAlloca, SymbolType::Integer, 0, 0, nullptr};
-    }
+    // default‐zero
+    builder.CreateStore(
+        Constant::getNullValue(ty),
+        alloca);
   }
 
+  symbolTable.top()[varName] = {
+      ty, alloca, baseType, dimensions, 0, nullptr};
   return alloca;
 }
 
@@ -894,12 +823,63 @@ Value *IRGenerator::generate_variable_declaration(VariableDeclaration *decl)
 {
   SymbolType baseType = Symbol::get_datatype(decl->datatype);
   int dimensions = Symbol::get_dimension(decl->datatype);
-  Type *ty = getLLVMType(baseType, dimensions);
 
-  for (auto var : decl->variables)
+  // ARRAY case: emit "struct ArrayN { T* data; i32 length; }" on the stack
+  if (dimensions > 0)
   {
-    AllocaInst *alloca = builder.CreateAlloca(ty, nullptr, var->name);
-    symbolTable.top()[var->name] = {ty, alloca, baseType, dimensions};
+    // element‐type = baseType @ dim=0
+    Type *elementTy = getLLVMType(baseType, /*dim*/ 0);
+    // get-or-create the ArrayN struct
+    StructType *arrStruct =
+        getOrCreateArrayStruct(elementTy, dimensions, "array");
+    PointerType *arrPtrTy = PointerType::getUnqual(arrStruct);
+
+    for (auto *var : decl->variables)
+    {
+      const std::string &name = var->name;
+      // allocate the ArrayN struct on the stack
+      AllocaInst *all = builder.CreateAlloca(arrStruct, nullptr, name);
+
+      // zero‐init .data (field 0)
+      Value *dataGEP =
+          builder.CreateStructGEP(arrStruct, all, 0, name + ".data_gep");
+      // pointer‐type of the .data field:
+      Type *dataFieldTy =
+          (dimensions == 1)
+              ? elementTy->getPointerTo()
+              : getOrCreateArrayStruct(elementTy, dimensions - 1, "array")
+                    ->getPointerTo();
+      builder.CreateStore(
+          ConstantPointerNull::get(cast<PointerType>(dataFieldTy)),
+          dataGEP);
+
+      // zero‐init .length (field 1)
+      Value *lenGEP =
+          builder.CreateStructGEP(arrStruct, all, 1, name + ".len_gep");
+      builder.CreateStore(
+          builder.getInt32(0),
+          lenGEP);
+
+      // register in symbol‐table
+      symbolTable.top()[name] = {
+          /* llvmType    */ arrPtrTy,
+          /* llvmValue   */ all,
+          /* baseType    */ baseType,
+          /* dimensions  */ dimensions,
+          /* arrayLength */ 0,
+          /* lengthAlloca*/ nullptr};
+    }
+    return nullptr;
+  }
+
+  // SCALAR case: unchanged
+  Type *ty = getLLVMType(baseType, dimensions);
+  for (auto *var : decl->variables)
+  {
+    AllocaInst *alloca =
+        builder.CreateAlloca(ty, nullptr, var->name);
+    symbolTable.top()[var->name] = {
+        ty, alloca, baseType, dimensions, 0, nullptr};
   }
   return nullptr;
 }
@@ -908,11 +888,10 @@ Value *IRGenerator::generate_expression(Expression *expr)
 {
   if (auto index = dynamic_cast<IndexExpression *>(expr))
   {
-    Type *elementType = nullptr;
-    Value *gep = generate_index_expression(index, &elementType);
-    return builder.CreateLoad(elementType, gep, "loadidx");
+    Type *elemTy = nullptr;
+    Value *addr = generate_index_expression(index, &elemTy);
+    return builder.CreateLoad(elemTy, addr, "loadidx");
   }
-
   if (auto decl = dynamic_cast<VariableDefinition *>(expr))
     return generate_variable_definition(decl);
 
@@ -953,61 +932,78 @@ Value *IRGenerator::generate_expression(Expression *expr)
 
 Value *IRGenerator::generate_assignment(AssignmentExpression *assign)
 {
-  Value *target = generate_l_value(assign->assignee);
-  Value *value = generate_expression(assign->value);
-
-  if (!target || !value)
+  // 1) Get the address of the LHS and the RHS value
+  Value *lhsAddr = generate_l_value(assign->assignee);
+  Value *rhsVal = generate_expression(assign->value);
+  if (!lhsAddr || !rhsVal)
     return nullptr;
 
-  std::string varName;
-  if (auto id = dynamic_cast<Identifier *>(assign->assignee))
+  // 2) If LHS is a top-level identifier, check if it's an array
+  if (auto *id = dynamic_cast<Identifier *>(assign->assignee))
   {
-    varName = id->name;
-  }
-  else if (auto index = dynamic_cast<IndexExpression *>(assign->assignee))
-  {
-
-    builder.CreateStore(value, target);
-    return target;
-  }
-
-  if (value->getType()->isPointerTy() && !varName.empty())
-  {
-
-    builder.CreateStore(value, target);
-
-    size_t arraySize = 0;
-
-    if (auto arrayLit = dynamic_cast<ArrayLiteral *>(assign->value))
+    auto entryOpt = findSymbol(id->name);
+    if (entryOpt)
     {
-      arraySize = arrayLit->elements.size();
+      SymbolEntry entry = *entryOpt;
 
-      auto lenEntry = findSymbol(varName + "_len");
-      if (lenEntry && lenEntry->llvmValue)
+      // 2a) ARRAY case
+      if (entry.dimensions > 0)
       {
-        builder.CreateStore(
-            builder.getInt32(arraySize),
-            lenEntry->llvmValue);
+        // reconstruct your ArrayN struct type
+        Type *eltTy = getLLVMType(entry.baseType, /*dim=*/0);
+        StructType *arrStruct =
+            getOrCreateArrayStruct(eltTy, entry.dimensions, "array");
 
-        auto varEntry = findSymbol(varName);
-        if (varEntry)
-        {
+        // --- unpack RHS struct fields ---
+        Value *rhsStructPtr = rhsVal; // this is ArrayN*
+        // .data
+        Value *rhsDataGEP = builder.CreateStructGEP(
+            arrStruct, rhsStructPtr,
+            /*fieldNo=*/0,
+            id->name + ".rhs.data.gep");
+        Type *dataFieldTy = arrStruct->getElementType(0);
+        Value *rhsData = builder.CreateLoad(
+            dataFieldTy,
+            rhsDataGEP,
+            id->name + ".rhs.data");
+        // .length
+        Value *rhsLenGEP = builder.CreateStructGEP(
+            arrStruct, rhsStructPtr,
+            /*fieldNo=*/1,
+            id->name + ".rhs.len.gep");
+        Type *lenFieldTy = arrStruct->getElementType(1);
+        Value *rhsLen = builder.CreateLoad(
+            lenFieldTy,
+            rhsLenGEP,
+            id->name + ".rhs.len");
 
-          symbolTable.top()[varName] = {
-              varEntry->llvmType,
-              varEntry->llvmValue,
-              varEntry->baseType,
-              varEntry->dimensions,
-              arraySize,
-              lenEntry->llvmValue};
-        }
+        // --- overwrite LHS struct fields in place ---
+        Value *lhsStructPtr = entry.llvmValue; // this is the AllocaInst* from decl/init
+        // store .data
+        Value *lhsDataGEP = builder.CreateStructGEP(
+            arrStruct, lhsStructPtr,
+            /*fieldNo=*/0,
+            id->name + ".data.gep");
+        builder.CreateStore(rhsData, lhsDataGEP);
+        // store .length
+        Value *lhsLenGEP = builder.CreateStructGEP(
+            arrStruct, lhsStructPtr,
+            /*fieldNo=*/1,
+            id->name + ".len.gep");
+        builder.CreateStore(rhsLen, lhsLenGEP);
+
+        // update in-memory arrayLength if you like
+        if (auto *CI = dyn_cast<ConstantInt>(rhsLen))
+          symbolTable.top()[id->name].arrayLength = CI->getZExtValue();
+
+        return lhsAddr;
       }
     }
-    return target;
   }
 
-  builder.CreateStore(value, target);
-  return target;
+  // 2b) indexed or scalar: just a normal store
+  builder.CreateStore(rhsVal, lhsAddr);
+  return lhsAddr;
 }
 
 Value *IRGenerator::generate_identifier(Identifier *id)
@@ -1399,53 +1395,101 @@ Value *IRGenerator::generate_unary_expr(UnaryExpression *expr)
 
   if (expr->optr == "#")
   {
+    Value *arrStructPtr = nullptr;
+    SymbolEntry info;
 
-    auto id = dynamic_cast<Identifier *>(expr->operand);
-    if (!id)
+    // 1) Determine if we're doing #arr or #arr[i]
+    if (auto *id = dynamic_cast<Identifier *>(expr->operand))
     {
-      module->getContext().emitError("# operator requires an array variable");
-      return nullptr;
-    }
-
-    auto entryOpt = findSymbol(id->name);
-    if (!entryOpt)
-    {
-      module->getContext().emitError("Undefined variable: " + id->name);
-      return nullptr;
-    }
-
-    const SymbolEntry &entry = *entryOpt;
-
-    auto lenEntryOpt = findSymbol(id->name + "_len");
-    if (lenEntryOpt && lenEntryOpt->llvmValue)
-    {
-
-      Value *lengthVal = builder.CreateLoad(Type::getInt32Ty(context),
-                                            lenEntryOpt->llvmValue,
-                                            id->name + "_len");
-
-      if (!lengthVal->getType()->isIntegerTy(32))
+      // #arr
+      auto entryOpt = findSymbol(id->name);
+      if (!entryOpt)
       {
-        lengthVal = builder.CreateIntCast(lengthVal, Type::getInt32Ty(context), false);
+        module->getContext().emitError("Undefined variable: " + id->name);
+        return nullptr;
       }
+      info = *entryOpt;
 
-      return lengthVal;
+      // load the ArrayN* from its alloca
+      arrStructPtr = builder.CreateLoad(
+          info.llvmType,  // should be ArrayN*
+          info.llvmValue, // the alloca of type ArrayN*
+          id->name + ".struct.load");
     }
-
-    if (entry.arrayLength > 0)
+    else if (auto *ix = dynamic_cast<IndexExpression *>(expr->operand))
     {
-      return ConstantInt::get(Type::getInt32Ty(context), entry.arrayLength);
-    }
+      // #arr[i]  → we want the sub‐array struct, not the element
+      // First find the root identifier and how many inds
+      int count = 0;
+      Expression *cur = ix;
+      while (auto *sub = dynamic_cast<IndexExpression *>(cur))
+      {
+        count++;
+        cur = sub->base;
+      }
+      auto *rootId = dynamic_cast<Identifier *>(cur);
+      if (!rootId)
+      {
+        module->getContext().emitError(
+            "# operator requires arr or arr[i]...");
+        return nullptr;
+      }
+      auto entryOpt = findSymbol(rootId->name);
+      if (!entryOpt)
+      {
+        module->getContext().emitError("Undefined variable: " + rootId->name);
+        return nullptr;
+      }
+      info = *entryOpt;
 
-    if (entry.llvmType->isArrayTy())
+      // We need a little helper that returns the address of the sub‐array struct:
+      //   e.g. from ArrayN* data pointer to Array(N−1)* alloca
+      // Let’s write it inline here:
+
+      //  a) generate the raw element GEP + load chain for sub‐array
+      Type *dummyTy = nullptr;
+      // This returns the *address* of the sub‐array or element slot
+      Value *gepAddr = generate_index_expression(ix, &dummyTy);
+
+      //  b) since there are still sub‐arrays left (count < dims), this gepAddr
+      //     is actually a pointer to a Array(N-count)*, not to a scalar.
+      //     So we can treat gepAddr itself as our struct pointer:
+      arrStructPtr = gepAddr;
+      //  c) adjust the dimensions for our struct type below:
+      info.dimensions = info.dimensions - count;
+    }
+    else
     {
-      ArrayType *arrTy = cast<ArrayType>(entry.llvmType);
-      uint64_t size = arrTy->getNumElements();
-      return ConstantInt::get(Type::getInt32Ty(context), size);
+      module->getContext().emitError("# operator requires variable or indexed array");
+      return nullptr;
     }
 
-    module->getContext().emitError("Cannot determine array size for variable: " + id->name);
-    return ConstantInt::get(Type::getInt32Ty(context), 0);
+    // At this point arrStructPtr is an ArrayM* (for M>=1)
+    if (info.dimensions < 1)
+    {
+      module->getContext().emitError("# operator on non-array");
+      return nullptr;
+    }
+
+    // 2) Reconstruct the ArrayM struct type
+    Type *elt0Ty = getLLVMType(info.baseType, /*dim*/ 0);
+    StructType *arrSt = getOrCreateArrayStruct(elt0Ty, info.dimensions, "array");
+
+    // 3) GEP into the .length field and load it
+    Value *lenGEP = builder.CreateStructGEP(
+        arrSt,
+        arrStructPtr,
+        /*fieldNo=*/1,
+        "arr.len.gep");
+    Value *lenVal = builder.CreateLoad(
+        arrSt->getElementType(1), // i32
+        lenGEP,
+        "arr.len");
+    // final result
+    return builder.CreateIntCast(lenVal,
+                                 Type::getInt32Ty(context),
+                                 /*isSigned=*/false,
+                                 "len32");
   }
 
   if (expr->optr == "++" || expr->optr == "--")
@@ -1619,248 +1663,139 @@ Value *IRGenerator::generate_call(CallFunctionExpression *call)
 
 Value *IRGenerator::generate_index_expression(IndexExpression *expr, Type **outElementType)
 {
-  std::vector<Value *> indices;
+  // 1) peel off root-id + collect all index values
   const Identifier *rootId = nullptr;
-  SymbolType baseType;
-  int totalDims;
-
-  IndexExpression *current = expr;
-  while (current)
+  std::vector<Value *> indices;
   {
-    if (auto id = dynamic_cast<Identifier *>(current->base))
+    IndexExpression *cur = expr;
+    while (cur)
     {
-      rootId = id;
-      break;
-    }
-    else if (auto innerExpr = dynamic_cast<IndexExpression *>(current->base))
-    {
-      indices.push_back(generate_node(current->index));
-      current = innerExpr;
-    }
-    else
-    {
-      module->getContext().emitError("Unsupported base expression in index");
-      return nullptr;
+      indices.push_back(generate_node(cur->index));
+      if (auto *id = dynamic_cast<Identifier *>(cur->base))
+      {
+        rootId = id;
+        break;
+      }
+      cur = dynamic_cast<IndexExpression *>(cur->base);
     }
   }
-
   if (!rootId)
   {
-    module->getContext().emitError("Could not find root array in index expression");
+    module->getContext().emitError("Bad base in index expression");
     return nullptr;
-  }
-
-  while (current)
-  {
-    indices.push_back(generate_node(current->index));
-    current = dynamic_cast<IndexExpression *>(current->base);
   }
   std::reverse(indices.begin(), indices.end());
 
+  // 2) lookup symbol
   auto entryOpt = findSymbol(rootId->name);
   if (!entryOpt)
   {
-    module->getContext().emitError("Undefined variable: " + rootId->name);
+    module->getContext().emitError("Undefined array: " + rootId->name);
     return nullptr;
   }
-  baseType = entryOpt->baseType;
-  totalDims = entryOpt->dimensions;
-
-  if (indices.size() > totalDims)
+  SymbolEntry entry = *entryOpt;
+  SymbolType baseTy = entry.baseType;
+  int totalD = entry.dimensions;
+  if (indices.size() > (size_t)totalD)
   {
-    module->getContext().emitError("Too many array indices for '" + rootId->name + "'");
+    module->getContext()
+        .emitError("Too many indices for array " + rootId->name);
     return nullptr;
   }
 
-  Value *currentPtr = builder.CreateLoad(getLLVMType(baseType, totalDims), entryOpt->llvmValue, "array_ptr");
+  // 3) rebuild ArrayN struct type { T* data; i32 len; }
+  Type *elt0Ty = getLLVMType(baseTy, /*dim=*/0);
+  StructType *arrSt = getOrCreateArrayStruct(elt0Ty, totalD, "array");
 
+  // 4) load the top‐level .data pointer
+  Value *dataGEP = builder.CreateStructGEP(
+      arrSt,
+      entry.llvmValue, // the AllocaInst* holding ArrayN
+      /*field=*/0,
+      rootId->name + ".data_gep");
+  Value *currentPtr = builder.CreateLoad(
+      arrSt->getElementType(0), // the T* or Array(N-1)*
+      dataGEP,
+      rootId->name + ".data_load");
+
+  // 5) load the top‐level length (for the dim0 bounds check)
+  Value *lenGEP = builder.CreateStructGEP(
+      arrSt,
+      entry.llvmValue,
+      /*field=*/1,
+      rootId->name + ".len_gep");
+  Value *lengthVal = builder.CreateLoad(
+      arrSt->getElementType(1), // i32
+      lenGEP,
+      rootId->name + ".len_load");
+
+  // 6) walk each ‘[i]’
   for (size_t i = 0; i < indices.size(); ++i)
   {
-    int remainingDims = totalDims - i - 1;
-    Type *elementType = getLLVMType(baseType, remainingDims);
+    int remDims = totalD - int(i) - 1;
 
+    // 6a) first‐dim bounds‐check
     if (i == 0)
     {
-      auto lenEntryOpt = findSymbol(rootId->name + "_len");
-      if (lenEntryOpt && lenEntryOpt->llvmValue)
-      {
-        Value *lengthVal = builder.CreateLoad(Type::getInt32Ty(context),
-                                              lenEntryOpt->llvmValue,
-                                              "len_load");
+      Value *ok = builder.CreateICmpULT(
+          indices[i], lengthVal,
+          rootId->name + ".in_bounds");
+      Function *F = builder.GetInsertBlock()->getParent();
+      BasicBlock *thenBB = BasicBlock::Create(context, "in_bounds", F);
+      BasicBlock *elseBB = BasicBlock::Create(context, "out_of_bounds", F);
+      BasicBlock *merge = BasicBlock::Create(context, "after_bounds", F);
 
-        Value *cmp = builder.CreateICmpULT(indices[i], lengthVal, "bounds_check");
+      builder.CreateCondBr(ok, thenBB, elseBB);
+      builder.SetInsertPoint(elseBB);
+      builder.CreateBr(merge);
+      builder.SetInsertPoint(thenBB);
+      builder.CreateBr(merge);
+      builder.SetInsertPoint(merge);
 
-        Function *currentFunc = builder.GetInsertBlock()->getParent();
-        BasicBlock *thenBB = BasicBlock::Create(context, "in_bounds", currentFunc);
-        BasicBlock *elseBB = BasicBlock::Create(context, "out_of_bounds", currentFunc);
-        BasicBlock *mergeBB = BasicBlock::Create(context, "after_bounds_check", currentFunc);
-
-        builder.CreateCondBr(cmp, thenBB, elseBB);
-
-        builder.SetInsertPoint(elseBB);
-
-        Value *defaultIndex = ConstantInt::get(Type::getInt32Ty(context), 0);
-        builder.CreateBr(mergeBB);
-
-        builder.SetInsertPoint(thenBB);
-        builder.CreateBr(mergeBB);
-
-        builder.SetInsertPoint(mergeBB);
-        PHINode *indexPhi = builder.CreatePHI(Type::getInt32Ty(context), 2, "safe_index");
-        indexPhi->addIncoming(defaultIndex, elseBB);
-        indexPhi->addIncoming(indices[i], thenBB);
-
-        indices[i] = indexPhi;
-      }
+      PHINode *phi = builder.CreatePHI(
+          Type::getInt32Ty(context), 2,
+          rootId->name + ".idx_safe");
+      phi->addIncoming(ConstantInt::get(context, APInt(32, 0)), elseBB);
+      phi->addIncoming(indices[i], thenBB);
+      indices[i] = phi;
     }
 
-    currentPtr = builder.CreateInBoundsGEP(
-        elementType,
+    // 6b) load nested .data pointer before indexing if remDims > 0
+    if (remDims > 0)
+    {
+      StructType *subArrStruct = getOrCreateArrayStruct(elt0Ty, remDims, "array");
+      Value *subDataGEP = builder.CreateStructGEP(subArrStruct, currentPtr, 0);
+      currentPtr = builder.CreateLoad(subArrStruct->getElementType(0), subDataGEP);
+    }
+
+    // 6c) final access: GEP to the element
+    if (remDims == 0)
+    {
+      Value *elemGEP = builder.CreateInBoundsGEP(
+          Type::getInt32Ty(context),
+          currentPtr,
+          {indices[i]},
+          rootId->name + ".elem_gep");
+      if (outElementType)
+        *outElementType = Type::getInt32Ty(context);
+      return elemGEP;
+    }
+
+    // 6d) GEP to next level struct pointer
+    Type *ptrTy = getLLVMType(baseTy, remDims);
+    Value *slot = builder.CreateInBoundsGEP(
+        ptrTy,
         currentPtr,
         {indices[i]},
-        "dim" + std::to_string(i) + "_idx");
+        rootId->name + ".idx" + std::to_string(i));
 
-    if (i < indices.size() - 1)
-    {
-      currentPtr = builder.CreateLoad(elementType, currentPtr, "elem_ptr");
-    }
+    currentPtr = builder.CreateLoad(ptrTy, slot, rootId->name + ".nested_load" + std::to_string(i));
   }
 
+  // 7) no indices? return the raw data ptr
   if (outElementType)
-  {
-    *outElementType = getLLVMType(baseType, totalDims - indices.size());
-  }
-
+    *outElementType = getLLVMType(baseTy, totalD);
   return currentPtr;
-}
-
-bool IRGenerator::isUniformArray(ArrayLiteral *lit)
-{
-
-  if (lit->elements.empty())
-    return true;
-
-  bool isNested = dynamic_cast<ArrayLiteral *>(lit->elements[0]) != nullptr;
-  size_t expectedSize = isNested ? dynamic_cast<ArrayLiteral *>(lit->elements[0])->elements.size() : 0;
-  Type *expectedType = generate_node(lit->elements[0])->getType();
-
-  for (auto elem : lit->elements)
-  {
-    auto sub = dynamic_cast<ArrayLiteral *>(elem);
-    if ((sub != nullptr) != isNested)
-      return false;
-
-    if (isNested && sub)
-    {
-      if (sub->elements.size() != expectedSize)
-        return false;
-      if (!isUniformArray(sub))
-        return false;
-    }
-
-    if (!isNested && generate_node(elem)->getType() != expectedType)
-      return false;
-  }
-
-  return true;
-}
-
-Type *IRGenerator::getElementType(ArrayLiteral *lit, int *outDim)
-{
-  int dimensions = 0;
-  ArrayLiteral *current = lit;
-
-  while (true)
-  {
-    dimensions++;
-    if (current->elements.empty())
-    {
-      *outDim = dimensions;
-      return Type::getInt32Ty(context);
-    }
-
-    auto first = current->elements[0];
-    if (auto sub = dynamic_cast<ArrayLiteral *>(first))
-    {
-      current = sub;
-    }
-    else
-    {
-      *outDim = dimensions;
-      return generate_node(first)->getType();
-    }
-  }
-}
-
-Value *IRGenerator::createJaggedArray(ArrayLiteral *lit, Function *mallocFn,
-                                      SymbolType *outBaseType, int *outDimensions)
-{
-
-  int totalDimensions = 0;
-  Type *elementType = getElementType(lit, &totalDimensions);
-  SymbolType baseType;
-
-  if (elementType->isIntegerTy(32))
-    baseType = SymbolType::Integer;
-  else if (elementType->isFloatTy())
-    baseType = SymbolType::Float;
-  else if (elementType->isIntegerTy(1))
-    baseType = SymbolType::Boolean;
-  else
-    baseType = SymbolType::Integer;
-
-  if (outBaseType)
-    *outBaseType = baseType;
-  if (outDimensions)
-    *outDimensions = totalDimensions;
-
-  return createJaggedArrayHelper(lit, mallocFn, totalDimensions, elementType);
-}
-Constant *IRGenerator::createNestedArray(ArrayLiteral *lit, ArrayType *arrType)
-{
-  std::vector<Constant *> elements;
-  if (!arrType)
-    arrType = inferArrayType(lit);
-
-  Type *elementType = arrType->getElementType();
-
-  for (auto elem : lit->elements)
-  {
-    if (auto sub = dynamic_cast<ArrayLiteral *>(elem))
-    {
-      ArrayType *subArrType = cast<ArrayType>(elementType);
-      elements.push_back(createNestedArray(sub, subArrType));
-    }
-    else
-    {
-      Constant *c = cast<Constant>(generate_node(elem));
-      elements.push_back(c);
-    }
-  }
-
-  return ConstantArray::get(arrType, elements);
-}
-
-ArrayType *IRGenerator::inferArrayType(ArrayLiteral *lit)
-{
-  std::vector<uint64_t> dims;
-  ArrayLiteral *current = lit;
-  while (dynamic_cast<ArrayLiteral *>(current->elements[0]))
-  {
-    dims.push_back(current->elements.size());
-    current = dynamic_cast<ArrayLiteral *>(current->elements[0]);
-  }
-  dims.push_back(current->elements.size());
-
-  Type *elementType = generate_node(current->elements[0])->getType();
-  ArrayType *arrType = ArrayType::get(elementType, dims.back());
-
-  for (int i = dims.size() - 2; i >= 0; i--)
-  {
-    arrType = ArrayType::get(arrType, dims[i]);
-  }
-
-  return arrType;
 }
 
 Function *IRGenerator::declareMalloc()
@@ -1879,23 +1814,6 @@ Function *IRGenerator::declareMalloc()
         module.get());
   }
   return mallocFn;
-}
-
-Value *IRGenerator::createArrayAllocation(Type *elementType, Value *size)
-{
-  DataLayout dl = module->getDataLayout();
-  uint64_t typeSize = dl.getTypeAllocSize(elementType);
-  Value *allocSize = builder.CreateMul(
-      size,
-      ConstantInt::get(context, APInt(32, typeSize)),
-      "total_size");
-
-  Value *rawPtr = builder.CreateCall(
-      declareMalloc(),
-      {builder.CreateIntCast(allocSize, Type::getInt64Ty(context), false)},
-      "malloc");
-
-  return builder.CreateBitCast(rawPtr, PointerType::get(elementType, 0), "array_ptr");
 }
 
 Value *IRGenerator::findValue(const std::string &name)
@@ -2012,63 +1930,151 @@ Value *IRGenerator::generate_l_value(Expression *expr)
   return nullptr;
 }
 
-Value *IRGenerator::createJaggedArrayHelper(ArrayLiteral *lit, Function *mallocFn,
-                                            int remainingDims, Type *elementType)
+llvm::StructType *IRGenerator::getOrCreateArrayStruct(llvm::Type *elementType, unsigned dimension, const std::string &baseName)
 {
-  DataLayout dl = module->getDataLayout();
+  // Unique key per elementType+dimension
+  std::string key = baseName + "_" + std::to_string(dimension) + "_" + std::to_string((uintptr_t)elementType);
+  auto it = arrayStructCache.find(key);
+  if (it != arrayStructCache.end())
+    return it->second;
 
-  if (remainingDims == 1)
+  // Decide the data field type
+  llvm::Type *dataType;
+  if (dimension == 1)
   {
-    size_t elementCount = lit->elements.size();
-    Value *allocSize = ConstantInt::get(Type::getInt64Ty(context),
-                                        dl.getTypeAllocSize(elementType) * elementCount);
-
-    Value *buffer = builder.CreateCall(mallocFn, {allocSize}, "contiguous.array");
-    buffer = builder.CreateBitCast(buffer, PointerType::getUnqual(elementType));
-
-    for (size_t i = 0; i < elementCount; ++i)
-    {
-      Value *elementPtr = builder.CreateInBoundsGEP(elementType, buffer,
-                                                    ConstantInt::get(Type::getInt32Ty(context), i));
-      Value *val = generate_node(lit->elements[i]);
-      builder.CreateStore(val, elementPtr);
-    }
-    return buffer;
+    // 1D: data is T*
+    dataType = llvm::PointerType::getUnqual(elementType);
+  }
+  else
+  {
+    // ND>1: data is a pointer to the (D-1)-dim struct
+    auto innerStruct = getOrCreateArrayStruct(elementType, dimension - 1, baseName);
+    dataType = llvm::PointerType::getUnqual(innerStruct);
   }
 
-  const size_t ptrSize = dl.getPointerSize();
-  Value *allocSize = ConstantInt::get(Type::getInt64Ty(context),
-                                      lit->elements.size() * ptrSize);
-
-  Value *rawMem = builder.CreateCall(mallocFn, {allocSize}, "malloc.array");
-  Value *ptrArray = builder.CreateBitCast(rawMem,
-                                          PointerType::getUnqual(PointerType::getUnqual(elementType)),
-                                          "ptr.array");
-
-  for (size_t i = 0; i < lit->elements.size(); ++i)
-  {
-    Value *elementPtr = builder.CreateInBoundsGEP(
-        PointerType::getUnqual(elementType),
-        ptrArray,
-        ConstantInt::get(Type::getInt32Ty(context), i),
-        "element.ptr");
-
-    auto subLit = dynamic_cast<ArrayLiteral *>(lit->elements[i]);
-    if (!subLit)
-    {
-      module->getContext().emitError("Invalid jagged array structure");
-      return nullptr;
-    }
-
-    Value *subArray = createJaggedArrayHelper(subLit, mallocFn,
-                                              remainingDims - 1, elementType);
-    builder.CreateStore(subArray, elementPtr);
-  }
-  return ptrArray;
+  // Create struct { dataType data; i32 length; }
+  auto st = llvm::StructType::create(context, baseName + std::to_string(dimension));
+  st->setBody({dataType, llvm::Type::getInt32Ty(context)});
+  arrayStructCache[key] = st;
+  return st;
 }
 
-bool IRGenerator::isSingleDimensionArray(const SymbolEntry &entry)
+Value *IRGenerator::createJaggedArrayStruct(ArrayLiteral *lit, Function *mallocFn, SymbolType *outBaseType, int *outDimensions)
 {
-  return entry.dimensions == 1 &&
-         entry.baseType != SymbolType::String;
+  // 1) Determine dimensions and base element type
+  int dims = 0;
+  ArrayLiteral *cur = lit;
+  // Drill down to primitive literal
+  while (auto sub = dynamic_cast<ArrayLiteral *>(cur->elements[0]))
+  {
+    dims++;
+    cur = sub;
+  }
+  dims++; // count last level
+  // Get element type from first non‐array literal
+  auto firstElem = cur->elements[0];
+  Type *llvmEltType = nullptr;
+  if (dynamic_cast<IntegerLiteral *>(firstElem))
+    llvmEltType = Type::getInt32Ty(context), *outBaseType = SymbolType::Integer;
+  else if (dynamic_cast<FloatLiteral *>(firstElem))
+    llvmEltType = Type::getFloatTy(context), *outBaseType = SymbolType::Float;
+  else if (dynamic_cast<BooleanLiteral *>(firstElem))
+    llvmEltType = Type::getInt1Ty(context), *outBaseType = SymbolType::Boolean;
+  else
+    llvmEltType = PointerType::getUnqual(Type::getInt8Ty(context)), *outBaseType = SymbolType::String;
+
+  *outDimensions = dims;
+
+  // 2) Get the struct type for this dimension
+  auto arrStructTy = getOrCreateArrayStruct(llvmEltType, dims, "Array");
+
+  // 3) Allocate the struct on the stack (or heap if global)
+  auto arrAlloca = builder.CreateAlloca(arrStructTy, nullptr, "array_d" + std::to_string(dims));
+
+  // 4) Set length = lit->elements.size()
+  int len = lit->elements.size();
+  auto lenGEP = builder.CreateStructGEP(arrStructTy, arrAlloca, 1, "lenGEP");
+  builder.CreateStore(builder.getInt32(len), lenGEP);
+
+  // 5) Allocate data buffer: element type = pointer to dim−1 struct (or primitive*)
+  Type *dataEltTy = (dims == 1)
+                        ? llvmEltType
+                        : PointerType::getUnqual(getOrCreateArrayStruct(llvmEltType, dims - 1, "Array"));
+
+  // total bytes = len * sizeof(dataEltTy)
+  auto dl = module->getDataLayout();
+  uint64_t eltSize = dl.getTypeAllocSize(dataEltTy);
+  auto dataSize = builder.CreateMul(
+      builder.getInt64(len), ConstantInt::get(builder.getInt64Ty(), eltSize));
+  auto raw = builder.CreateCall(mallocFn, {dataSize}, "malloc_d" + std::to_string(dims));
+  auto dataPtr = builder.CreateBitCast(raw, PointerType::getUnqual(dataEltTy), "dataPtr");
+
+  // store data pointer
+  auto dataGEP = builder.CreateStructGEP(arrStructTy, arrAlloca, 0, "dataGEP");
+  builder.CreateStore(dataPtr, dataGEP);
+
+  // 6) Recursively initialize each element if dimension>1
+  if (dims > 1)
+  {
+    for (int i = 0; i < len; ++i)
+    {
+      // sub‐literal
+      auto subLit = dynamic_cast<ArrayLiteral *>(lit->elements[i]);
+      // create subarray
+      SymbolType dummyBase;
+      int dummyDim;
+      auto subArr = createJaggedArrayStruct(subLit, mallocFn, &dummyBase, &dummyDim);
+      // store pointer into dataPtr[i]
+      auto idx = builder.getInt32(i);
+      auto slot = builder.CreateGEP(dataEltTy, dataPtr, idx, "slot" + std::to_string(i));
+      builder.CreateStore(subArr, slot);
+    }
+  }
+  else
+  {
+    for (int i = 0; i < len; ++i)
+    {
+      auto litElem = dynamic_cast<IntegerLiteral *>(lit->elements[i]);
+      Value *v = ConstantInt::get(Type::getInt32Ty(context), litElem->value);
+      auto slot = builder.CreateGEP(dataEltTy, dataPtr, builder.getInt32(i));
+      builder.CreateStore(v, slot);
+    }
+  }
+
+  return arrAlloca;
+}
+
+StructType *IRGenerator::getArrayStruct(const SymbolEntry &entry)
+{
+  // element‐type = primitive @ dim=0
+  Type *elt0 = getLLVMType(entry.baseType, /*dim*/ 0);
+  return getOrCreateArrayStruct(elt0, entry.dimensions, "array");
+}
+
+Value *IRGenerator::loadArrayLength(Value *arrayAlloca, StructType *arrSt, const Twine &name)
+{
+  // GEP to field #1 (.length) then load i32
+  Value *lenGEP = builder.CreateStructGEP(
+      arrSt,
+      arrayAlloca,
+      /*idx=*/1,
+      name + ".len.gep");
+  return builder.CreateLoad(
+      arrSt->getElementType(1), // i32
+      lenGEP,
+      name + ".len");
+}
+
+Value *IRGenerator::callStrlen(Value *strPtr, const Twine &name)
+{
+  // declare or lookup strlen(i8*)->i64
+  auto *i8ptr = PointerType::getUnqual(Type::getInt8Ty(context));
+  FunctionCallee strlenFn = module->getOrInsertFunction(
+      "strlen",
+      FunctionType::get(Type::getInt64Ty(context), {i8ptr}, false));
+  // call + truncate
+  Value *len64 = builder.CreateCall(strlenFn, {strPtr}, name + ".strlen");
+  return builder.CreateTrunc(len64,
+                             Type::getInt32Ty(context),
+                             name + ".len32");
 }

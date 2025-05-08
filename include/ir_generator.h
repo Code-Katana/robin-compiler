@@ -12,6 +12,8 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Value.h"
+#include "llvm/IR/Instructions.h" 
+#include "llvm/IR/Function.h"
 
 #include <unordered_map>
 #include <string>
@@ -46,6 +48,13 @@ private:
   IRBuilder<> builder;
   stack<unordered_map<string, SymbolEntry>> symbolTable;
   std::unordered_map<std::string, FunctionDefinition *> functionTable;
+  std::unordered_map<std::string, llvm::StructType *> arrayStructCache;
+
+  StructType* getArrayStruct(const SymbolEntry &entry);
+  Value* loadArrayLength(Value *arrayAlloca, StructType *arrSt, const Twine &name);
+  Value* callStrlen(Value *strPtr, const Twine &name);
+  StructType *getOrCreateArrayStruct(llvm::Type *elementType, unsigned dimension, const std::string &baseName);
+  Value *createJaggedArrayStruct(ArrayLiteral *lit, Function *mallocFn, SymbolType *outBaseType, int *outDimensions);
 
   Type *getLLVMType(SymbolType type, int dim = 0);
   Value *generate_node(AstNode *node);
@@ -90,7 +99,7 @@ private:
   Value *findValue(const string &name);
   Value *generate_identifier_address(Identifier *id);
   optional<SymbolEntry> findSymbol(const std::string &name);
-  //array helpers
+  // array helpers
   bool isUniformArray(ArrayLiteral *lit);
   Type *getElementType(ArrayLiteral *lit, int *outDim);
   Value *createJaggedArray(ArrayLiteral *lit, Function *mallocFn,

@@ -81,101 +81,73 @@ Value *IRGenerator::generate_node(AstNode *node)
   return nullptr;
 }
 
-Value *IRGenerator::generate_program(ProgramDefinition *program)
-{
+Value *IRGenerator::generate_program(ProgramDefinition *program) {
+  FunctionType *FT = FunctionType::get(Type::getInt32Ty(context), false);
+  Function *Main = Function::Create(FT, Function::ExternalLinkage,
+                                    "main", module.get());
+  BasicBlock *EntryBB = BasicBlock::Create(context, "entry", Main);
+  builder.SetInsertPoint(EntryBB);
 
-  FunctionType *funcType = FunctionType::get(Type::getInt32Ty(context), false);
-  Function *mainFunc = Function::Create(funcType, Function::ExternalLinkage, "main", module.get());
-  FunctionCallee pauseFunc = module->getOrInsertFunction(
-      "waitForKeypress",
-      FunctionType::get(Type::getVoidTy(context), {}, false));
-  BasicBlock *entry = BasicBlock::Create(context, "entry", mainFunc);
-  builder.SetInsertPoint(entry);
+  for (auto *G : program->globals)
+    generate_global_variable(G);
 
-  for (auto global : program->globals)
-  {
+  for (auto *G : program->globals) {
+    auto *initStmt = dynamic_cast<VariableInitialization*>(G->def);
+    if (!initStmt) continue;
 
-    generate_global_variable(global);
-  }
-  pushScope();
+    const string &name = initStmt->name->name;
+    if (auto *lit = dynamic_cast<ArrayLiteral*>(initStmt->initializer)) {
+      auto sym = findSymbol(name);
+      assert(sym && "global var missing");
+      GlobalVariable *gvar = cast<GlobalVariable>(sym->llvmValue);
 
-  for (auto stmt : program->body)
-  {
-    if (auto assign = dynamic_cast<AssignmentExpression *>(stmt))
-    {
-      if (auto arrayLit = dynamic_cast<ArrayLiteral *>(assign->value))
-      {
-        Function *mallocFn = declareMalloc();
-        SymbolType baseType;
-        int dimensions;
+      SymbolType baseType;
+      int dimensions;
+      Function *mallocFn = declareMalloc();
+      Value *jaggedPtr = createJaggedArray(lit,
+                                           mallocFn,
+                                           &baseType,
+                                           &dimensions);
+      builder.CreateStore(jaggedPtr, gvar);
 
-        Value *array = createJaggedArray(arrayLit, mallocFn, &baseType, &dimensions);
-
-        if (auto id = dynamic_cast<Identifier *>(assign->assignee))
-        {
-          Value *target = generate_identifier_address(id);
-          builder.CreateStore(array, target);
-
-          auto entry = findSymbol(id->name);
-          if (entry)
-          {
-            size_t arraySize = arrayLit->elements.size();
-
-            auto lenEntry = findSymbol(id->name + "_len");
-            if (lenEntry && lenEntry->llvmValue)
-            {
-              builder.CreateStore(
-                  builder.getInt32(arraySize),
-                  lenEntry->llvmValue);
-
-              symbolTable.top()[id->name] = {
-                  entry->llvmType,
-                  entry->llvmValue,
-                  baseType,
-                  dimensions,
-                  arraySize,
-                  lenEntry->llvmValue};
-            }
-          }
-        }
-        else
-        {
-          Value *target = generate_l_value(assign->assignee);
-          builder.CreateStore(array, target);
-        }
-        continue;
+      auto lenSym = findSymbol(name + "_len");
+      if (lenSym && lenSym->llvmValue) {
+        builder.CreateStore(
+          builder.getInt32(lit->elements.size()),
+          lenSym->llvmValue);
       }
     }
-    generate_node(stmt);
   }
 
-  builder.CreateCall(pauseFunc);
+  pushScope();
+  for (auto *stmt : program->body)
+    generate_node(stmt);
+
+  auto pauseFn = module->getOrInsertFunction(
+      "waitForKeypress", FunctionType::get(Type::getVoidTy(context), {}, false));
+  builder.CreateCall(pauseFn);
   builder.CreateRet(ConstantInt::get(context, APInt(32, 0)));
 
   popScope();
-  return mainFunc;
+  return Main;
 }
 
-Value *IRGenerator::generate_function(FunctionDefinition *func)
-{
-  std::vector<llvm::Type *> paramTypes;
-  std::vector<VariableDeclaration *> paramDecls;
-  std::vector<VariableInitialization *> paramInits;
+Value* IRGenerator::generate_function(FunctionDefinition *func) {
+  SmallVector<Type*,8> paramTypes;
+  SmallVector<VariableDeclaration*,8> paramDecls;
+  SmallVector<VariableInitialization*,8> paramInits;
 
-  for (auto param : func->parameters)
-  {
-    if (auto decl = dynamic_cast<VariableDeclaration *>(param->def))
-    {
-      llvm::Type *ty = getLLVMType(
+  for (auto *paramDef : func->parameters) {
+    if (auto *decl = dynamic_cast<VariableDeclaration*>(paramDef->def)) {
+      Type *ty = getLLVMType(
           Symbol::get_datatype(decl->datatype),
           Symbol::get_dimension(decl->datatype));
       paramTypes.push_back(ty);
       paramDecls.push_back(decl);
       paramInits.push_back(nullptr);
     }
-    else if (auto init = dynamic_cast<VariableInitialization *>(param->def))
-    {
-      llvm::Type *ty = getLLVMType(
+    else if (auto *init = dynamic_cast<VariableInitialization*>(paramDef->def)) {
+      Type *ty = getLLVMType(
           Symbol::get_datatype(init->datatype),
           Symbol::get_dimension(init->datatype));
       paramTypes.push_back(ty);
@@ -184,89 +156,115 @@ Value *IRGenerator::generate_function(FunctionDefinition *func)
     }
   }
 
-  llvm::Type *retType = getLLVMType(
+  Type  *retTy = getLLVMType(
       Symbol::get_datatype(func->return_type->return_type),
       Symbol::get_dimension(func->return_type->return_type));
-  llvm::FunctionType *funcType = llvm::FunctionType::get(retType, paramTypes, false);
-  llvm::Function *llvmFunc = llvm::Function::Create(
-      funcType,
-      llvm::Function::ExternalLinkage,
-      func->funcname->name,
-      module.get());
+  FunctionType *ft = FunctionType::get(retTy, paramTypes, false);
+  Function     *F = Function::Create(
+                       ft,
+                       Function::ExternalLinkage,
+                       func->funcname->name,
+                       module.get());
+  BasicBlock *entryBB = BasicBlock::Create(context, "entry", F);
+  builder.SetInsertPoint(entryBB);
 
-  llvm::BasicBlock *entry = llvm::BasicBlock::Create(context, "entry", llvmFunc);
-  builder.SetInsertPoint(entry);
   pushScope();
-
   unsigned idx = 0;
-  for (auto &arg : llvmFunc->args())
-  {
-    std::string paramName;
+  for (auto &Arg : F->args()) {
+    std::string name;
     SymbolType baseType;
-    int dimensions = 0;
-    size_t defaultLength = 10;
-
-    if (paramDecls[idx])
-    {
-      auto varName = paramDecls[idx]->variables[0]->name;
-      paramName = varName;
-      baseType = Symbol::get_datatype(paramDecls[idx]->datatype);
+    int        dimensions;
+    if (paramDecls[idx]) {
+      name       = paramDecls[idx]->variables[0]->name;
+      baseType   = Symbol::get_datatype(paramDecls[idx]->datatype);
       dimensions = Symbol::get_dimension(paramDecls[idx]->datatype);
-
-      Type *ty = getLLVMType(baseType, dimensions);
-      AllocaInst *alloca = builder.CreateAlloca(ty, nullptr, varName);
-      builder.CreateStore(&arg, alloca);
-
-      symbolTable.top()[varName] = {
-          ty, alloca, baseType, dimensions, defaultLength, nullptr};
-    }
-    else if (paramInits[idx])
-    {
-
-      auto varName = paramInits[idx]->name->name;
-      paramName = varName;
-      baseType = Symbol::get_datatype(paramInits[idx]->datatype);
-      dimensions = Symbol::get_dimension(paramInits[idx]->datatype);
-
-      Type *ty = getLLVMType(baseType, dimensions);
-      AllocaInst *alloca = builder.CreateAlloca(ty, nullptr, varName);
-      builder.CreateStore(&arg, alloca);
-
-      symbolTable.top()[varName] = {
-          ty, alloca, baseType, dimensions, defaultLength, nullptr};
+    } else {
+      auto *init = paramInits[idx];
+      name       = init->name->name;
+      baseType   = Symbol::get_datatype(init->datatype);
+      dimensions = Symbol::get_dimension(init->datatype);
     }
 
-    if (dimensions > 0)
-    {
+    Type *ParamTy = getLLVMType(baseType, dimensions);
+    AllocaInst *paramAlloca = builder.CreateAlloca(ParamTy, nullptr, name);
+    builder.CreateStore(&Arg, paramAlloca);
 
-      AllocaInst *lengthAlloca = builder.CreateAlloca(
-          Type::getInt32Ty(context), nullptr, paramName + "_len");
+    symbolTable.top()[name] = {
+        ParamTy,    
+        paramAlloca,
+        baseType,
+        dimensions,
+        0,          
+        nullptr     
+    };
 
-      builder.CreateStore(builder.getInt32(defaultLength), lengthAlloca);
+    if (dimensions > 0) {
+      AllocaInst *lenAlloca =
+         builder.CreateAlloca(Type::getInt32Ty(context),
+                              nullptr,
+                              name + "_len");
 
-      auto &entry = symbolTable.top()[paramName];
-      entry.lengthAlloca = lengthAlloca;
-      entry.arrayLength = defaultLength;
+      
+      Value *loadedPtr = builder.CreateLoad(
+          ParamTy,          
+          paramAlloca,
+          name + ".ptr");
 
-      symbolTable.top()[paramName + "_len"] = {
-          Type::getInt32Ty(context), lengthAlloca, SymbolType::Integer, 0, 0, nullptr};
+      Type *slotElemTy = (dimensions > 1)
+         ? getLLVMType(baseType, dimensions - 1)
+         : getLLVMType(baseType, 0);
+      uint64_t slotSize = module
+          ->getDataLayout()
+          .getTypeAllocSize(slotElemTy);
+
+      auto *i8p = PointerType::getUnqual(Type::getInt8Ty(context));
+      Value *asI8 = builder.CreateBitCast(loadedPtr, i8p, name + ".hdr.cast");
+      Value *off   = ConstantInt::get(
+                         Type::getInt64Ty(context),
+                         -int64_t(slotSize));
+      Value *hdrGep = builder.CreateInBoundsGEP(
+                         Type::getInt8Ty(context),
+                         asI8,
+                         off,
+                         name + ".hdr.gep");
+      Value *lenPtr = builder.CreateBitCast(
+                         hdrGep,
+                         PointerType::getUnqual(Type::getInt32Ty(context)),
+                         name + ".len.ptr");
+      Value *trueLen = builder.CreateLoad(
+                         Type::getInt32Ty(context),
+                         lenPtr,
+                         name + ".len.load");
+
+      builder.CreateStore(trueLen, lenAlloca);
+
+      auto &entry = symbolTable.top()[name];
+      entry.lengthAlloca = lenAlloca;
+      entry.arrayLength =  
+                         0;
+      symbolTable.top()[name + "_len"] = {
+        Type::getInt32Ty(context),
+        lenAlloca,
+        SymbolType::Integer,
+        0,
+        0,
+        nullptr
+      };
     }
 
     ++idx;
   }
 
-  for (auto stmt : func->body)
-  {
+  
+  for (auto *stmt : func->body)
     generate_node(stmt);
-  }
 
-  if (retType->isVoidTy() && !builder.GetInsertBlock()->getTerminator())
-  {
+  
+  if (retTy->isVoidTy() && !builder.GetInsertBlock()->getTerminator())
     builder.CreateRetVoid();
-  }
 
   popScope();
-  return llvmFunc;
+  return F;
 }
 
 Value *IRGenerator::generate_statement(Statement *stmt)
@@ -1401,7 +1399,6 @@ Value *IRGenerator::generate_unary_expr(UnaryExpression *expr)
   }
 
   if (expr->optr == "#") {
-    // 1) Figure out how many indices and the root identifier
     int numIndices = 0;
     Identifier *rootId = nullptr;
     Expression *cur = expr->operand;
@@ -1416,7 +1413,6 @@ Value *IRGenerator::generate_unary_expr(UnaryExpression *expr)
       return nullptr;
     }
   
-    // 2) Compute the slot‐address (l‐value)
     Value *slotAddr = nullptr;
     Type  *dummyTy = nullptr;
     if (numIndices > 0) {
@@ -1426,26 +1422,19 @@ Value *IRGenerator::generate_unary_expr(UnaryExpression *expr)
     } else {
       auto sym = findSymbol(rootId->name);
       if (!sym) return nullptr;
-      slotAddr = sym->llvmValue;           // this is a ptr‐to‐pointer or ptr‐to‐data
+      slotAddr = sym->llvmValue;           
     }
   
-    // 3) Load the _value_ from that slot address:
-    //    now dataPtr is a real "pointer to the first element"
-    //    of either the top‐level array or the nested sub‐array.
+   
     Value *dataPtr = nullptr;
-    if (numIndices > 0 ||                       // index case
+    if (numIndices > 0 ||                       
         dynamic_cast<IndexExpression*>(expr->operand)) {
-      // dummyTy already holds the element type after all indices,
-      // but what we really want is the next‐inner pointer type:
-      // i.e. for sym.dimensions > numIndices:
       auto sym = *findSymbol(rootId->name);
       int remDims = sym.dimensions - numIndices;
-      // The type of dataPtr is: getLLVMType(base, remDims)
       Type *loadTy = getLLVMType(sym.baseType, remDims);
       dataPtr = builder.CreateLoad(loadTy, slotAddr, "slot.load");
     }
     else {
-      // no indexing: slotAddr already was the loadable pointer
       dataPtr = builder.CreateLoad(
                   getLLVMType(findSymbol(rootId->name)->baseType,
                                findSymbol(rootId->name)->dimensions),
@@ -1454,7 +1443,6 @@ Value *IRGenerator::generate_unary_expr(UnaryExpression *expr)
     }
     if (!dataPtr) return nullptr;
   
-    // 4) Lookup the original symbol for dimensions and baseType
     auto sym = *findSymbol(rootId->name);
     int declaredDims = sym.dimensions;
     int remDims = declaredDims - numIndices;
@@ -1464,7 +1452,6 @@ Value *IRGenerator::generate_unary_expr(UnaryExpression *expr)
       return nullptr;
     }
   
-    // 5) Figure out how big one slot was when allocated:
     Type *slotElemTy = (remDims > 1)
          ? getLLVMType(sym.baseType, remDims - 1)
          : getLLVMType(sym.baseType, 0);
@@ -1472,7 +1459,6 @@ Value *IRGenerator::generate_unary_expr(UnaryExpression *expr)
         ->getDataLayout()
         .getTypeAllocSize(slotElemTy);
   
-    // 6) Back up by slotSize bytes from the actual data‐pointer:
     auto *i8p = PointerType::getUnqual(Type::getInt8Ty(context));
     Value *asI8 = builder.CreateBitCast(dataPtr, i8p, "hdr.cast");
     Value *off   = ConstantInt::get(Type::getInt64Ty(context),
@@ -1483,7 +1469,6 @@ Value *IRGenerator::generate_unary_expr(UnaryExpression *expr)
                    off,
                    "hdr.ptr");
   
-    // 7) Cast to i32* and load the length
     Value *lenPtr = builder.CreateBitCast(
                        hdr,
                        PointerType::getUnqual(Type::getInt32Ty(context)),
@@ -1493,60 +1478,6 @@ Value *IRGenerator::generate_unary_expr(UnaryExpression *expr)
              lenPtr,
              "len.load");
   }
-
-
-
-  
-  // if (expr->optr == "#")
-  // {
-
-  //   auto id = dynamic_cast<Identifier *>(expr->operand);
-  //   if (!id)
-  //   {
-  //     module->getContext().emitError("# operator requires an array variable");
-  //     return nullptr;
-  //   }
-
-  //   auto entryOpt = findSymbol(id->name);
-  //   if (!entryOpt)
-  //   {
-  //     module->getContext().emitError("Undefined variable: " + id->name);
-  //     return nullptr;
-  //   }
-
-  //   const SymbolEntry &entry = *entryOpt;
-
-  //   auto lenEntryOpt = findSymbol(id->name + "_len");
-  //   if (lenEntryOpt && lenEntryOpt->llvmValue)
-  //   {
-
-  //     Value *lengthVal = builder.CreateLoad(Type::getInt32Ty(context),
-  //                                           lenEntryOpt->llvmValue,
-  //                                           id->name + "_len");
-
-  //     if (!lengthVal->getType()->isIntegerTy(32))
-  //     {
-  //       lengthVal = builder.CreateIntCast(lengthVal, Type::getInt32Ty(context), false);
-  //     }
-
-  //     return lengthVal;
-  //   }
-
-  //   if (entry.arrayLength > 0)
-  //   {
-  //     return ConstantInt::get(Type::getInt32Ty(context), entry.arrayLength);
-  //   }
-
-  //   if (entry.llvmType->isArrayTy())
-  //   {
-  //     ArrayType *arrTy = cast<ArrayType>(entry.llvmType);
-  //     uint64_t size = arrTy->getNumElements();
-  //     return ConstantInt::get(Type::getInt32Ty(context), size);
-  //   }
-
-  //   module->getContext().emitError("Cannot determine array size for variable: " + id->name);
-  //   return ConstantInt::get(Type::getInt32Ty(context), 0);
-  // }
 
   if (expr->optr == "++" || expr->optr == "--")
   {
@@ -1925,12 +1856,10 @@ arrType = inferArrayType(lit);
 Type *eltType = arrType->getElementType();
 for (auto *e : lit->elements) {
 if (auto *subLit = dynamic_cast<ArrayLiteral*>(e)) {
-// nested literal → recursive call
 auto *subArrTy = cast<ArrayType>(eltType);
 elems.push_back(createNestedArray(subLit, subArrTy));
 }
 else {
-// leaf literal → must be an LLVM Constant
 auto *val = generate_node(e);
 auto *c   = dyn_cast<Constant>(val);
 assert(c && "expected a Constant for nested array literal");
@@ -2115,27 +2044,20 @@ Value* IRGenerator::createJaggedArrayHelper(ArrayLiteral *lit,
   Function    *mallocFn,
   int          remainingDims,
   Type        *elementType) {
-// 1) how many elements in this literal
 uint64_t count = lit->elements.size();
 
-// 2) decide each slot’s LLVM type
-//    - if >1 dims remain, each slot holds a pointer to the next level
-//    - else each slot holds a raw elementType
 Type *slotTy = (remainingDims > 1)
 ? PointerType::getUnqual(elementType)
 : elementType;
 
-// 3) get slot-size from the module’s layout
 auto &DL = module->getDataLayout();
 uint64_t slotSize = DL.getTypeAllocSize(slotTy);
 
-// 4) malloc (count+1)*slotSize bytes
 Value *allocBytes = ConstantInt::get(
 Type::getInt64Ty(context),
 slotSize * (count + 1));
 Value *raw = builder.CreateCall(mallocFn, {allocBytes}, "raw.mem");
 
-// 5) store the header (the length) into slot[0]
 {
 Value *hdrPtr = builder.CreateBitCast(
 raw,
@@ -2146,7 +2068,6 @@ ConstantInt::get(Type::getInt32Ty(context), count),
 hdrPtr);
 }
 
-// 6) compute dataStart = raw + slotSize
 Value *dataStart = builder.CreateInBoundsGEP(
 Type::getInt8Ty(context),
 builder.CreateBitCast(raw,
@@ -2155,15 +2076,12 @@ PointerType::getUnqual(Type::getInt8Ty(context)),
 ConstantInt::get(Type::getInt64Ty(context), slotSize),
 "data.start");
 
-// 7) cast dataStart back to slotTy*
 Value *arrayPtr = builder.CreateBitCast(
 dataStart,
 PointerType::getUnqual(slotTy),
 "arr.ptr");
 
-// 8) fill slots [0..count-1] with either leaf values or sub-arrays
 for (unsigned i = 0; i < count; ++i) {
-// element address = arr.ptr + i
 Value *eltAddr = builder.CreateInBoundsGEP(
 slotTy,
 arrayPtr,
@@ -2171,11 +2089,9 @@ ConstantInt::get(Type::getInt32Ty(context), i),
 "elt.addr");
 
 if (remainingDims == 1) {
-// leaf: store the value of the expression
 Value *v = generate_node(lit->elements[i]);
 builder.CreateStore(v, eltAddr);
 } else {
-// nested: recurse one dimension down
 auto *subLit = dynamic_cast<ArrayLiteral*>(lit->elements[i]);
 assert(subLit && "Expected ArrayLiteral here");
 Value *subArr = createJaggedArrayHelper(

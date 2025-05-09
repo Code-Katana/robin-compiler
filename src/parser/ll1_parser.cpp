@@ -2603,9 +2603,11 @@ void LL1Parser::build_index_expression()
   }
 
   int start_line = base->start_line;
-  int end_line = indexChain->end_line;
   int node_start = base->node_start;
-  int node_end = indexChain->node_end;
+
+  Token lastRsq = tracking.index_last_right_sq;
+  int end_line = lastRsq.line;
+  int node_end = lastRsq.end;
 
   IndexExpression *current = new IndexExpression(base, indexChain, start_line, end_line, node_start, node_end);
 

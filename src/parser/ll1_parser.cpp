@@ -1898,27 +1898,21 @@ void LL1Parser::build_if_statement()
         start_line = t.line;
         node_start = t.start;
       }
-      else
-      {
-        start_line = condition->start_line;
-        node_start = condition->node_start;
-      }
-
-      int endLineStmt = alternate->empty() ? consequent->back()->end_line : alternate->back()->end_line;
-      int nodeEndStmt = alternate->empty() ? consequent->back()->node_end : alternate->back()->node_end;
-
       int end_line, node_end;
       if (!tracking.if_close_stack.empty())
       {
         Token t = tracking.if_close_stack.back();
         tracking.if_close_stack.pop_back();
-        end_line = max(endLineStmt, t.line);
-        node_end = max(nodeEndStmt, t.end);
+        end_line = t.line;
+        node_end = t.end;
       }
       else
       {
-        end_line = max(endLineStmt, previous_token.line);
-        node_end = max(nodeEndStmt, previous_token.end);
+        Token next_end = peek_token();
+        Token next_if = peek_token();
+
+        end_line = next_if.line;
+        node_end = next_if.end;
       }
 
       reverse(consequent->begin(), consequent->end());
@@ -1946,27 +1940,21 @@ void LL1Parser::build_if_statement()
         start_line = t.line;
         node_start = t.start;
       }
-      else
-      {
-        start_line = condition->start_line;
-        node_start = condition->node_start;
-      }
-
-      int endLineStmt = alternate->empty() ? consequent->back()->end_line : alternate->back()->end_line;
-      int nodeEndStmt = alternate->empty() ? consequent->back()->node_end : alternate->back()->node_end;
-
       int end_line, node_end;
       if (!tracking.if_close_stack.empty())
       {
         Token t = tracking.if_close_stack.back();
         tracking.if_close_stack.pop_back();
-        end_line = max(endLineStmt, t.line);
-        node_end = max(nodeEndStmt, t.end);
+        end_line = t.line;
+        node_end = t.end;
       }
       else
       {
-        end_line = max(endLineStmt, previous_token.line);
-        node_end = max(nodeEndStmt, previous_token.end);
+        Token next_end = peek_token();
+        Token next_if = peek_token();
+
+        end_line = next_if.line;
+        node_end = next_if.end;
       }
 
       reverse(consequent->begin(), consequent->end());
@@ -2016,27 +2004,21 @@ void LL1Parser::build_if_statement()
     start_line = t.line;
     node_start = t.start;
   }
-  else
-  {
-    start_line = condition->start_line;
-    node_start = condition->node_start;
-  }
-
-  int endLineStmt = alternate->empty() ? consequent->back()->end_line : alternate->back()->end_line;
-  int nodeEndStmt = alternate->empty() ? consequent->back()->node_end : alternate->back()->node_end;
-
   int end_line, node_end;
   if (!tracking.if_close_stack.empty())
   {
     Token t = tracking.if_close_stack.back();
     tracking.if_close_stack.pop_back();
-    end_line = max(endLineStmt, t.line);
-    node_end = max(nodeEndStmt, t.end);
+    end_line = t.line;
+    node_end = t.end;
   }
   else
   {
-    end_line = max(endLineStmt, previous_token.line);
-    node_end = max(nodeEndStmt, previous_token.end);
+    Token next_end = peek_token();
+    Token next_if = peek_token();
+
+    end_line = next_if.line;
+    node_end = next_if.end;
   }
 
   reverse(consequent->begin(), consequent->end());

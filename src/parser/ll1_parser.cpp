@@ -13,10 +13,10 @@ LL1Parser::LL1Parser(ScannerBase *sc) : ParserBase(sc)
 
 AstNode *LL1Parser::END_OF_LIST_MARKER = reinterpret_cast<AstNode *>(-1);
 Statement *LL1Parser::END_OF_LIST_ELSE = reinterpret_cast<Statement *>(-1);
+Statement *LL1Parser::START_OF_IF = reinterpret_cast<Statement *>(-2);
 
 AstNode *LL1Parser::parse_ast()
 {
-  st.push(SymbolLL1(TokenType::END_OF_FILE));
   st.push(SymbolLL1(NonTerminal::Source_NT));
 
   while (!st.empty())
@@ -126,6 +126,8 @@ bool LL1Parser::match(TokenType t)
     nodes.push_back(error);
     return false;
   }
+
+  track_special_tokens(t, current_token);
 
   previous_token = current_token;
 
@@ -856,6 +858,7 @@ void LL1Parser::push_rule(int rule)
   {
   case 1:
     st.push(SymbolLL1(1));
+    st.push(SymbolLL1(TokenType::END_OF_FILE));
     st.push(SymbolLL1(NonTerminal::Program_NT));
     st.push(SymbolLL1(NonTerminal::Function_List_NT));
     break;
@@ -895,6 +898,7 @@ void LL1Parser::push_rule(int rule)
     st.push(SymbolLL1(NonTerminal::Primitive_NT));
     break;
   case 9:
+    tracking.arr_type_tracking = true;
     st.push(SymbolLL1(NonTerminal::Array_Type_Tail_NT));
     st.push(SymbolLL1(TokenType::LEFT_SQUARE_PR));
     break;
@@ -1091,7 +1095,7 @@ void LL1Parser::push_rule(int rule)
     break;
   case 56:
     st.push(SymbolLL1(NonTerminal::More_Exprs_NT));
-    st.push(SymbolLL1(NonTerminal::Expr_NT));
+    st.push(SymbolLL1(NonTerminal::Or_Expr_NT));
     break;
   case 57:
     break;
@@ -1137,24 +1141,25 @@ void LL1Parser::push_rule(int rule)
     st.push(SymbolLL1(TokenType::IF_KW));
     st.push(SymbolLL1(TokenType::END_KW));
     st.push(SymbolLL1(NonTerminal::Else_Part_NT));
+    st.push(SymbolLL1(65));
     st.push(SymbolLL1(NonTerminal::Command_Seq_NT));
     st.push(SymbolLL1(TokenType::THEN_KW));
-    st.push(SymbolLL1(NonTerminal::Expr_NT));
+    st.push(SymbolLL1(NonTerminal::Or_Expr_NT));
     st.push(SymbolLL1(TokenType::IF_KW));
+    st.push(SymbolLL1(64));
     break;
   case 65:
-    currentCommandSeq.insert(currentCommandSeq.begin(), nullptr);
     break;
   case 66:
     st.push(SymbolLL1(47));
     st.push(SymbolLL1(NonTerminal::Else_Part_NT));
+    st.push(SymbolLL1(65));
     st.push(SymbolLL1(NonTerminal::Command_Seq_NT));
     st.push(SymbolLL1(TokenType::THEN_KW));
     st.push(SymbolLL1(NonTerminal::Or_Expr_NT));
     st.push(SymbolLL1(TokenType::IF_KW));
     st.push(SymbolLL1(TokenType::ELSE_KW));
-    currentCommandSeq.insert(currentCommandSeq.begin(), nullptr);
-    currentCommandSeq.insert(currentCommandSeq.begin(), END_OF_LIST_ELSE);
+    st.push(SymbolLL1(66));
     break;
   case 67:
     st.push(SymbolLL1(TokenType::SEMI_COLON_SY));
@@ -1370,7 +1375,7 @@ void LL1Parser::push_rule(int rule)
     st.push(SymbolLL1(NonTerminal::Index_Chain_NT));
     st.push(SymbolLL1(122));
     st.push(SymbolLL1(TokenType::RIGHT_SQUARE_PR));
-    st.push(SymbolLL1(NonTerminal::Expr_NT));
+    st.push(SymbolLL1(NonTerminal::Or_Expr_NT));
     st.push(SymbolLL1(TokenType::LEFT_SQUARE_PR));
     break;
   case 123:
@@ -1431,7 +1436,7 @@ void LL1Parser::push_rule(int rule)
     break;
   case 138:
     st.push(SymbolLL1(NonTerminal::Command_Seq_NT));
-    currentCommandSeq.insert(currentCommandSeq.begin(), nullptr);
+    st.push(SymbolLL1(65));
     st.push(SymbolLL1(TokenType::ELSE_KW));
     break;
   }
@@ -1518,6 +1523,15 @@ void LL1Parser::builder(int rule)
   case 63:
     build_while_loop();
     break;
+  case 64:
+    currentCommandSeq.insert(currentCommandSeq.begin(), START_OF_IF);
+    break;
+  case 65:
+    currentCommandSeq.insert(currentCommandSeq.begin(), nullptr);
+    break;
+  case 66:
+    currentCommandSeq.insert(currentCommandSeq.begin(), END_OF_LIST_ELSE);
+    break;
   case 72:
     build_assignment_expression();
     break;
@@ -1589,18 +1603,10 @@ void LL1Parser::build_source()
     return;
   }
 
-  int start_line = program->start_line;
-  int end_line = program->end_line;
-  int node_start = program->node_start;
-  int node_end = program->node_end;
-
-  if (!currentFunctionList.empty())
-  {
-    start_line = currentFunctionList.front()->start_line;
-    node_start = currentFunctionList.front()->node_start;
-    end_line = max(end_line, currentFunctionList.back()->end_line);
-    node_end = max(node_end, currentFunctionList.back()->node_end);
-  }
+  int start_line = tracking.program_start_token.line;
+  int node_start = tracking.program_start_token.start;
+  int end_line = tracking.program_end_token.line;
+  int node_end = tracking.program_end_token.end;
 
   Source *sourceNode = new Source(program, currentFunctionList, start_line, end_line, node_start, node_end);
 
@@ -1621,8 +1627,8 @@ void LL1Parser::build_program()
     return;
   }
 
-  int start_line = id->start_line;
-  int node_start = id->node_start;
+  int start_line = tracking.program_kw_token.line;
+  int node_start = tracking.program_kw_token.start;
   int end_line = currentCommandSeq.empty() ? id->end_line : currentCommandSeq.back()->end_line;
   int node_end = currentCommandSeq.empty() ? id->node_end : currentCommandSeq.back()->node_end;
 
@@ -1664,10 +1670,10 @@ void LL1Parser::build_function()
   auto &declSeq = currentDeclarationSeq;
   auto &commandSeq = currentCommandSeq;
 
-  int start_line = id->start_line;
-  int end_line = currentCommandSeq.empty() ? id->end_line : currentCommandSeq.back()->end_line;
-  int node_start = id->node_start;
-  int node_end = currentCommandSeq.empty() ? id->node_end : currentCommandSeq.back()->node_end;
+  int start_line = tracking.function_start_token.line;
+  int node_start = tracking.function_start_token.start;
+  int end_line = tracking.function_end_token.line;
+  int node_end = tracking.function_end_token.end;
 
   Function *funcNode = new Function(id, rtn, declSeq, commandSeq, start_line, end_line, node_start, node_end);
 
@@ -1733,10 +1739,10 @@ void LL1Parser::build_variable_declaration()
     return;
   }
 
-  int start_line = varList.front()->start_line;
-  int end_line = varList.back()->end_line;
-  int node_start = varList.front()->node_start;
-  int node_end = varList.back()->node_end;
+  int start_line = tracking.current_var_token.line;
+  int node_start = tracking.current_var_token.start;
+  int end_line = previous_token.line;
+  int node_end = previous_token.end;
 
   VariableDeclaration *varDecl = new VariableDeclaration(varList, dt, start_line, end_line, node_start, node_end);
 
@@ -1770,13 +1776,10 @@ void LL1Parser::build_variable_initialization()
     return;
   }
 
-  int start_line = id->start_line;
-  int node_start = id->node_start;
-  int end_line = initializer->end_line;
-  int node_end = initializer->node_end;
-
-  start_line = min(start_line, initializer->start_line);
-  node_start = min(node_start, initializer->node_start);
+  int start_line = tracking.current_var_token.line;
+  int node_start = tracking.current_var_token.start;
+  int end_line = previous_token.line;
+  int node_end = previous_token.end;
 
   VariableInitialization *varInit = new VariableInitialization(id, dt, initializer, start_line, end_line, node_start, node_end);
 
@@ -1821,25 +1824,43 @@ void LL1Parser::build_primitive_type()
 
 void LL1Parser::build_array_type()
 {
+  int start_line = tracking.first_left_square_token.line;
+  int node_start = tracking.first_left_square_token.start;
+  int end_line;
+  int node_end;
+  string type;
+  int dim;
+
   AstNode *tailNode = nodes.back();
   nodes.pop_back();
 
   if (auto prim = dynamic_cast<PrimitiveType *>(tailNode))
   {
-    ArrayType *arrType = new ArrayType(prim->datatype, 1, prim->start_line, prim->end_line, prim->node_start, prim->node_end);
+    end_line = tracking.last_right_square_token.line;
+    node_end = tracking.last_right_square_token.end;
+    type = prim->datatype;
+    dim = 1;
+
     delete prim;
-    nodes.push_back(arrType);
   }
   else if (auto arr = dynamic_cast<ArrayType *>(tailNode))
   {
-    ArrayType *arrType = new ArrayType(arr->datatype, arr->dimension + 1, arr->start_line, arr->end_line, arr->node_start, arr->node_end);
+    end_line = tracking.last_right_square_token.line;
+    node_end = tracking.last_right_square_token.end;
+    type = arr->datatype;
+    dim = arr->dimension + 1;
+
     delete arr;
-    nodes.push_back(arrType);
   }
   else
   {
     nodes.push_back(syntax_error("Error building ArrayType node: invalid child node"));
+    return;
   }
+
+  ArrayType *arrType = new ArrayType(type, dim, start_line, end_line, node_start, node_end);
+  nodes.push_back(arrType);
+  tracking.arr_type_tracking = false;
 }
 
 void LL1Parser::build_if_statement()
@@ -1863,14 +1884,90 @@ void LL1Parser::build_if_statement()
       continue;
     }
 
+    if (stmt == START_OF_IF)
+    {
+      Statement *stmt = currentCommandSeq.front();
+
+      Expression *condition = dynamic_cast<Expression *>(conditionNode);
+
+      int start_line, node_start;
+      if (!tracking.if_open_stack.empty())
+      {
+        Token t = tracking.if_open_stack.back();
+        tracking.if_open_stack.pop_back();
+        start_line = t.line;
+        node_start = t.start;
+      }
+      else
+      {
+        start_line = condition->start_line;
+        node_start = condition->node_start;
+      }
+
+      int endLineStmt = alternate->empty() ? consequent->back()->end_line : alternate->back()->end_line;
+      int nodeEndStmt = alternate->empty() ? consequent->back()->node_end : alternate->back()->node_end;
+
+      int end_line, node_end;
+      if (!tracking.if_close_stack.empty())
+      {
+        Token t = tracking.if_close_stack.back();
+        tracking.if_close_stack.pop_back();
+        end_line = max(endLineStmt, t.line);
+        node_end = max(nodeEndStmt, t.end);
+      }
+      else
+      {
+        end_line = max(endLineStmt, previous_token.line);
+        node_end = max(nodeEndStmt, previous_token.end);
+      }
+
+      reverse(consequent->begin(), consequent->end());
+      reverse(alternate->begin(), alternate->end());
+
+      IfStatement *ifStmt = new IfStatement(condition, *consequent, *alternate, start_line, end_line, node_start, node_end);
+
+      nodes.push_back(ifStmt);
+
+      delete consequent;
+      delete alternate;
+
+      return;
+    }
+
     if (stmt == END_OF_LIST_ELSE)
     {
       Expression *condition = dynamic_cast<Expression *>(conditionNode);
 
-      int start_line = condition->start_line;
-      int end_line = alternate->empty() ? consequent->back()->end_line : alternate->back()->end_line;
-      int node_start = condition->node_start;
-      int node_end = alternate->empty() ? consequent->back()->node_end : alternate->back()->node_end;
+      int start_line, node_start;
+      if (!tracking.if_open_stack.empty())
+      {
+        Token t = tracking.if_open_stack.back();
+        tracking.if_open_stack.pop_back();
+        start_line = t.line;
+        node_start = t.start;
+      }
+      else
+      {
+        start_line = condition->start_line;
+        node_start = condition->node_start;
+      }
+
+      int endLineStmt = alternate->empty() ? consequent->back()->end_line : alternate->back()->end_line;
+      int nodeEndStmt = alternate->empty() ? consequent->back()->node_end : alternate->back()->node_end;
+
+      int end_line, node_end;
+      if (!tracking.if_close_stack.empty())
+      {
+        Token t = tracking.if_close_stack.back();
+        tracking.if_close_stack.pop_back();
+        end_line = max(endLineStmt, t.line);
+        node_end = max(nodeEndStmt, t.end);
+      }
+      else
+      {
+        end_line = max(endLineStmt, previous_token.line);
+        node_end = max(nodeEndStmt, previous_token.end);
+      }
 
       reverse(consequent->begin(), consequent->end());
       reverse(alternate->begin(), alternate->end());
@@ -1881,6 +1978,7 @@ void LL1Parser::build_if_statement()
       delete alternate;
 
       currentCommandSeq.insert(currentCommandSeq.begin(), ifStmt);
+
       return;
     }
 
@@ -1910,10 +2008,36 @@ void LL1Parser::build_if_statement()
     return;
   }
 
-  int start_line = condition->start_line;
-  int end_line = consequent->back()->end_line;
-  int node_start = condition->node_start;
-  int node_end = consequent->back()->node_end;
+  int start_line, node_start;
+  if (!tracking.if_open_stack.empty())
+  {
+    Token t = tracking.if_open_stack.back();
+    tracking.if_open_stack.pop_back();
+    start_line = t.line;
+    node_start = t.start;
+  }
+  else
+  {
+    start_line = condition->start_line;
+    node_start = condition->node_start;
+  }
+
+  int endLineStmt = alternate->empty() ? consequent->back()->end_line : alternate->back()->end_line;
+  int nodeEndStmt = alternate->empty() ? consequent->back()->node_end : alternate->back()->node_end;
+
+  int end_line, node_end;
+  if (!tracking.if_close_stack.empty())
+  {
+    Token t = tracking.if_close_stack.back();
+    tracking.if_close_stack.pop_back();
+    end_line = max(endLineStmt, t.line);
+    node_end = max(nodeEndStmt, t.end);
+  }
+  else
+  {
+    end_line = max(endLineStmt, previous_token.line);
+    node_end = max(nodeEndStmt, previous_token.end);
+  }
 
   reverse(consequent->begin(), consequent->end());
   reverse(alternate->begin(), alternate->end());
@@ -1923,7 +2047,15 @@ void LL1Parser::build_if_statement()
   delete consequent;
   delete alternate;
 
-  nodes.push_back(ifStmt);
+  if (currentCommandSeq.front() != START_OF_IF)
+  {
+    currentCommandSeq.insert(currentCommandSeq.begin(), ifStmt);
+  }
+  else
+  {
+    currentCommandSeq.erase(currentCommandSeq.begin());
+    nodes.push_back(ifStmt);
+  }
 }
 
 void LL1Parser::build_return_statement()
@@ -1933,23 +2065,10 @@ void LL1Parser::build_return_statement()
 
   Expression *returnValue = dynamic_cast<Expression *>(returnValueNode);
 
-  int start_line, end_line;
-  int node_start, node_end;
-
-  if (returnValue)
-  {
-    start_line = previous_token.line;
-    end_line = returnValue->end_line;
-    node_start = previous_token.start;
-    node_end = returnValue->node_end;
-  }
-  else
-  {
-    start_line = previous_token.line;
-    end_line = previous_token.line;
-    node_start = previous_token.start;
-    node_end = previous_token.end;
-  }
+  int start_line = tracking.current_return_token.line;
+  int node_start = tracking.current_return_token.start;
+  int end_line = previous_token.line;
+  int node_end = previous_token.end;
 
   ReturnStatement *retStmt = new ReturnStatement(returnValue, start_line, end_line, node_start, node_end);
 
@@ -1958,10 +2077,10 @@ void LL1Parser::build_return_statement()
 
 void LL1Parser::build_skip_statement()
 {
-  int start_line = previous_token.line;
-  int node_start = previous_token.start;
-  int end_line = current_token.line;
-  int node_end = current_token.end;
+  int start_line = tracking.current_skip_token.line;
+  int node_start = tracking.current_skip_token.start;
+  int end_line = previous_token.line;
+  int node_end = previous_token.end;
 
   SkipStatement *skipStmt = new SkipStatement(start_line, end_line, node_start, node_end);
 
@@ -1970,10 +2089,10 @@ void LL1Parser::build_skip_statement()
 
 void LL1Parser::build_stop_statement()
 {
-  int start_line = previous_token.line;
-  int node_start = previous_token.start;
-  int end_line = current_token.line;
-  int node_end = current_token.end;
+  int start_line = tracking.current_stop_token.line;
+  int node_start = tracking.current_stop_token.start;
+  int end_line = previous_token.line;
+  int node_end = previous_token.end;
 
   StopStatement *stopStmt = new StopStatement(start_line, end_line, node_start, node_end);
 
@@ -2003,10 +2122,10 @@ void LL1Parser::build_read_statement()
     variables->insert(variables->begin(), var);
   }
 
-  int start_line = variables->front()->start_line;
-  int end_line = variables->back()->end_line;
-  int node_start = variables->front()->node_start;
-  int node_end = variables->back()->node_end;
+  int start_line = tracking.current_read_token.line;
+  int node_start = tracking.current_read_token.start;
+  int end_line = previous_token.line;
+  int node_end = previous_token.end;
 
   ReadStatement *readStmt = new ReadStatement(*variables, start_line, end_line, node_start, node_end);
 
@@ -2037,10 +2156,10 @@ void LL1Parser::build_write_statement()
     exprList->insert(exprList->begin(), expr);
   }
 
-  int start_line = exprList->front()->start_line;
-  int end_line = exprList->back()->end_line;
-  int node_start = exprList->front()->node_start;
-  int node_end = exprList->back()->node_end;
+  int start_line = tracking.current_write_token.line;
+  int node_start = tracking.current_write_token.start;
+  int end_line = previous_token.line;
+  int node_end = previous_token.end;
 
   if (exprList->empty())
   {
@@ -2090,10 +2209,10 @@ void LL1Parser::build_for_loop()
     return;
   }
 
-  int start_line = init->start_line;
-  int node_start = init->node_start;
-  int end_line = body->empty() ? update->end_line : body->back()->end_line;
-  int node_end = body->empty() ? update->node_end : body->back()->node_end;
+  int start_line = tracking.for_start_token.line;
+  int node_start = tracking.for_start_token.start;
+  int end_line = tracking.for_end_token.line;
+  int node_end = tracking.for_end_token.end;
 
   ForLoop *forLoop = new ForLoop(init, condition, update, *body, start_line, end_line, node_start, node_end);
 
@@ -2156,10 +2275,10 @@ void LL1Parser::build_while_loop()
     return;
   }
 
-  int start_line = condition->start_line;
-  int node_start = condition->node_start;
-  int end_line = body->empty() ? condition->end_line : body->back()->end_line;
-  int node_end = body->empty() ? condition->node_end : body->back()->node_end;
+  int start_line = tracking.while_start_token.line;
+  int node_start = tracking.while_start_token.start;
+  int end_line = tracking.while_end_token.line;
+  int node_end = tracking.while_end_token.end;
 
   WhileLoop *whileLoop = new WhileLoop(condition, *body, start_line, end_line, node_start, node_end);
 
@@ -2474,10 +2593,10 @@ void LL1Parser::build_call_function_expression()
     return;
   }
 
-  int start_line = id->start_line;
-  int node_start = id->node_start;
-  int end_line = exprList->empty() ? id->end_line : exprList->back()->end_line;
-  int node_end = exprList->empty() ? id->node_end : exprList->back()->node_end;
+  int start_line = tracking.first_left_paren_token.line;
+  int node_start = tracking.first_left_paren_token.start;
+  int end_line = tracking.last_right_paren_token.line;
+  int node_end = tracking.last_right_paren_token.end;
 
   CallFunctionExpression *callFuncExpr = new CallFunctionExpression(id, *exprList, start_line, end_line, node_start, node_end);
 
@@ -2667,33 +2786,153 @@ ArrayLiteral *LL1Parser::build_array()
     elements->insert(elements->begin(), expr);
   }
 
-  int start_line = 0;
-  int end_line = 0;
-  int node_start = 0;
-  int node_end = 0;
-
-  if (!elements->empty())
-  {
-    start_line = elements->front()->start_line;
-    node_start = elements->front()->node_start;
-    end_line = elements->back()->end_line;
-    node_end = elements->back()->node_end;
-  }
-  else if (current_token.type == TokenType::RIGHT_CURLY_PR && previous_token.type == TokenType::LEFT_CURLY_PR)
-  {
-    start_line = previous_token.line;
-    node_start = previous_token.start;
-    end_line = current_token.line;
-    node_end = current_token.end;
-  }
-  else
-  {
-    start_line = end_line = node_start = node_end = 0;
-  }
+  int start_line = tracking.last_left_curly_token.line;
+  int node_start = tracking.last_left_curly_token.start;
+  int end_line = tracking.last_right_curly_token.line;
+  int node_end = tracking.last_right_curly_token.end;
 
   ArrayLiteral *arrLit = new ArrayLiteral(*elements, start_line, end_line, node_start, node_end);
 
   delete elements;
 
   return arrLit;
+}
+
+void LL1Parser::track_special_tokens(TokenType t, const Token &token)
+{
+  if (!tracking.program_start_token_set)
+  {
+    tracking.program_start_token = token;
+    tracking.program_start_token_set = true;
+  }
+
+  switch (t)
+  {
+  case TokenType::PROGRAM_KW:
+    tracking.program_kw_token = token;
+    break;
+  case TokenType::FUNC_KW:
+    if (!tracking.function_start_token_set)
+    {
+      tracking.function_start_token = token;
+      tracking.function_start_token_set = true;
+    }
+    else
+    {
+      tracking.function_end_token = token;
+      tracking.function_start_token_set = false;
+    }
+    break;
+  case TokenType::WHILE_KW:
+    if (!tracking.while_start_token_set)
+    {
+      tracking.while_start_token = token;
+      tracking.while_start_token_set = true;
+    }
+    else
+    {
+      tracking.while_end_token = token;
+      tracking.while_start_token_set = false;
+    }
+    break;
+  case TokenType::FOR_KW:
+    if (!tracking.for_start_token_set)
+    {
+      tracking.for_start_token = token;
+      tracking.for_start_token_set = true;
+    }
+    else
+    {
+      tracking.for_end_token = token;
+      tracking.for_start_token_set = false;
+    }
+    break;
+  case TokenType::IF_KW:
+    if (previous_token.type == TokenType::END_KW)
+    {
+      tracking.if_close_stack.push_back(token);
+    }
+    else
+    {
+      tracking.if_open_stack.push_back(token);
+    }
+    break;
+  case TokenType::VAR_KW:
+    tracking.current_var_token = token;
+    break;
+  case TokenType::SKIP_KW:
+    tracking.current_skip_token = token;
+    break;
+  case TokenType::STOP_KW:
+    tracking.current_stop_token = token;
+    break;
+  case TokenType::WRITE_KW:
+    tracking.current_write_token = token;
+    break;
+  case TokenType::READ_KW:
+    tracking.current_read_token = token;
+    break;
+  case TokenType::RETURN_KW:
+    tracking.current_return_token = token;
+    break;
+  case TokenType::LEFT_SQUARE_PR:
+    if (tracking.arr_type_tracking)
+    {
+      if (!tracking.program_start_left_square_token)
+      {
+        tracking.first_left_square_token = token;
+        tracking.program_start_left_square_token = true;
+      }
+    }
+    else
+    {
+      tracking.index_sq_stack.push_back(token);
+    }
+    break;
+  case TokenType::RIGHT_SQUARE_PR:
+    if (tracking.arr_type_tracking)
+    {
+      tracking.last_right_square_token = token;
+      tracking.program_start_left_square_token = false;
+    }
+    else
+    {
+      tracking.index_last_right_sq = token;
+      if (!tracking.index_sq_stack.empty())
+      {
+        tracking.index_first_left_sq = tracking.index_sq_stack.back();
+        tracking.index_sq_stack.pop_back();
+      }
+    }
+    break;
+  case TokenType::LEFT_PR:
+    if (!tracking.paren_tracked)
+    {
+      tracking.first_left_paren_token = token;
+      tracking.paren_tracked = true;
+    }
+    break;
+  case TokenType::RIGHT_PR:
+    tracking.last_right_paren_token = token;
+    tracking.paren_tracked = false;
+    break;
+  case TokenType::LEFT_CURLY_PR:
+    tracking.curly_stack.push_back(token);
+    break;
+  case TokenType::RIGHT_CURLY_PR:
+    tracking.last_right_curly_token = token;
+    if (!tracking.curly_stack.empty())
+    {
+      tracking.last_left_curly_token = tracking.curly_stack.back();
+      tracking.curly_stack.pop_back();
+    }
+    break;
+  case TokenType::END_OF_FILE:
+    if (!tracking.program_end_token_set)
+    {
+      tracking.program_end_token = token;
+      tracking.program_end_token_set = true;
+    }
+    break;
+  }
 }

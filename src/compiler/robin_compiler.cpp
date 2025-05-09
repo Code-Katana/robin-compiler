@@ -23,7 +23,10 @@ RobinCompiler::RobinCompiler(CompilerOptions *options)
     parser = new LL1Parser(scanner);
     break;
   }
+
   semantic = new SemanticAnalyzer(parser);
+  generator = new IRGenerator(semantic);
+  optimization = new CodeOptimization(generator->getModule(), options->get_optimization_option());
 }
 
 vector<Token> RobinCompiler::tokenize()
@@ -39,4 +42,15 @@ AstNode *RobinCompiler::parse_ast()
 void RobinCompiler::typecheck()
 {
   semantic->analyze();
+}
+
+void RobinCompiler::generate_ir(const string &filename)
+{
+
+  generator->generate(filename);
+}
+
+void RobinCompiler::optimize(const string &filename)
+{
+  optimization->optimize_and_write(filename);
 }

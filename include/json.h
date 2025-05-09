@@ -37,8 +37,8 @@ private:
   static string stringify_source(const Source *src);
 
   // Declarations
-  static string stringify_program(const Program *node);
-  static string stringify_function(const Function *node);
+  static string stringify_program(const ProgramDefinition *node);
+  static string stringify_function(const FunctionDefinition *node);
   static string stringify_var_def(const VariableDefinition *node);
   static string stringify_var_dec(const VariableDeclaration *node);
   static string stringify_var_init(const VariableInitialization *node);
@@ -75,8 +75,8 @@ private:
 
   // Types
   static string stringify_type(const DataType *type);
-  static string stringify_primitive_type(const PrimitiveType *type);
-  static string stringify_array_type(const ArrayType *type);
+  static string stringify_primitive_type(const PrimitiveDataType *type);
+  static string stringify_array_type(const ArrayDataType *type);
   static string stringify_return_type(const ReturnType *type);
 
   // Literals

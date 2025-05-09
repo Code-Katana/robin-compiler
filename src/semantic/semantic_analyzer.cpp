@@ -17,7 +17,7 @@ ErrorSymbol SemanticAnalyzer::get_error()
   return {};
 }
 
-void SemanticAnalyzer::analyze()
+Source *SemanticAnalyzer::analyze()
 {
   Source *source = (Source *)parser->parse_ast();
   semantic_source(source);
@@ -25,6 +25,8 @@ void SemanticAnalyzer::analyze()
   {
     cout << error_symbol.message_error << endl;
   }
+
+  return source;
 }
 
 void SemanticAnalyzer::semantic_source(Source *source)
@@ -99,7 +101,7 @@ void SemanticAnalyzer::semantic_source(Source *source)
   }
 }
 
-void SemanticAnalyzer::semantic_program(Program *program)
+void SemanticAnalyzer::semantic_program(ProgramDefinition *program)
 {
   SymbolTable *st = new SymbolTable();
   call_stack.push(st);
@@ -110,7 +112,7 @@ void SemanticAnalyzer::semantic_program(Program *program)
   call_stack.pop();
 }
 
-void SemanticAnalyzer::sematic_function(Function *func)
+void SemanticAnalyzer::sematic_function(FunctionDefinition *func)
 {
   SymbolTable *st = new SymbolTable();
   SymbolTable *globals = call_stack.top();

@@ -14,9 +14,9 @@ public:
 
 private:
   Source *parse_source();
-  Program *parse_program();
+  ProgramDefinition *parse_program();
   ReturnType *parse_return_type();
-  Function *parse_function();
+  FunctionDefinition *parse_function();
 
   DataType *parse_data_type();
   VariableDefinition *parse_var_def();

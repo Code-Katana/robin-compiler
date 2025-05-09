@@ -43,14 +43,14 @@ string Symbol::get_name_symboltype(SymbolType st)
 
 SymbolType Symbol::get_datatype(DataType *dt)
 {
-  if (dynamic_cast<ArrayType *>(dt))
+  if (dynamic_cast<ArrayDataType *>(dt))
   {
-    ArrayType *arr = (ArrayType *)dt;
+    ArrayDataType *arr = (ArrayDataType *)dt;
     return Symbol::get_type_name(arr->datatype);
   }
-  else if (dynamic_cast<PrimitiveType *>(dt))
+  else if (dynamic_cast<PrimitiveDataType *>(dt))
   {
-    PrimitiveType *primitive = (PrimitiveType *)dt;
+    PrimitiveDataType *primitive = (PrimitiveDataType *)dt;
     return Symbol::get_type_name(primitive->datatype);
   }
 
@@ -59,9 +59,9 @@ SymbolType Symbol::get_datatype(DataType *dt)
 
 int Symbol::get_dimension(DataType *dt)
 {
-  if (dynamic_cast<ArrayType *>(dt))
+  if (dynamic_cast<ArrayDataType *>(dt))
   {
-    ArrayType *arr = (ArrayType *)dt;
+    ArrayDataType *arr = (ArrayDataType *)dt;
     return arr->dimension;
   }
 

@@ -15,7 +15,7 @@ class SemanticAnalyzer
 {
 public:
   SemanticAnalyzer(ParserBase *pr);
-  void analyze();
+  Source *analyze();
   ErrorSymbol get_error();
 
 private:
@@ -25,8 +25,8 @@ private:
   bool has_error;
 
   void semantic_source(Source *source);
-  void semantic_program(Program *program);
-  void sematic_function(Function *func);
+  void semantic_program(ProgramDefinition *program);
+  void sematic_function(FunctionDefinition *func);
   void semantic_command(Statement *stmt, string name_parent);
   void semantic_if(IfStatement *ifstmt, string name_parent);
   void semantic_return(ReturnStatement *rtnStmt, string name_parent);

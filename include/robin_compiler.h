@@ -20,6 +20,9 @@
 // intermediate representation phase
 #include "ir_generator.h"
 
+//code optimization phase
+#include "code_optimization.h"
+
 class RobinCompiler
 {
 public:
@@ -30,10 +33,12 @@ public:
   AstNode *parse_ast();
   void typecheck();
   void generate_ir(const string &filename);
+  void optimize(const string &filename);
 
 private:
   ScannerBase *scanner;
   ParserBase *parser;
   SemanticAnalyzer *semantic;
   IRGenerator *generator;
+  CodeOptimization *optimization;
 };

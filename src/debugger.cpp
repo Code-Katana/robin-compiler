@@ -28,8 +28,9 @@ int Debugger::run()
 {
   string input_file = DEBUGGING_FOLDER + "/" + PROGRAM_FILE;
   string output_file = DEBUGGING_FOLDER + "/" + PROGRAM_FILE + ".ll";
+  string opt_file = DEBUGGING_FOLDER + "/" + PROGRAM_FILE + "_opt.ll";
   string program = read_program(input_file);
-  CompilerOptions *options = new CompilerOptions(program);
+  CompilerOptions *options = new CompilerOptions(program ,OptLevel::O3);
 
   RobinCompiler *rc = new RobinCompiler(options);
 
@@ -48,6 +49,7 @@ int Debugger::run()
     rc->typecheck();
   }
   rc->generate_ir(output_file);
+  rc->optimize(opt_file);
   system("pause");
   return 0;
 }

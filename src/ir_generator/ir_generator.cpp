@@ -53,13 +53,11 @@ void IRGenerator::generate(const string &filename)
 
   std::error_code EC;
   raw_fd_ostream outfile(filename, EC, llvm::sys::fs::OF_None);
-
   if (EC)
   {
     errs() << "Could not open file: " << EC.message() << "\n";
     return;
   }
-
   module->print(outfile, nullptr);
   outfile.flush();
 

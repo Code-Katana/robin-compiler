@@ -14,7 +14,16 @@ RobinCompiler::RobinCompiler(CompilerOptions *options)
     break;
   }
 
-  parser = new RecursiveDecentParser(scanner);
+  switch (options->get_parser_option())
+  {
+  case ParserOptions::RecursiveDecent:
+    parser = new RecursiveDecentParser(scanner);
+    break;
+  case ParserOptions::LL1:
+    parser = new LL1Parser(scanner);
+    break;
+  }
+
   semantic = new SemanticAnalyzer(parser);
   generator = new IRGenerator(semantic);
   optimization = new CodeOptimization(generator->getModule(), options->get_optimization_option());

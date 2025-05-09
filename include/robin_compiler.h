@@ -13,6 +13,7 @@
 // syntax analysis phase
 #include "parser_base.h"
 #include "recursive_decent_parser.h"
+#include "ll1_parser.h"
 
 // semantic analysis phase
 #include "semantic_analyzer.h"

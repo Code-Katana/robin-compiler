@@ -14,6 +14,7 @@ void ParserBase::reset_parser()
   current_token = sc->get_token();
   previous_token = Token();
 }
+
 ErrorNode *ParserBase::syntax_error(string message)
 {
   if (!has_error)
@@ -22,7 +23,7 @@ ErrorNode *ParserBase::syntax_error(string message)
     has_error = true;
   }
 
-  return nullptr;
+  return error_node;
 }
 
 bool ParserBase::lookahead(TokenType type)

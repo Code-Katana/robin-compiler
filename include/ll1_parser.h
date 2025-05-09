@@ -74,7 +74,7 @@ private:
   vector<Token> peeked_tokens;
   stack<SymbolLL1> st;
   vector<AstNode *> nodes;
-  vector<Function *> currentFunctionList;
+  vector<FunctionDefinition *> currentFunctionList;
   vector<VariableDefinition *> currentDeclarationSeq;
   vector<Statement *> currentCommandSeq;
   static AstNode *END_OF_LIST_MARKER;

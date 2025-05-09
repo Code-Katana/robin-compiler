@@ -157,7 +157,7 @@ bool LL1Parser::match(TokenType t)
   case TokenType::STRING_TY:
   case TokenType::FLOAT_TY:
   case TokenType::VOID_TY:
-    leaf = new PrimitiveType(current_token.value, current_token.line, current_token.line, current_token.start, current_token.end);
+    leaf = new PrimitiveDataType(current_token.value, current_token.line, current_token.line, current_token.start, current_token.end);
     break;
   case TokenType::PLUS_OP:
   case TokenType::MINUS_OP:
@@ -1596,7 +1596,7 @@ void LL1Parser::build_source()
   AstNode *programNode = nodes.back();
   nodes.pop_back();
 
-  Program *program = dynamic_cast<Program *>(programNode);
+  ProgramDefinition *program = dynamic_cast<ProgramDefinition *>(programNode);
   if (!program)
   {
     nodes.push_back(syntax_error("Error building Source node: invalid program node"));
@@ -1638,7 +1638,7 @@ void LL1Parser::build_program()
     node_end = previous_token.end;
   }
 
-  Program *programNode = new Program(id, currentDeclarationSeq, currentCommandSeq, start_line, end_line, node_start, node_end);
+  ProgramDefinition *programNode = new ProgramDefinition(id, currentDeclarationSeq, currentCommandSeq, start_line, end_line, node_start, node_end);
 
   currentDeclarationSeq.clear();
   currentCommandSeq.clear();
@@ -1675,7 +1675,7 @@ void LL1Parser::build_function()
   int end_line = tracking.function_end_token.line;
   int node_end = tracking.function_end_token.end;
 
-  Function *funcNode = new Function(id, rtn, declSeq, commandSeq, start_line, end_line, node_start, node_end);
+  FunctionDefinition *funcNode = new FunctionDefinition(id, rtn, declSeq, commandSeq, start_line, end_line, node_start, node_end);
 
   currentDeclarationSeq.clear();
   currentCommandSeq.clear();
@@ -1791,12 +1791,12 @@ void LL1Parser::build_return_type()
   AstNode *typeNode = nodes.back();
   nodes.pop_back();
 
-  if (auto prim = dynamic_cast<PrimitiveType *>(typeNode))
+  if (auto prim = dynamic_cast<PrimitiveDataType *>(typeNode))
   {
     ReturnType *retType = new ReturnType(prim, prim->start_line, prim->end_line, prim->node_start, prim->node_end);
     nodes.push_back(retType);
   }
-  else if (auto arr = dynamic_cast<ArrayType *>(typeNode))
+  else if (auto arr = dynamic_cast<ArrayDataType *>(typeNode))
   {
     ReturnType *retType = new ReturnType(arr, arr->start_line, arr->end_line, arr->node_start, arr->node_end);
     nodes.push_back(retType);
@@ -1812,7 +1812,7 @@ void LL1Parser::build_primitive_type()
   AstNode *tokenNode = nodes.back();
   nodes.pop_back();
 
-  PrimitiveType *primType = dynamic_cast<PrimitiveType *>(tokenNode);
+  PrimitiveDataType *primType = dynamic_cast<PrimitiveDataType *>(tokenNode);
   if (!primType)
   {
     nodes.push_back(syntax_error("Error building PrimitiveType node"));
@@ -1834,7 +1834,7 @@ void LL1Parser::build_array_type()
   AstNode *tailNode = nodes.back();
   nodes.pop_back();
 
-  if (auto prim = dynamic_cast<PrimitiveType *>(tailNode))
+  if (auto prim = dynamic_cast<PrimitiveDataType *>(tailNode))
   {
     end_line = tracking.last_right_square_token.line;
     node_end = tracking.last_right_square_token.end;
@@ -1843,7 +1843,7 @@ void LL1Parser::build_array_type()
 
     delete prim;
   }
-  else if (auto arr = dynamic_cast<ArrayType *>(tailNode))
+  else if (auto arr = dynamic_cast<ArrayDataType *>(tailNode))
   {
     end_line = tracking.last_right_square_token.line;
     node_end = tracking.last_right_square_token.end;
@@ -1858,7 +1858,7 @@ void LL1Parser::build_array_type()
     return;
   }
 
-  ArrayType *arrType = new ArrayType(type, dim, start_line, end_line, node_start, node_end);
+  ArrayDataType *arrType = new ArrayDataType(type, dim, start_line, end_line, node_start, node_end);
   nodes.push_back(arrType);
   tracking.arr_type_tracking = false;
 }
@@ -2709,7 +2709,7 @@ void LL1Parser::build_function_list()
   AstNode *funcNode = nodes.back();
   nodes.pop_back();
 
-  Function *func = dynamic_cast<Function *>(funcNode);
+  FunctionDefinition *func = dynamic_cast<FunctionDefinition *>(funcNode);
   if (!func)
   {
     nodes.push_back(syntax_error("Invalid function node"));

@@ -1399,6 +1399,29 @@ Value *IRGenerator::generate_unary_expr(UnaryExpression *expr)
   }
 
   if (expr->optr == "#") {
+     if (auto *id = dynamic_cast<Identifier*>(expr->operand)) {
+      auto symOpt = findSymbol(id->name);
+      if (symOpt &&
+          symOpt->baseType   == SymbolType::String &&
+          symOpt->dimensions == 0)
+      {
+        Value *strPtr = generate_expression(id);
+        if (!strPtr) return nullptr;
+
+        auto &C    = context;
+        Type *i8Ty   = Type::getInt8Ty(C);
+        Type *i8Ptr  = PointerType::getUnqual(i8Ty);
+        Type *i64Ty  = Type::getInt64Ty(C);
+        Type *i32Ty  = Type::getInt32Ty(C);
+
+        FunctionCallee strlenFn = module->getOrInsertFunction(
+          "strlen",
+          FunctionType::get(i64Ty, { i8Ptr },false));
+
+        Value *len64 = builder.CreateCall(strlenFn,{ strPtr },"strlen.call");
+        return builder.CreateTrunc(len64,i32Ty,"strlen.i32");
+      }
+    }
     int numIndices = 0;
     Identifier *rootId = nullptr;
     Expression *cur = expr->operand;
@@ -1416,9 +1439,7 @@ Value *IRGenerator::generate_unary_expr(UnaryExpression *expr)
     Value *slotAddr = nullptr;
     Type  *dummyTy = nullptr;
     if (numIndices > 0) {
-      slotAddr = generate_index_expression(
-                   static_cast<IndexExpression*>(expr->operand),
-                   &dummyTy);
+      slotAddr = generate_index_expression(static_cast<IndexExpression*>(expr->operand),&dummyTy);
     } else {
       auto sym = findSymbol(rootId->name);
       if (!sym) return nullptr;

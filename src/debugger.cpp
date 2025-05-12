@@ -52,6 +52,5 @@ int Debugger::run()
   }
 
   rc->generate_ir(output_file);
-  rc->optimize(opt_file);
   return 0;
 }

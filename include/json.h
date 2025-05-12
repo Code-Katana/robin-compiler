@@ -5,8 +5,8 @@
 #include <vector>
 #include <typeinfo>
 
-#include "token.h"
-#include "ast.h"
+#include "compiler/core/token.h"
+#include "compiler/core/ast.h"
 
 using namespace std;
 

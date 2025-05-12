@@ -4,7 +4,7 @@
 #include <fstream>
 #include <string>
 
-#include "robin_compiler.h"
+#include "compiler/robin_compiler.h"
 #include "json.h"
 
 using namespace std;

@@ -437,7 +437,20 @@ void SemanticAnalyzer::semantic_var_def(VariableDefinition *var, SymbolTable *st
       dt_init = array_value.first;
       dim_init = array_value.second;
     }
-
+    else if (dynamic_cast<IndexExpression *>(def->initializer))
+    {
+      IndexExpression *var = static_cast<IndexExpression *>(def->initializer);
+      dt_init = semantic_index_expr(def->initializer, false, true);
+      dim_init = 1;
+      while (dynamic_cast<IndexExpression *>(var->base))
+      {
+        dim_init += 1;
+        var = static_cast<IndexExpression *>(var->base);
+      }
+      Identifier *id = static_cast<Identifier *>(var->base);
+      VariableSymbol *sv = is_initialized_var(id);
+      dim_init = sv->dim - dim_init;
+    }
     else if (dynamic_cast<Identifier *>(def->initializer))
     {
       Identifier *var = static_cast<Identifier *>(def->initializer);
@@ -540,15 +553,25 @@ SymbolType SemanticAnalyzer::semantic_assign_expr(Expression *assignExpr)
     }
   }
 
-  SymbolType type_assignee = semantic_assignable_expr(assign_Expr->assignee);
-  SymbolType type_value = semantic_expr(assign_Expr->value);
+  SymbolType type_assignee;
+  if (dynamic_cast<IndexExpression *>(assign_Expr->assignee))
+  {
+    type_assignee = semantic_index_expr(assign_Expr->assignee, true, true);
+  }
+  else
+  {
+    type_assignee = semantic_assignable_expr(assign_Expr->assignee);
+  }
+  SymbolType type_value;
 
   if (dynamic_cast<ArrayLiteral *>(assign_Expr->value))
   {
+    type_value = semantic_expr(assign_Expr->value);
     dim_value = semantic_array(static_cast<ArrayLiteral *>(assign_Expr->value)).second;
   }
   else if (dynamic_cast<Identifier *>(assign_Expr->value))
   {
+    type_value = semantic_expr(assign_Expr->value);
     Identifier *id = static_cast<Identifier *>(assign_Expr->value);
     SymbolTable *scope = retrieve_scope(id->name);
     if (scope == nullptr)
@@ -564,8 +587,23 @@ SymbolType SemanticAnalyzer::semantic_assign_expr(Expression *assignExpr)
     }
     dim_value = vr->dim;
   }
+  else if (dynamic_cast<IndexExpression *>(assign_Expr->value))
+  {
+    IndexExpression *var = static_cast<IndexExpression *>(assign_Expr->value);
+    type_value = semantic_index_expr(assign_Expr->value, false, true);
+    dim_value = 1;
+    while (dynamic_cast<IndexExpression *>(var->base))
+    {
+      dim_value += 1;
+      var = static_cast<IndexExpression *>(var->base);
+    }
+    Identifier *id = static_cast<Identifier *>(var->base);
+    VariableSymbol *sv = is_initialized_var(id);
+    dim_value = sv->dim - dim_value;
+  }
   else
   {
+    type_value = semantic_expr(assign_Expr->value);
     dim_value = 0;
   }
   SymbolType result = TypeChecker::is_valid_assign(type_assignee, type_value, dim_assignee, dim_value);
@@ -1012,7 +1050,11 @@ SymbolType SemanticAnalyzer::semantic_call_function_expr(Expression *cfExpr)
 
   for (int i = 0; i < arguments.size(); ++i)
   {
-    SymbolType type = semantic_expr(arguments[i]);
+    SymbolType type;
+    if (!dynamic_cast<IndexExpression *>(arguments[i]))
+    {
+      SymbolType type = semantic_expr(arguments[i]);
+    }
 
     // 1. Get dimension of current argument
     int arg_dim = 0;
@@ -1030,6 +1072,20 @@ SymbolType SemanticAnalyzer::semantic_call_function_expr(Expression *cfExpr)
         if (vs)
           arg_dim = vs->dim;
       }
+    }
+    else if (dynamic_cast<IndexExpression *>(arguments[i]))
+    {
+      IndexExpression *var = static_cast<IndexExpression *>(arguments[i]);
+      type = semantic_index_expr(arguments[i], false, true);
+      arg_dim = 1;
+      while (dynamic_cast<IndexExpression *>(var->base))
+      {
+        arg_dim += 1;
+        var = static_cast<IndexExpression *>(var->base);
+      }
+      Identifier *id = static_cast<Identifier *>(var->base);
+      VariableSymbol *sv = is_initialized_var(id);
+      arg_dim = sv->dim - arg_dim;
     }
 
     // 2. Get expected type + dimension from function signature

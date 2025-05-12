@@ -28,8 +28,14 @@ int Debugger::run()
 {
   string input_file = DEBUGGING_FOLDER + "/" + PROGRAM_FILE;
   string output_file = DEBUGGING_FOLDER + "/" + PROGRAM_FILE + ".ll";
+  string opt_file = DEBUGGING_FOLDER + "/" + PROGRAM_FILE + "_opt.ll";
+
   string program = read_program(input_file);
-  CompilerOptions *options = new CompilerOptions(program);
+  CompilerOptions *options = new CompilerOptions(
+      program,
+      ScannerOptions::FiniteAutomaton,
+      ParserOptions::LL1,
+      OptLevel::O3);
 
   RobinCompiler *rc = new RobinCompiler(options);
 
@@ -42,13 +48,9 @@ int Debugger::run()
   }
   else
   {
-    JSON::debug_file(Debugger::DEBUGGING_FOLDER + "/tokens.json", JSON::stringify_tokens_stream(tokens));
     JSON::debug_file(Debugger::DEBUGGING_FOLDER + "/tree.json", JSON::stringify_node(tree));
-
-    rc->typecheck();
   }
+
   rc->generate_ir(output_file);
-  
-  system("pause");
   return 0;
 }

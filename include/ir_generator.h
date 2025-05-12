@@ -3,10 +3,15 @@
 #include "ast.h"
 #include "symbol.h"
 #include "semantic_analyzer.h"
+#include "code_optimization.h"
 
 #include <llvm/IR/Type.h>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/Support/TargetSelect.h>
+#include <llvm/IR/PassManager.h>
+#include <llvm/Passes/PassBuilder.h>
+#include <llvm/Passes/PassPlugin.h>
+#include <llvm/Support/raw_ostream.h>
 #include "llvm/Support/FileSystem.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
@@ -39,7 +44,7 @@ public:
   Module *getModule() { return module.get(); }
 
   void generate(const string &filename);
-
+  
 private:
   Source *source;
   static LLVMContext context;
@@ -47,6 +52,7 @@ private:
   IRBuilder<> builder;
   stack<unordered_map<string, SymbolEntry>> symbolTable;
   std::unordered_map<std::string, FunctionDefinition *> functionTable;
+  OptLevel optLevel = OptLevel::O0;
 
   Type *getLLVMType(SymbolType type, int dim = 0);
   Value *generate_node(AstNode *node);
@@ -91,7 +97,7 @@ private:
   Value *findValue(const string &name);
   Value *generate_identifier_address(Identifier *id);
   optional<SymbolEntry> findSymbol(const std::string &name);
-  //array helpers
+  // array helpers
   bool isUniformArray(ArrayLiteral *lit);
   Type *getElementType(ArrayLiteral *lit, int *outDim);
   Value *createJaggedArray(ArrayLiteral *lit, Function *mallocFn,

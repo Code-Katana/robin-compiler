@@ -80,7 +80,7 @@ private:
   static AstNode *END_OF_LIST_MARKER;
   static Statement *END_OF_LIST_ELSE;
   static Statement *START_OF_IF;
-  int parseTable[(int)NonTerminal::May_be_Arg_NT + 1][(int)TokenType::END_OF_FILE + 1];
+  int parseTable[(int)NonTerminal::Call_Value_NT + 1][(int)TokenType::END_OF_FILE + 1];
 
   void fill_table();
   Token peek_token();

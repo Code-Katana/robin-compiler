@@ -849,7 +849,25 @@ void LL1Parser::fill_table()
   parseTable[(int)NonTerminal::May_be_Arg_NT][(int)TokenType::LEFT_PR] = 136;
   parseTable[(int)NonTerminal::May_be_Arg_NT][(int)TokenType::ID_SY] = 136;
   parseTable[(int)NonTerminal::May_be_Arg_NT][(int)TokenType::STRING_SY] = 136;
+  parseTable[(int)NonTerminal::May_be_Arg_NT][(int)TokenType::LEFT_CURLY_PR] = 136;
   parseTable[(int)NonTerminal::May_be_Arg_NT][(int)TokenType::RIGHT_PR] = 137;
+
+  parseTable[(int)NonTerminal::Call_Value_NT][(int)TokenType::TRUE_KW] = 139;
+  parseTable[(int)NonTerminal::Call_Value_NT][(int)TokenType::FALSE_KW] = 139;
+  parseTable[(int)NonTerminal::Call_Value_NT][(int)TokenType::NOT_KW] = 139;
+  parseTable[(int)NonTerminal::Call_Value_NT][(int)TokenType::INTEGER_NUM] = 139;
+  parseTable[(int)NonTerminal::Call_Value_NT][(int)TokenType::FLOAT_NUM] = 139;
+  parseTable[(int)NonTerminal::Call_Value_NT][(int)TokenType::MINUS_OP] = 139;
+  parseTable[(int)NonTerminal::Call_Value_NT][(int)TokenType::INCREMENT_OP] = 139;
+  parseTable[(int)NonTerminal::Call_Value_NT][(int)TokenType::DECREMENT_OP] = 139;
+  parseTable[(int)NonTerminal::Call_Value_NT][(int)TokenType::STRINGIFY_OP] = 139;
+  parseTable[(int)NonTerminal::Call_Value_NT][(int)TokenType::BOOLEAN_OP] = 139;
+  parseTable[(int)NonTerminal::Call_Value_NT][(int)TokenType::ROUND_OP] = 139;
+  parseTable[(int)NonTerminal::Call_Value_NT][(int)TokenType::LENGTH_OP] = 139;
+  parseTable[(int)NonTerminal::Call_Value_NT][(int)TokenType::LEFT_PR] = 139;
+  parseTable[(int)NonTerminal::Call_Value_NT][(int)TokenType::ID_SY] = 139;
+  parseTable[(int)NonTerminal::Call_Value_NT][(int)TokenType::STRING_SY] = 139;
+  parseTable[(int)NonTerminal::Call_Value_NT][(int)TokenType::LEFT_CURLY_PR] = 140;
 }
 
 void LL1Parser::push_rule(int rule)
@@ -891,6 +909,7 @@ void LL1Parser::push_rule(int rule)
     break;
   case 7:
     st.push(SymbolLL1(7));
+    st.push(SymbolLL1(140));
     st.push(SymbolLL1(NonTerminal::Array_Type_NT));
 
     break;
@@ -1425,12 +1444,12 @@ void LL1Parser::push_rule(int rule)
     break;
   case 135:
     st.push(SymbolLL1(NonTerminal::Call_Expr_Tail_NT));
-    st.push(SymbolLL1(NonTerminal::Or_Expr_NT));
+    st.push(SymbolLL1(NonTerminal::Call_Value_NT));
     st.push(SymbolLL1(TokenType::COMMA_SY));
     break;
   case 136:
     st.push(SymbolLL1(NonTerminal::Call_Expr_Tail_NT));
-    st.push(SymbolLL1(NonTerminal::Or_Expr_NT));
+    st.push(SymbolLL1(NonTerminal::Call_Value_NT));
     break;
   case 137:
     break;
@@ -1438,6 +1457,16 @@ void LL1Parser::push_rule(int rule)
     st.push(SymbolLL1(NonTerminal::Command_Seq_NT));
     st.push(SymbolLL1(65));
     st.push(SymbolLL1(TokenType::ELSE_KW));
+    break;
+  case 139:
+    st.push(SymbolLL1(NonTerminal::Or_Expr_NT));
+    break;
+  case 140:
+    st.push(SymbolLL1(75));
+    st.push(SymbolLL1(TokenType::RIGHT_CURLY_PR));
+    st.push(SymbolLL1(NonTerminal::Array_Value_NT));
+    nodes.push_back(END_OF_LIST_MARKER);
+    st.push(SymbolLL1(TokenType::LEFT_CURLY_PR));
     break;
   }
 }
@@ -1587,6 +1616,9 @@ void LL1Parser::builder(int rule)
     break;
   case 132:
     build_call_function_expression();
+    break;
+  case 140:
+    tracking.arr_type_tracking = false;
     break;
   }
 }
@@ -1860,7 +1892,6 @@ void LL1Parser::build_array_type()
 
   ArrayDataType *arrType = new ArrayDataType(type, dim, start_line, end_line, node_start, node_end);
   nodes.push_back(arrType);
-  tracking.arr_type_tracking = false;
 }
 
 void LL1Parser::build_if_statement()

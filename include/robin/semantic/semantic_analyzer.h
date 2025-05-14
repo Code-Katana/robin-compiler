@@ -61,5 +61,6 @@ namespace rbn::semantic
     void is_array(ast::Expression *Expr);
 
     core::ErrorSymbol semantic_error(string name, core::SymbolType st, string err);
+    core::ErrorSymbol forword_syntax_error(ast::ErrorNode *err);
   };
 }

@@ -18,6 +18,7 @@ namespace rbn::syntax
     virtual ~ParserBase() = default;
 
     virtual ast::AstNode *parse_ast() = 0;
+    ast::ErrorNode *get_error_node();
 
   protected:
     lexical::ScannerBase *sc;
@@ -28,6 +29,7 @@ namespace rbn::syntax
 
     virtual bool match(core::TokenType type) = 0;
     ast::ErrorNode *syntax_error(string message);
+    ast::ErrorNode *forword_lexical_error(core::Token *error_token, core::Token *prev_token);
     bool lookahead(core::TokenType type);
   };
 }

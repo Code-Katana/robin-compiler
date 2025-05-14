@@ -4,9 +4,10 @@ namespace rbn::ir
 {
   LLVMContext IRGenerator::context;
 
-  IRGenerator::IRGenerator(semantic::SemanticAnalyzer *semantic) : builder(context)
+  IRGenerator::IRGenerator(semantic::SemanticAnalyzer *sem) : builder(context)
   {
-    source = semantic->analyze();
+    semantic = sem;
+    source = nullptr;
     module = make_unique<Module>("main_module", context);
     pushScope();
   }
@@ -45,6 +46,11 @@ namespace rbn::ir
 
   void IRGenerator::generate(const string &filename)
   {
+    if (!source && !(source = semantic->analyze()))
+    {
+      return;
+    }
+
     for (auto func : source->functions)
     {
       functionTable[func->funcname->name] = func;

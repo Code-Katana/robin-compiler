@@ -87,7 +87,7 @@ namespace rbn::syntax
     void fill_table();
     core::Token peek_token();
     core::Token peek_token_n(int n);
-    void get_token();
+    void consume();
     bool match(core::TokenType t);
     void push_rule(int rule);
     void builder(int rule);

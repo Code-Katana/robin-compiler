@@ -82,7 +82,7 @@ namespace rbn::syntax
     static ast::AstNode *END_OF_LIST_MARKER;
     static ast::Statement *END_OF_LIST_ELSE;
     static ast::Statement *START_OF_IF;
-    int parseTable[(int)core::NonTerminal::May_be_Arg_NT + 1][(int)core::TokenType::END_OF_FILE + 1];
+    int parseTable[(int)core::NonTerminal::Call_Value_NT + 1][(int)core::TokenType::END_OF_FILE + 1];
 
     void fill_table();
     core::Token peek_token();

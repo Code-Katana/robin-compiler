@@ -31,24 +31,20 @@ int Debugger::run()
   string opt_file = DEBUGGING_FOLDER + "/" + PROGRAM_FILE + "_opt.ll";
 
   string program = read_program(input_file);
-  CompilerOptions *options = new CompilerOptions(
+  rbn::options::CompilerOptions *options = new rbn::options::CompilerOptions(
       program,
-      ScannerOptions::FiniteAutomaton,
-      ParserOptions::LL1,
-      OptLevel::O3);
+      rbn::options::ScannerOptions::FiniteAutomaton,
+      rbn::options::ParserOptions::LL1,
+      rbn::options::OptimizationLevels::O3);
 
-  RobinCompiler *rc = new RobinCompiler(options);
+  rbn::RobinCompiler *rc = new rbn::RobinCompiler(options);
 
-  vector<Token> tokens = rc->tokenize();
-  AstNode *tree = rc->parse_ast();
+  vector<rbn::core::Token> tokens = rc->tokenize();
+  rbn::ast::AstNode *tree = rc->parse_ast();
 
-  if (auto error = dynamic_cast<ErrorNode *>(tree))
+  if (auto error = dynamic_cast<rbn::ast::ErrorNode *>(tree))
   {
     cout << error->message << endl;
-  }
-  else
-  {
-    JSON::debug_file(Debugger::DEBUGGING_FOLDER + "/tree.json", JSON::stringify_node(tree));
   }
 
   rc->generate_ir(output_file);

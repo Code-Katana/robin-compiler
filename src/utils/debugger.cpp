@@ -1,4 +1,4 @@
-#include "debugger.h"
+#include "utils/debugger.h"
 
 string Debugger::DEBUGGING_FOLDER = "./debug";
 string Debugger::PROGRAM_FILE = "main.rbn";

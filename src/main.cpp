@@ -1,4 +1,4 @@
-#include "debugger.h"
+#include "utils/debugger.h"
 
 /**
  * Example of WASM Integration

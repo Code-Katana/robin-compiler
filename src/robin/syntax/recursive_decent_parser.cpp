@@ -5,23 +5,30 @@ namespace rbn::syntax
 
   bool RecursiveDecentParser::match(core::TokenType type)
   {
-    if (current_token.type == type)
+    if (current_token.type != type)
     {
-      previous_token = current_token;
-      current_token = sc->get_token();
-      return true;
+      return false;
     }
-    return false;
+
+    previous_token = current_token;
+    current_token = sc->get_token();
+
+    if (current_token.type == core::TokenType::ERROR)
+    {
+      forword_lexical_error(&current_token, &previous_token);
+      return false;
+    }
+
+    return true;
   }
 
   ast::AstNode *RecursiveDecentParser::parse_ast()
   {
-
     ast::AstNode *ast_tree = parse_source();
     reset_parser();
+
     if (has_error)
     {
-
       return error_node;
     }
 

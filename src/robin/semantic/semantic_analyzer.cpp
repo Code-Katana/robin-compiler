@@ -20,6 +20,13 @@ namespace rbn::semantic
   ast::Source *SemanticAnalyzer::analyze()
   {
     ast::Source *source = (ast::Source *)parser->parse_ast();
+
+    if (source->type == ast::AstNodeType::ErrorNode)
+    {
+      forword_syntax_error(parser->get_error_node());
+      return nullptr;
+    }
+
     semantic_source(source);
     if (has_error)
     {
@@ -1315,6 +1322,12 @@ namespace rbn::semantic
       error_symbol = core::ErrorSymbol(name, st, err);
     }
 
+    return error_symbol;
+  }
+
+  core::ErrorSymbol SemanticAnalyzer::forword_syntax_error(ast::ErrorNode *err)
+  {
+    semantic_error("", core::SymbolType::Undefined, err->message);
     return error_symbol;
   }
 }

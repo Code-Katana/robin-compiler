@@ -48,7 +48,6 @@ namespace rbn
 
   void RobinCompiler::generate_ir(const string &filename)
   {
-
     generator->generate(filename);
   }
 

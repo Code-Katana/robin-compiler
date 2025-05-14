@@ -76,6 +76,7 @@ namespace rbn::syntax
         }
       }
     }
+
     reset_parser();
 
     if (has_error)
@@ -106,7 +107,7 @@ namespace rbn::syntax
     return peek_token_n(1);
   }
 
-  void LL1Parser::get_token()
+  void LL1Parser::consume()
   {
     if (!peeked_tokens.empty())
     {
@@ -116,6 +117,11 @@ namespace rbn::syntax
     else
     {
       current_token = sc->get_token();
+
+      if (current_token.type == core::TokenType::ERROR)
+      {
+        forword_lexical_error(&current_token, &previous_token);
+      }
     }
   }
 
@@ -189,7 +195,7 @@ namespace rbn::syntax
       nodes.push_back(leaf);
     }
 
-    get_token();
+    consume();
     return true;
   }
 

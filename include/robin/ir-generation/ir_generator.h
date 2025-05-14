@@ -39,6 +39,7 @@ namespace rbn::ir
     size_t arrayLength = 0;
     llvm::Value *lengthAlloca = nullptr;
   };
+
   class IRGenerator
   {
   public:
@@ -49,6 +50,7 @@ namespace rbn::ir
 
   private:
     ast::Source *source;
+    semantic::SemanticAnalyzer *semantic;
     static LLVMContext context;
     unique_ptr<Module> module;
     IRBuilder<> builder;

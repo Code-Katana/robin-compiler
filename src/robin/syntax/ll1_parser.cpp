@@ -856,7 +856,25 @@ namespace rbn::syntax
     parseTable[(int)core::NonTerminal::May_be_Arg_NT][(int)core::TokenType::LEFT_PR] = 136;
     parseTable[(int)core::NonTerminal::May_be_Arg_NT][(int)core::TokenType::ID_SY] = 136;
     parseTable[(int)core::NonTerminal::May_be_Arg_NT][(int)core::TokenType::STRING_SY] = 136;
+    parseTable[(int)core::NonTerminal::May_be_Arg_NT][(int)core::TokenType::LEFT_CURLY_PR] = 136;
     parseTable[(int)core::NonTerminal::May_be_Arg_NT][(int)core::TokenType::RIGHT_PR] = 137;
+
+    parseTable[(int)core::NonTerminal::Call_Value_NT][(int)core::TokenType::TRUE_KW] = 139;
+    parseTable[(int)core::NonTerminal::Call_Value_NT][(int)core::TokenType::FALSE_KW] = 139;
+    parseTable[(int)core::NonTerminal::Call_Value_NT][(int)core::TokenType::NOT_KW] = 139;
+    parseTable[(int)core::NonTerminal::Call_Value_NT][(int)core::TokenType::INTEGER_NUM] = 139;
+    parseTable[(int)core::NonTerminal::Call_Value_NT][(int)core::TokenType::FLOAT_NUM] = 139;
+    parseTable[(int)core::NonTerminal::Call_Value_NT][(int)core::TokenType::MINUS_OP] = 139;
+    parseTable[(int)core::NonTerminal::Call_Value_NT][(int)core::TokenType::INCREMENT_OP] = 139;
+    parseTable[(int)core::NonTerminal::Call_Value_NT][(int)core::TokenType::DECREMENT_OP] = 139;
+    parseTable[(int)core::NonTerminal::Call_Value_NT][(int)core::TokenType::STRINGIFY_OP] = 139;
+    parseTable[(int)core::NonTerminal::Call_Value_NT][(int)core::TokenType::BOOLEAN_OP] = 139;
+    parseTable[(int)core::NonTerminal::Call_Value_NT][(int)core::TokenType::ROUND_OP] = 139;
+    parseTable[(int)core::NonTerminal::Call_Value_NT][(int)core::TokenType::LENGTH_OP] = 139;
+    parseTable[(int)core::NonTerminal::Call_Value_NT][(int)core::TokenType::LEFT_PR] = 139;
+    parseTable[(int)core::NonTerminal::Call_Value_NT][(int)core::TokenType::ID_SY] = 139;
+    parseTable[(int)core::NonTerminal::Call_Value_NT][(int)core::TokenType::STRING_SY] = 139;
+    parseTable[(int)core::NonTerminal::Call_Value_NT][(int)core::TokenType::LEFT_CURLY_PR] = 140;
   }
 
   void LL1Parser::push_rule(int rule)
@@ -898,8 +916,8 @@ namespace rbn::syntax
       break;
     case 7:
       st.push(SymbolLL1(7));
+      st.push(SymbolLL1(140));
       st.push(SymbolLL1(core::NonTerminal::Array_Type_NT));
-
       break;
     case 8:
       st.push(SymbolLL1(core::NonTerminal::Primitive_NT));
@@ -1432,12 +1450,12 @@ namespace rbn::syntax
       break;
     case 135:
       st.push(SymbolLL1(core::NonTerminal::Call_Expr_Tail_NT));
-      st.push(SymbolLL1(core::NonTerminal::Or_Expr_NT));
+      st.push(SymbolLL1(core::NonTerminal::Call_Value_NT));
       st.push(SymbolLL1(core::TokenType::COMMA_SY));
       break;
     case 136:
       st.push(SymbolLL1(core::NonTerminal::Call_Expr_Tail_NT));
-      st.push(SymbolLL1(core::NonTerminal::Or_Expr_NT));
+      st.push(SymbolLL1(core::NonTerminal::Call_Value_NT));
       break;
     case 137:
       break;
@@ -1445,6 +1463,16 @@ namespace rbn::syntax
       st.push(SymbolLL1(core::NonTerminal::Command_Seq_NT));
       st.push(SymbolLL1(65));
       st.push(SymbolLL1(core::TokenType::ELSE_KW));
+      break;
+    case 139:
+      st.push(SymbolLL1(core::NonTerminal::Or_Expr_NT));
+      break;
+    case 140:
+      st.push(SymbolLL1(75));
+      st.push(SymbolLL1(core::TokenType::RIGHT_CURLY_PR));
+      st.push(SymbolLL1(core::NonTerminal::Array_Value_NT));
+      nodes.push_back(END_OF_LIST_MARKER);
+      st.push(SymbolLL1(core::TokenType::LEFT_CURLY_PR));
       break;
     }
   }
@@ -1594,6 +1622,9 @@ namespace rbn::syntax
       break;
     case 132:
       build_call_function_expression();
+      break;
+    case 140:
+      tracking.arr_type_tracking = false;
       break;
     }
   }
@@ -1867,7 +1898,6 @@ namespace rbn::syntax
 
     ast::ArrayDataType *arrType = new ast::ArrayDataType(type, dim, start_line, end_line, node_start, node_end);
     nodes.push_back(arrType);
-    tracking.arr_type_tracking = false;
   }
 
   void LL1Parser::build_if_statement()

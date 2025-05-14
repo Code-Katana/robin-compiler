@@ -34,7 +34,7 @@ int Debugger::run()
   rbn::options::CompilerOptions *options = new rbn::options::CompilerOptions(
       program,
       rbn::options::ScannerOptions::FiniteAutomaton,
-      rbn::options::ParserOptions::LL1,
+      rbn::options::ParserOptions::RecursiveDecent,
       rbn::options::OptimizationLevels::O3);
 
   rbn::RobinCompiler *rc = new rbn::RobinCompiler(options);
@@ -47,6 +47,7 @@ int Debugger::run()
     cout << error->message << endl;
   }
 
-  rc->generate_ir(output_file);
+  // rc->generate_ir(output_file);
+  system("pause");
   return 0;
 }

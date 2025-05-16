@@ -2,9 +2,10 @@
 
 namespace rpc
 {
-  void create_message(const string &json_rpc)
+  void create_message(const string &json_message)
   {
-    cout << Headers::CONTENT_LENGTH + ": " + to_string(json_rpc.length()) + "\r\n\r\n" + json_rpc;
+    cout << Headers::CONTENT_LENGTH << ": " << to_string(json_message.length()) << "\r\n\r\n"
+         << json_message;
   }
 
   void send(Message *message)

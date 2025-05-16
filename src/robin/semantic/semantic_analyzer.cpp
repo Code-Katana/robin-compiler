@@ -28,11 +28,6 @@ namespace rbn::semantic
     }
 
     semantic_source(source);
-    if (has_error)
-    {
-      cout << error_symbol.message_error << endl;
-    }
-
     return source;
   }
 

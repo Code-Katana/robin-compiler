@@ -59,6 +59,8 @@ namespace lsp::lifecycle
       return methods::initialize(request);
 
     case MethodType::Tokenize:
+      return methods::compiler_action_tokenize(request);
+
     case MethodType::ParseAst:
     case MethodType::Unknown:
       return nullptr;

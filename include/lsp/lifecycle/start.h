@@ -8,6 +8,7 @@
 #include "jsonrpc/transport/sending.h"
 
 #include "lsp/methods/initialize.h"
+#include "lsp/methods/tokenize.h"
 
 using namespace std;
 

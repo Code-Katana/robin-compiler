@@ -20,7 +20,7 @@ namespace lsp::methods
 
     if (params->has("scannerOption") && params->get("scannerOption")->type == json::ValueType::NUMBER)
     {
-      scanner_option = (rbn::options::ScannerOptions)params->get_number("scannerOption")->as_integer();
+      scanner_option = (rbn::options::ScannerOptions)params->get_integer("scannerOption")->value;
     }
 
     return new TokenizeParams{text_document, scanner_option};
@@ -58,16 +58,17 @@ namespace lsp::methods
 
       obj->add("type", new json::String(rbn::core::Token::get_token_name(token.type)));
       obj->add("value", new json::String(token.value));
-      obj->add("line", new json::String(to_string(token.line)));
-      obj->add("start", new json::String(to_string(token.start)));
-      obj->add("end", new json::String(to_string(token.end)));
+      obj->add("line", new json::Integer(token.line));
+      obj->add("start", new json::Integer(token.start));
+      obj->add("end", new json::Integer(token.end));
 
       stream->add(obj);
     }
 
     json::Object *result = new json::Object();
     result->add("tokens", stream);
-    result->add("tokenCount", new json::Number(tokens.size()));
+    result->add("tokenCount", new json::Integer(tokens.size()));
+    result->add("textDocument", new json::String(params->text_document));
 
     return new rpc::ResponseMessage(request->id, result);
   }

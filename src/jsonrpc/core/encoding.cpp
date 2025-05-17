@@ -44,6 +44,9 @@ namespace json
     case ValueType::NUMBER:
       return to_string(static_cast<Number *>(value)->value);
 
+    case ValueType::INTEGER:
+      return to_string(static_cast<Integer *>(value)->value);
+
     case ValueType::NULL_VALUE:
       return keywords::NULL_KEYWORD;
     default:

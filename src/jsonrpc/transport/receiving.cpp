@@ -10,7 +10,7 @@ namespace rpc
     {
       return new rpc::RequestMessage(
           obj->get_string("jsonrpc")->value,
-          obj->get_number("id")->as_integer(),
+          obj->get_integer("id")->value,
           lsp::get_method(obj->get_string("method")->value),
           (json::Json *)obj->get("params"));
     }

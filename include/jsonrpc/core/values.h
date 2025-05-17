@@ -17,6 +17,7 @@ namespace json
     ARRAY,
     STRING,
     NUMBER,
+    INTEGER,
     BOOLEAN,
     NULL_VALUE,
   };
@@ -73,6 +74,17 @@ namespace json
     double value;
   };
 
+  // Integer values class
+  class Integer : public Value
+  {
+  public:
+    Integer(const int &value);
+    Integer(const string &value);
+    virtual ~Integer() = default;
+
+    int value;
+  };
+
   // String Value class
   class String : public Value
   {
@@ -121,6 +133,7 @@ namespace json
 
     String *get_string(const string &key);
     Number *get_number(const string &key);
+    Integer *get_integer(const string &key);
     Boolean *get_boolean(const string &key);
     Array *get_array(const string &key);
     Object *get_object(const string &key);

@@ -1,4 +1,5 @@
 #include "jsonrpc/core/values.h"
+#include "jsonrpc/core/values.h"
 
 namespace json
 {
@@ -27,6 +28,10 @@ namespace json
   {
     return (int)this->value;
   }
+
+  // Integer Value implementation
+  Integer::Integer(const int &value) : Value(ValueType::INTEGER), value(value) {}
+  Integer::Integer(const string &value) : Value(ValueType::INTEGER), value(stod(value)) {}
 
   // String Value implementation
   String::String(const string &value) : Value(ValueType::STRING), value(value) {}
@@ -135,6 +140,16 @@ namespace json
     if (value && value->type == ValueType::NUMBER)
     {
       return static_cast<Number *>(value);
+    }
+    return nullptr;
+  }
+
+  Integer *Object::get_integer(const string &key)
+  {
+    Value *value = this->props[key];
+    if (value && value->type == ValueType::INTEGER)
+    {
+      return static_cast<Integer *>(value);
     }
     return nullptr;
   }

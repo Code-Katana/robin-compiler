@@ -44,9 +44,9 @@ namespace rpc
   RequestMessage::RequestMessage(int id, lsp::MethodType method, json::Json *params) : Message(), id(id), method(method), params(params) {}
   RequestMessage::RequestMessage(string json_rpc, int id, lsp::MethodType method, json::Json *params) : Message(json_rpc), id(id), method(method), params(params) {}
 
-  json::Number *RequestMessage::get_id()
+  json::Integer *RequestMessage::get_id()
   {
-    return new json::Number(id);
+    return new json::Integer(id);
   }
 
   json::Object *RequestMessage::get_message()
@@ -75,7 +75,7 @@ namespace rpc
   {
     json::Object *msg = new json::Object();
 
-    msg->add("code", new json::Number((int)code));
+    msg->add("code", new json::Integer((int)code));
     msg->add("message", new json::String(message));
 
     if (data.has_value())
@@ -101,7 +101,7 @@ namespace rpc
   json::Value *ResponseMessage::get_id()
   {
     return (id.has_value())
-               ? (json::Value *)new json::Number(id.value())
+               ? (json::Value *)new json::Integer(id.value())
                : (json::Value *)new json::Null();
   }
 

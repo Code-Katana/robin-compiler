@@ -5,7 +5,6 @@
 #include <optional>
 
 #include "jsonrpc/protocol/constants.h"
-#include "jsonrpc/core/values.h"
 #include "jsonrpc/core/encoding.h"
 #include "lsp/core/methods.h"
 
@@ -50,7 +49,7 @@ namespace rpc
     RequestMessage(string json_rpc, int id, lsp::MethodType method, ::json::Json *params);
     virtual ~RequestMessage() = default;
 
-    ::json::Number *get_id();
+    ::json::Integer *get_id();
     ::json::Object *get_message();
     string get_json();
 

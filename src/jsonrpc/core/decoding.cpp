@@ -17,7 +17,7 @@ namespace json
     static Object *parse_object();
     static Array *parse_array();
     static String *parse_string();
-    static Number *parse_number();
+    static Value *parse_numeric();
     static Value *parse_keyword();
 
     // helper functions
@@ -97,7 +97,7 @@ namespace json
     }
     else if (isdigit(peek()) || peek() == '-' || peek() == '+')
     {
-      return parse_number();
+      return parse_numeric();
     }
     else if (is_keyword(slice(current_index, current_index + 4)))
     {
@@ -238,27 +238,32 @@ namespace json
     return new String(str);
   }
 
-  Number *Decoder::parse_number()
+  Value *Decoder::parse_numeric()
   {
     string num = "";
-    bool is_decimal = false;
+    bool is_real = false;
 
     while (isdigit(peek()) || peek() == '.')
     {
       if (peek() == '.')
       {
-        if (is_decimal)
+        if (is_real)
         {
           return nullptr;
         }
 
-        is_decimal = true;
+        is_real = true;
       }
 
       num += consume();
     }
 
-    return new Number(num);
+    if (!is_real)
+    {
+      return new Integer(stoi(num));
+    }
+
+    return new Number(stod(num));
   }
 
   Value *Decoder::parse_keyword()

@@ -27,7 +27,7 @@ namespace lsp::methods
 
     if (params->has("processId") && params->get("processId")->type == json::ValueType::NUMBER)
     {
-      pid = params->get_number("processId")->as_integer();
+      pid = params->get_integer("processId")->value;
     }
 
     if (!client_info->has("name") || !client_info->has("version") ||

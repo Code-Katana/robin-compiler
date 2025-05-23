@@ -9,6 +9,8 @@
 #include "robin/lexical/fa_scanner.h"
 
 #include "jsonrpc/protocol/messages.h"
+#include "jsonrpc/core/values.h"
+#include "jsonrpc/utils/convert.h"
 
 #include "utils/file_reader.h"
 

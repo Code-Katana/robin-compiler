@@ -26,15 +26,8 @@ namespace lsp::methods
     return new TokenizeParams{text_document, scanner_option};
   }
 
-  rpc::ResponseMessage *compiler_action_tokenize(rpc::RequestMessage *request)
+  json::Object *get_token_result(const TokenizeParams *params)
   {
-    TokenizeParams *params = get_token_params((json::Object *)request->params);
-
-    if (params == nullptr)
-    {
-      return nullptr;
-    }
-
     rbn::lexical::ScannerBase *scanner = nullptr;
     string program = read_file(params->text_document);
 
@@ -50,26 +43,22 @@ namespace lsp::methods
 
     vector<rbn::core::Token> tokens = scanner->get_tokens_stream();
 
-    json::Array *stream = new json::Array();
-
-    for (const auto &token : tokens)
-    {
-      json::Object *obj = new json::Object();
-
-      obj->add("type", new json::String(rbn::core::Token::get_token_name(token.type)));
-      obj->add("value", new json::String(token.value));
-      obj->add("line", new json::Integer(token.line));
-      obj->add("start", new json::Integer(token.start));
-      obj->add("end", new json::Integer(token.end));
-
-      stream->add(obj);
-    }
-
     json::Object *result = new json::Object();
-    result->add("tokens", stream);
+    result->add("tokens", json::utils::convert_token_stream(&tokens));
     result->add("tokenCount", new json::Integer(tokens.size()));
     result->add("textDocument", new json::String(params->text_document));
+  }
 
+  rpc::ResponseMessage *compiler_action_tokenize(rpc::RequestMessage *request)
+  {
+    TokenizeParams *params = get_token_params((json::Object *)request->params);
+
+    if (params == nullptr)
+    {
+      return nullptr;
+    }
+
+    json::Object *result = get_token_result(params);
     return new rpc::ResponseMessage(request->id, result);
   }
 }

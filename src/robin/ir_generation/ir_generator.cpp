@@ -70,7 +70,6 @@ namespace rbn::ir
     outfile.flush();
 
     outs() << "LLVM IR written to " << filename << "\n";
-    IRGenerator::printSymbolTable();
   }
 
   Value *IRGenerator::generate_node(ast::AstNode *node)
@@ -1199,10 +1198,6 @@ namespace rbn::ir
     Value *L = generate_expression(expr->left);
     Value *R = generate_expression(expr->right);
 
-    L->getType()->print(llvm::errs());
-    errs() << "\n";
-    R->getType()->print(llvm::errs());
-    errs() << "\n";
     if (!L || !R)
       return nullptr;
 
@@ -1304,11 +1299,7 @@ namespace rbn::ir
   {
     Value *L = generate_expression(expr->left);
     Value *R = generate_expression(expr->right);
-    L->getType()->print(llvm::errs());
-    errs() << "\n";
-    R->getType()->print(llvm::errs());
-    errs() << "\n";
-
+    
     if (!L || !R)
       return nullptr;
 

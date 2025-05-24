@@ -1,22 +1,8 @@
 #include "utils/debugger.h"
+#include "lsp/lifecycle/start.h"
 
-/**
- * Example of WASM Integration
- * ***************************
- *
- * string tokenize(string js_input, int sc = 0, int pr = 0) {
- *    WrenCompiler wc(js_input, (ScannerOptions)sc, (ParserOptions)pr);
- *    return JSON::stringify_tokens_stream(wc.scanner->get_tokens_stream());
- * }
- *
- * string generateAst(string js_input, int sc = 0, int pr = 0) {
- *    WrenCompiler wc(js_input, (ScannerOptions)sc, (ParserOptions)pr);
- *    return JSON::stringify_tokens_stream(wc.parser->parse_ast());
- * }
- *
- */
-
-int main()
+int main(int argc, char **argv)
 {
-  return Debugger::run();
+  lsp::lifecycle::start_lsp();
+  return 0;
 }

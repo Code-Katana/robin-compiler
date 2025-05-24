@@ -5,6 +5,7 @@
 #include <string>
 
 #include "robin/compiler.h"
+#include "utils/file_reader.h"
 
 using namespace std;
 
